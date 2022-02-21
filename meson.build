@@ -119,7 +119,9 @@ geometry_sources = [
   'src/geometry/mesh/polygon_boundary_triangulation.cpp'
 ]
 
-geometry_sources = []
+geometry_sources = [
+  'src/geometry/point_cloud/read_xyz.cpp', 
+]
 
 geometry_deps = core_deps
 
