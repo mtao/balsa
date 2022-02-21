@@ -1,3 +1,6 @@
 [submodule "subprojects/embree"]
 	path = subprojects/embree
 	url = https://github.com/embree/embree.git
+[submodule "subprojects/colormap-shaders"]
+	path = subprojects/colormap-shaders
+	url = https://github.com/kbinani/colormap-shaders
