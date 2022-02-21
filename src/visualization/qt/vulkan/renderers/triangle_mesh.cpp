@@ -42,24 +42,34 @@ void TriangleMeshRenderer::startNextFrame() {
         value = 0.0f;
     auto col = colormap::transform::LavaWaves().getColor(value);
 
-    VkClearColorValue clearColor = { { float(col.r),float(col.g),float(col.b), 1.0f } };
+    VkClearColorValue clearColor = { { float(col.r), float(col.g), float(col.b), 1.0f } };
     VkClearDepthStencilValue clearDS = { 1.0f, 0 };
     VkClearValue clearValues[2];
     clearValues[0].color = clearColor;
     clearValues[1].depthStencil = clearDS;
 
-    VkRenderPassBeginInfo rpBeginInfo;
 
-    memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
-    rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.pNext = nullptr;
-    rpBeginInfo.renderPass = m_window->defaultRenderPass();
-    rpBeginInfo.framebuffer = m_window->currentFramebuffer();
     const QSize sz = m_window->swapChainImageSize();
-    rpBeginInfo.renderArea.extent.width = sz.width();
-    rpBeginInfo.renderArea.extent.height = sz.height();
-    rpBeginInfo.clearValueCount = 2;
-    rpBeginInfo.pClearValues = clearValues;
+    VkRenderPassBeginInfo rpBeginInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .pNext = nullptr,
+        .renderPass = m_window->defaultRenderPass(),
+        .framebuffer = m_window->currentFramebuffer(),
+        .renderArea = {
+          // VkRect2D
+          .offset = { //VkOffset2D
+                      .x = int32_t(0),
+                      .y = int32_t(0) },
+          .extent = { //VkExtent2D
+                      .width = uint32_t(sz.width()),
+                      .height = uint32_t(sz.height()) },
+        },
+        .clearValueCount = 2,
+        .pClearValues = clearValues
+    };
+
+    //memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
+
     VkCommandBuffer cmdBuf = m_window->currentCommandBuffer();
     m_devFuncs->vkCmdBeginRenderPass(cmdBuf, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
