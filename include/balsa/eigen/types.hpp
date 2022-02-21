@@ -12,41 +12,41 @@
 #endif
 
 namespace balsa::eigen {
-template <typename T, int A, int B>
+template<typename T, int A, int B>
 using Matrix = Eigen::Matrix<T, A, B>;
 
-template <typename T, int A>
+template<typename T, int A>
 using SquareMatrix = Matrix<T, A, A>;
-template <typename T>
+template<typename T>
 using MatrixX = SquareMatrix<T, Eigen::Dynamic>;
 
-template <typename T, int D>
+template<typename T, int D>
 using Vector = Matrix<T, D, 1>;
-template <typename T, int D>
+template<typename T, int D>
 using RowVector = Matrix<T, 1, D>;
-template <typename T>
+template<typename T>
 using VectorX = Vector<T, Eigen::Dynamic>;
-template <typename T>
+template<typename T>
 using RowVectorX = RowVector<T, Eigen::Dynamic>;
 
-template <typename T>
+template<typename T>
 using Vector2 = Vector<T, 2>;
-template <typename T>
+template<typename T>
 using RowVector2 = RowVector<T, 2>;
 
-template <typename T>
+template<typename T>
 using Vector3 = Vector<T, 3>;
-template <typename T>
+template<typename T>
 using RowVector3 = RowVector<T, 3>;
 
-template <typename T>
+template<typename T>
 using Vector4 = Vector<T, 4>;
-template <typename T>
+template<typename T>
 using RowVector4 = RowVector<T, 4>;
 
-template <typename T, int D>
+template<typename T, int D>
 using ColVectors = Matrix<T, D, Eigen::Dynamic>;
-template <typename T, int D>
+template<typename T, int D>
 using RowVectors = Matrix<T, Eigen::Dynamic, D>;
 
 using Mat3i = SquareMatrix<int, 3>;
@@ -96,6 +96,6 @@ using Vec2i = Vector2<int>;
 using Vec3i = Vector3<int>;
 using Vec4i = Vector4<int>;
 
-}  // namespace balsa::eigen
+}// namespace balsa::eigen
 
 #endif
