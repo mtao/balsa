@@ -35,7 +35,6 @@
 .cache
 subprojects/packagecache
 subprojects/patches/*.zip
-subprojects/*/
 
 compile_commands.json
 
