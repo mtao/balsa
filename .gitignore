@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+
+.cache
+subprojects/packagecache
+
+compile_commands.json

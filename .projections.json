@@ -1,0 +1,8 @@
+{
+    "src/*.cpp": {
+        "alternate": "include/balsa/{}.hpp"
+    },
+    "include/balsa/*.hpp": {
+        "alternate": "src/{}.cpp"
+    }
+}
