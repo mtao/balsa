@@ -34,8 +34,10 @@
 
 .cache
 subprojects/packagecache
+subprojects/colormap-shaders
 subprojects/patches/*.zip
 
 compile_commands.json
+
 
 
