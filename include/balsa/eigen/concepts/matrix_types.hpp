@@ -1,5 +1,5 @@
-#if !defined(BALSA_EIGEN_CONCEPTS_HPP)
-#define BALSA_EIGEN_CONCEPTS_HPP
+#if !defined(BALSA_EIGEN_CONCEPTS_MATRIX_TYPES_HPP)
+#define BALSA_EIGEN_CONCEPTS_MATRIX_TYPES_HPP
 
 
 #include <concepts>
@@ -57,8 +57,11 @@ concept SparseCompressedBaseDerived = std::derived_from<T, typename Eigen::Spars
 template<typename T>
 concept SparseMatrixBaseDerived = std::derived_from<T, typename Eigen::SparseMatrixBase<T>>;
 
-template <typename T>
+template<typename T>
 concept IsEigenMatrix = MatrixBaseDerived<T> || SparseMatrixBaseDerived<T>;
+
+template<typename T>
+concept IntegralMatrix = MatrixBaseDerived<T> &&std::is_integral_v<typename T::Scalar>;
 
 }// namespace balsa::eigen::concepts
 

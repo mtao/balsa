@@ -7,3 +7,4 @@ endif
 
 
 executable('xyz_to_partio', 'xyz_to_partio.cpp', dependencies: [geometry_dep])
+executable('mesh_info', 'mesh_info.cpp', dependencies: [geometry_dep, cxxopts_dep])

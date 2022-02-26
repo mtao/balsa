@@ -49,7 +49,7 @@ std::array<balsa::eigen::ColVectors<T, 3>, 2> read_xyz(const std::string &filena
                           return value;
                       });
           std::array<T, 6> ret;
-          auto inp = ranges::views::concat(nums, ranges::views::repeat(T(0))) | ranges::view::take_exactly(6);
+          auto inp = ranges::views::concat(nums, ranges::views::repeat(T(0))) | ranges::views::take_exactly(6);
           ranges::copy(inp, ret.begin());
           return ret;
       });

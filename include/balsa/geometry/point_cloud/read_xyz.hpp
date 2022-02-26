@@ -1,5 +1,5 @@
-#ifndef READ_XYZ_H
-#define READ_XYZ_H
+#if !defined(BALSA_GEOMETRY_POINT_CLOUD_READ_XYZ_H)
+#define BALSA_GEOMETRY_POINT_CLOUD_READ_XYZ_H
 
 #include "balsa/eigen/types.hpp"
 #include <array>
@@ -14,5 +14,5 @@ std::array<balsa::eigen::ColVectors<double, 3>, 2> read_xyzD(const std::string &
 
 }// namespace balsa::geometry::point_cloud
 
+#endif
 
-#endif//READ_XYZ_H

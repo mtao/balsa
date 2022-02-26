@@ -121,9 +121,12 @@ geometry_sources = [
 
 geometry_sources = [
   'src/geometry/point_cloud/read_xyz.cpp', 
+  'src/geometry/polygon_mesh/read_obj.cpp', 
+  'src/geometry/triangle_mesh/read_obj.cpp', 
 ]
 
-geometry_deps = core_deps
+geometry_deps = core_deps 
+geometry_deps += TBB_dep
 
 if get_option('partio') 
   partio_dep = dependency('partio', required: false)
