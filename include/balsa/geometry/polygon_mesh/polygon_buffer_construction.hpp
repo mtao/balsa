@@ -1,5 +1,6 @@
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_POLYGON_BUFFER_CONSTRUCTION_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_POLYGON_BUFFER_CONSTRUCTION_H
+#include <Eigen/Core>
 #include <range/v3/view/take_exactly.hpp>
 
 #include "polygon_buffer.hpp"

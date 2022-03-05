@@ -1,4 +1,5 @@
 #include "balsa/geometry/point_cloud/partio_loader_impl.hpp"
+#include <fmt/format.h>
 namespace balsa::geometry::point_cloud
 
 {

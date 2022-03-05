@@ -1,4 +1,5 @@
 #include "balsa/logging/stopwatch.hpp"
+#include <fmt/format.h>
 #include <fmt/ranges.h>
 
 

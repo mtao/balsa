@@ -16,8 +16,8 @@ struct PolygonBuffer {
     size_t polygon_count() const {
         return _offsets.size() - 1;
     }
-    Eigen::VectorX<IndexType> _buffer;
-    Eigen::VectorX<int> _offsets;
+    balsa::eigen::VectorX<IndexType> _buffer;
+    balsa::eigen::VectorX<int> _offsets;
 };
 
 template<typename IndexType>

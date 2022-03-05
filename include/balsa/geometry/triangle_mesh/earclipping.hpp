@@ -9,6 +9,7 @@
 #include <range/v3/view/cycle.hpp>
 #include <range/v3/range/conversion.hpp>
 #include "balsa/eigen/stl2eigen.hpp"
+#include <Eigen/Core>
 #include "balsa/geometry/winding_number.hpp"
 #include "balsa/geometry/get_angle.hpp"
 #include "balsa/eigen/types.hpp"

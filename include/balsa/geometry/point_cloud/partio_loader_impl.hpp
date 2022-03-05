@@ -1,8 +1,6 @@
 #include <Partio.h>
 #include <PartioAttribute.h>
 #include "balsa/geometry/point_cloud/partio_loader.hpp"
-#include <spdlog/spdlog.h>
-#include <fmt/format.h>
 
 namespace balsa::geometry::point_cloud
 
