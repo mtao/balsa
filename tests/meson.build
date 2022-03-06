@@ -5,6 +5,9 @@ if not catch2_dep.found()
   catch2_dep = dependency('catch2')
 endif
 
+test_asset_dir = meson.current_source_dir() / 'assets'
+
+
 executable('test_vulkan_window', 'test_vulkan_window.cpp', dependencies: [visualization_deps])
 
 
@@ -15,7 +18,7 @@ test('iterator test', test_iterators)
 test_eigen = executable('test_eigen', 'main.cpp', 'test_eigen_stl2eigen.cpp', dependencies: [core_dep,catch2_dep])
 test('eigen test', test_eigen)
 
-test_mesh_loading = executable('test_mesh_loading', 'main.cpp', 'test_mesh_loading.cpp', dependencies: [geometry_dep,catch2_dep])
+test_mesh_loading = executable('test_mesh_loading', 'main.cpp', 'test_mesh_loading.cpp', dependencies: [geometry_dep,catch2_dep], cpp_args: '-DBALSA_TEST_ASSET_PATH="'+test_asset_dir+'"')
 test('mesh_loading test', test_mesh_loading)
 
 

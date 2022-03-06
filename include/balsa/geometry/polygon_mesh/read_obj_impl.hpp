@@ -2,8 +2,8 @@
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H
 #include "read_obj.hpp"
-#include "balsa/geometry/polygon_mesh/polygon_buffer_construction.hpp"
 #include "balsa/eigen/stl2eigen.hpp"
+#include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <fstream>
 #include <range/v3/view/take_exactly.hpp>
 #include <optional>
@@ -17,6 +17,8 @@
 #include <range/v3/view/getlines.hpp>
 #include <range/v3/algorithm/copy.hpp>
 #include <charconv>
+#include <filesystem>
+#include <iostream>
 
 namespace balsa::geometry::polygon_mesh {
 
@@ -40,22 +42,43 @@ namespace {
 }// namespace
 
 template<typename Scalar, int D>
-OBJMesh<Scalar, D> read_obj(const std::string &filename) {
+OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
     std::ifstream ifs(filename);
 
     auto file_lines = ranges::getlines(ifs);
 
     std::vector<std::array<Scalar, D>> v;
     std::vector<std::vector<int>> vi;
-    std::vector<std::array<int, 2>> vl;
+    std::vector<std::vector<int>> vl;
 
     std::vector<std::array<Scalar, 2>> t;
     std::vector<std::vector<int>> ti;
-    std::vector<std::array<int, 2>> tl;
+    std::vector<std::vector<int>> tl;
 
     std::vector<std::array<Scalar, D>> n;
     std::vector<std::vector<int>> ni;
-    std::vector<std::array<int, 2>> nl;
+    std::vector<std::vector<int>> nl;
+
+
+    auto process_slash_toks = [](auto &&data) {
+        std::vector<int> v;
+        std::vector<int> n;
+        std::vector<int> t;
+        std::array<std::vector<int> *, 3> ptrs{ &v, &t, &n };
+        for (auto &&tok : data) {
+            auto slashtoks = tok | ranges::views::split('/');
+            auto zip = ranges::views::zip(ptrs, slashtoks);
+            for (auto &&[vecptr, str] : zip) {
+                auto s = str | ranges::to<std::string>;
+                if (!s.empty()) {
+                    int value;
+                    std::from_chars(s.data(), s.data() + s.size(), value);
+                    vecptr->emplace_back(value - 1);
+                }
+            }
+        }
+        return std::make_tuple(v, n, t);
+    };
 
     for (auto &&line : file_lines) {
 
@@ -64,7 +87,6 @@ OBJMesh<Scalar, D> read_obj(const std::string &filename) {
                     });
         auto front = toks.front() | ranges::to<std::string>();
         auto data = toks | ranges::views::drop(1);
-        //std::cout << front << ": " << data << std::endl;
         size_t size = front.size();
         switch (size) {
         case 1: {
@@ -79,28 +101,7 @@ OBJMesh<Scalar, D> read_obj(const std::string &filename) {
             case 'f':// f
 
             {
-                std::vector<int> v;
-                std::vector<int> n;
-                std::vector<int> t;
-                std::array<std::vector<int> *, 3> ptrs{ &v, &t, &n };
-                for (auto &&tok : data) {
-                    auto slashtoks = tok | ranges::views::split('/');
-                    auto zip = ranges::views::zip(ptrs, slashtoks);
-                    for (auto &&[vecptr, str] : zip) {
-                        auto s = str | ranges::to<std::string>;
-                        if (!s.empty()) {
-                            int value;
-                            std::from_chars(s.data(), s.data() + s.size(), value);
-                            vecptr->emplace_back(value);
-                        }
-                    }
-                }
-                //std::cout << slashed_toks << std::endl;
-                //std::cout << (slashed_toks | ranges::views::stride(0)) << std::endl;
-                //auto v = slashed_toks | ranges::views::stride(0) | ranges::views::transform([](const std::optional<int> &i) { return *i; }) | ranges::to<std::vector<int>>;
-                //std::cout << v.size() << std::endl;
-                //auto n = slashed_toks | ranges::views::stride(1) | ranges::to<std::vector<int>>;
-                //auto t = slashed_toks | ranges::views::stride(2) | ranges::to<std::vector<int>>;
+                auto [v, n, t] = process_slash_toks(data);
                 if (v.size() > 0) {
                     vi.emplace_back(v);
                 }
@@ -114,7 +115,16 @@ OBJMesh<Scalar, D> read_obj(const std::string &filename) {
             }
             case 'l':// l
             {
-                //ranges::copy(read_values<int>(data) | ranges::views::take_exactly(2), back.begin());
+                auto [v, n, t] = process_slash_toks(data);
+                if (v.size() > 0) {
+                    vl.emplace_back(v);
+                }
+                if (t.size() > 0) {
+                    tl.emplace_back(t);
+                }
+                if (n.size() > 0) {
+                    nl.emplace_back(n);
+                }
                 break;
             }
             default:
@@ -128,7 +138,7 @@ OBJMesh<Scalar, D> read_obj(const std::string &filename) {
                 switch (front[1]) {
                 case 't':// vt
                 {
-                    auto &back = v.emplace_back();
+                    auto &back = t.emplace_back();
                     auto dat = read_values<Scalar>(data) | ranges::views::take_exactly(2);
                     ranges::copy(dat, back.begin());
                     break;
@@ -151,11 +161,23 @@ OBJMesh<Scalar, D> read_obj(const std::string &filename) {
         }
     }
 
+
     return OBJMesh<Scalar, D>{
         .position = PolygonMesh<Scalar, D>{
-          eigen::ColVectors<Scalar, D>(balsa::eigen::stl2eigen(v)), from_constainer_container<int>(vi), {} },
-        .texture = PolygonMesh<Scalar, 2>{ eigen::ColVectors<Scalar, 2>(balsa::eigen::stl2eigen(t)), from_constainer_container<int>(ti), {} },
-        .normal = PolygonMesh<Scalar, D>{ eigen::ColVectors<Scalar, D>(balsa::eigen::stl2eigen(n)), from_constainer_container<int>(ni), {} },
+          eigen::ColVectors<Scalar, D>(balsa::eigen::stl2eigen(v)),//
+          PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(vi) },//
+          PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(vl) },//
+        },//
+        .texture = PolygonMesh<Scalar, 2>{
+          eigen::ColVectors<Scalar, 2>(balsa::eigen::stl2eigen(t)),//
+          PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(ti) },//
+          PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(tl) },//
+        },
+        .normal = PolygonMesh<Scalar, D>{
+          eigen::ColVectors<Scalar, D>(balsa::eigen::stl2eigen(n)),//
+          PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(ni) },//
+          PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(nl) },//
+        },
     };
 }
 }// namespace balsa::geometry::polygon_mesh

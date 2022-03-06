@@ -2,6 +2,7 @@
 #define BALSA_GEOMETRY_TRIANGLE_MESH_READ_OBJ_H
 
 #include "triangle_mesh.hpp"
+#include <filesystem>
 
 namespace balsa::geometry::triangle_mesh {
 
@@ -17,11 +18,11 @@ struct OBJMesh {
 //Read an obj file assuming that it returns points and maybe 3 more values,
 //which are returned in two arrays
 //If any vertices lack normals the second array is empty
-OBJMesh<float, 3> read_objF(const std::string &filename);
-OBJMesh<double, 3> read_objD(const std::string &filename);
+OBJMesh<float, 3> read_objF(const std::filesystem::path &filename);
+OBJMesh<double, 3> read_objD(const std::filesystem::path &filename);
 
-OBJMesh<float, 2> read_objF2(const std::string &filename);
-OBJMesh<double, 2> read_objD2(const std::string &filename);
+OBJMesh<float, 2> read_objF2(const std::filesystem::path &filename);
+OBJMesh<double, 2> read_objD2(const std::filesystem::path &filename);
 
 
 }// namespace balsa::geometry::triangle_mesh

@@ -1,9 +1,9 @@
-#if !defined(BALSA_GEOMETRY_POLYGON_MESH_POLYGON_BUFFER_CONSTRUCTION_H)
-#define BALSA_GEOMETRY_POLYGON_MESH_POLYGON_BUFFER_CONSTRUCTION_H
+#if !defined(BALSA_GEOMETRY_DATA_STRUCTURES_CONTAINER_OF_CONTAINERS_TO_STACKED_CONTIGUOUS_BUFFER)
+#define BALSA_GEOMETRY_DATA_STRUCTURES_CONTAINER_OF_CONTAINERS_TO_STACKED_CONTIGUOUS_BUFFER
 #include <Eigen/Core>
 #include <range/v3/view/take_exactly.hpp>
 
-#include "polygon_buffer.hpp"
+#include "stacked_contiguous_buffer.hpp"
 #include <concepts>
 #include <range/v3/view/transform.hpp>
 #include <range/v3/view/partial_sum.hpp>
@@ -11,7 +11,7 @@
 #include <range/v3/algorithm/copy.hpp>
 
 
-namespace balsa::geometry::polygon_mesh {
+namespace balsa::data_structures {
 
 
 template<typename IndexType, typename ContainerType>
@@ -20,10 +20,10 @@ requires requires(ContainerType t, typename ContainerType::value_type u, typenam
     u.size();
     IndexType(v);
 }
-PolygonBuffer<IndexType> from_constainer_container(const ContainerType &container) {
+StackedContiguousBuffer<IndexType> container_of_containers_to_stacked_contiguous_buffer(const ContainerType &container) {
 
 
-    PolygonBuffer<IndexType> ret;
+    StackedContiguousBuffer<IndexType> ret;
     {
         ret._offsets.resize(container.size() + 1);
         ret._offsets(0) = 0;
@@ -43,5 +43,5 @@ PolygonBuffer<IndexType> from_constainer_container(const ContainerType &containe
     return ret;
 }
 
-}// namespace balsa::geometry::polygon_mesh
+}// namespace balsa::geometry::data_structures
 #endif
