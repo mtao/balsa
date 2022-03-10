@@ -5,6 +5,7 @@
 #include <QtCore/QFile>
 #include <iostream>
 #include <shaderc/shaderc.hpp>
+#include <vulkan/vulkan_core.h>
 
 void balsa_visualization_shaders_initialize_resources() {
     Q_INIT_RESOURCE(glsl);
@@ -59,7 +60,7 @@ namespace {
 AbstractShader::AbstractShader() {
     balsa_visualization_shaders_initialize_resources();
 }
-std::vector<char> AbstractShader::compile_glsl(const std::string &glsl, ShaderType type) {
+std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, ShaderType type) const {
 
     const std::string &stage_name = get_shader_type_name(type);
     shaderc_shader_kind kind;
@@ -73,24 +74,27 @@ std::vector<char> AbstractShader::compile_glsl(const std::string &glsl, ShaderTy
     }
     shaderc::Compiler compiler;
     shaderc::CompileOptions compile_options;
+    add_compile_options(compile_options);
     auto result = compiler.CompileGlslToSpv(glsl.data(), glsl.size(), kind, stage_name.c_str(), "main", compile_options);
     auto status = result.GetCompilationStatus();
     if (status != shaderc_compilation_status_success) {
         const std::string &status_name = shaderc_compilation_status_name(status);
         const std::string &stage_name = get_shader_type_name(type);
         spdlog::error("shaderc failed to build {} shader due to a ({}) with {} errors and {} warnings:\n {}", stage_name, status_name, result.GetNumErrors(), result.GetNumWarnings(), result.GetErrorMessage());
+        return {};
     }
 
     if (result.GetNumWarnings() > 0) {
         spdlog::warn("shaderc caught {} warnings when compilng {}\n {}", result.GetNumWarnings(), stage_name, result.GetErrorMessage());
     }
 
+    std::vector<uint32_t> ret{ result.begin(), result.end() };
 
-    std::cout << glsl << std::endl;
-    return {};
+
+    return ret;
 }
 
-std::vector<char> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) {
+std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
     QFile file(path.c_str());
     if (!file.open(QFile::ReadOnly | QIODevice::Text)) {
         spdlog::error("Was unable to read []", path);
@@ -101,6 +105,27 @@ std::vector<char> AbstractShader::compile_glsl_from_path(const std::string &path
     QString data = _ts.readAll();
 
     return compile_glsl(data.toStdString(), type);
+}
+
+namespace {
+    VkShaderModule make_shader_module(const std::vector<uint32_t> &spirv) {
+        VkShaderModuleCreateInfo createInfo{
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = sizeof(uint32_t) * spirv.size(),
+            .pCode = spirv.data()
+        };
+        VkShaderModule module;
+        if (vkCreateShaderModule(device, &createInfo, nullptr, &module) != VK_SUCCESS) {
+        }
+    }
+}// namespace
+
+void AbstractShader::make_shader() {
+    auto vs_spirv = vert_spirv();
+    auto fs_spirv = frag_spirv();
+
+    auto vs_module = make_shader_module(vs_spirv);
+    auto fs_module = make_shader_module(fs_spirv);
 }
 
 }// namespace balsa::visualization::shaders

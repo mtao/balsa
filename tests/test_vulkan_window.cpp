@@ -1,6 +1,7 @@
 #include "balsa/scene_graph/embedding_traits.hpp"
 #include <QGuiApplication>
 #include <spdlog/spdlog.h>
+#include <iostream>
 #include <QVulkanInstance>
 #include <QLoggingCategory>
 #include <balsa/visualization/qt/vulkan/windows/scene.hpp>
@@ -56,12 +57,15 @@ int main(int argc, char *argv[]) {
     w.resize(1024, 768);
     w.show();
 
+    using embedding_traits = balsa::scene_graph::embedding_traits3F;
 
-    balsa::visualization::shaders::FlatShader fs;
+    balsa::visualization::shaders::FlatShader<embedding_traits> fs;
     spdlog::info("Vertex shader");
-    fs.vert_spirv();
+    auto vdata = fs.vert_spirv();
     spdlog::info("Fragment shader");
-    fs.frag_spirv();
+    auto fdata = fs.frag_spirv();
+    std::cout << vdata.size() << " " << fdata.size() << std::endl;
+    fs.make_shader();
     //! [1]
 
     return app.exec();

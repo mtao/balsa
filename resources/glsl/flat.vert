@@ -1,13 +1,23 @@
-#version 450 core
+#version 460 core
 
 layout(location = 0)
 #if defined(TWO_DIMENSIONS)
-uniform mat3 transformationProjectionMatrix;
+in vec2 position;
 #elif defined(THREE_DIMENSIONS)
-uniform mat4 transformationProjectionMatrix;
+in vec3 position;
 #else
 #error
 #endif
+
+layout(binding = 0) uniform Transformation {
+#if defined(TWO_DIMENSIONS)
+mat3 transformationProjectionMatrix;
+#elif defined(THREE_DIMENSIONS)
+mat4 transformationProjectionMatrix;
+#else
+#error
+#endif
+};
 
 
 void main()

@@ -106,8 +106,6 @@ core_headers = [
 ] + filesystem_headers
 
 include_dir = [include_directories('include')]
-# on ubuntu i had to install shaderc myself and I put it in my home directory...
-include_dir += include_directories('/home/mtao/.local/include')
 
 
 core_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep]
@@ -185,6 +183,8 @@ geometry_headers = [
 #===========================================
 
 shaderc_dep = dependency('shaderc')
+# on ubuntu i had to install shaderc myself and I put it in my home directory...
+include_dir += include_directories('/home/mtao/.local/include')
 qt5= import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
 subdir('resources')

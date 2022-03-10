@@ -1,12 +1,17 @@
-#version 450 core
+#version 460 core
+layout(binding=1) uniform Color {
+uniform vec4 diffuse;
+uniform vec4 specular;
+uniform vec4 ambient;
+uniform float shininess;
+};
 
-uniform lowp vec4 color = vec4(1.0);
-layout(location = 0) 
-//layout(location = COLOR_OUTPUT_ATTRIBUTE_LOCATION) 
-out lowp vec4 fragmentColor;
+
+layout(location=0)
+out vec4 fragmentColor;
 
 
 void main()
 {
-    fragmentColor = color;
+    fragmentColor = diffuse;
 }
