@@ -184,6 +184,7 @@ geometry_headers = [
 
 qt5= import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
+subdir('resources')
 
 visualization_sources = [
   'src/visualization/vulkan/film.cpp',
@@ -192,6 +193,7 @@ visualization_sources = [
   'src/visualization/qt/vulkan/windows/scene.cpp',
   'src/visualization/qt/vulkan/renderers/scene.cpp',
   'src/visualization/qt/vulkan/film.cpp',
+  glsl_resource_sources
 
 ]
 visualization_sources += colormap_shaders_sources

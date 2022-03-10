@@ -1,0 +1,6 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/glsl">
+    <file>flat.vert</file>
+    <file>flat.frag</file>
+</qresource>
+</RCC>
