@@ -1,19 +1,18 @@
-#include "balsa/visualization/qt/vulkan/renderers/triangle_mesh.hpp"
+#include "balsa/visualization/qt/vulkan/renderers/scene.hpp"
 #include "balsa/visualization/vulkan/scene.hpp"
 #include <QVulkanFunctions>
 #include <QFile>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#include <colormap/colormap.h>
 #pragma GCC diagnostic pop
 #include <balsa/visualization/qt/vulkan/film.hpp>
-#include <balsa/visualization/vulkan/camera.hpp>
+#include <balsa/scene_graph/camera.hpp>
 
 namespace balsa::visualization::qt::vulkan::renderers {
 
 
-TriangleMeshRenderer::TriangleMeshRenderer(QVulkanWindow *w, bool msaa)
-  : m_window(w) {
+SceneRenderer::SceneRenderer(QVulkanWindow *w, std::shared_ptr<scene_type> scene, bool msaa)
+  : m_window(w), _scene(std::move(scene)) {
     if (msaa) {
         const QVector<int> counts = w->supportedSampleCounts();
         qDebug() << "Supported sample counts:" << counts;
@@ -25,39 +24,35 @@ TriangleMeshRenderer::TriangleMeshRenderer(QVulkanWindow *w, bool msaa)
             }
         }
     }
-    _scene = std::make_shared<visualization::vulkan::Scene>();
 }
-TriangleMeshRenderer::~TriangleMeshRenderer() {}
+SceneRenderer::~SceneRenderer() {}
 
-void TriangleMeshRenderer::initResources() {
+void SceneRenderer::initResources() {
     m_devFuncs = m_window->vulkanInstance()->deviceFunctions(m_window->device());
 }
 
-void TriangleMeshRenderer::initSwapChainResources() {
+void SceneRenderer::initSwapChainResources() {
 }
 
-void TriangleMeshRenderer::releaseSwapChainResources() {
+void SceneRenderer::releaseSwapChainResources() {
 }
 
-void TriangleMeshRenderer::releaseResources() {
+void SceneRenderer::releaseResources() {
 }
 
-void TriangleMeshRenderer::startNextFrame() {
+void SceneRenderer::startNextFrame() {
 
-    static float value = 0.0;
-    value += 0.0005f;
-    if (value > 1.0f)
-        value = 0.0f;
-    auto col = colormap::transform::LavaWaves().getColor(value);
 
-    _scene->set_clear_color(float(col.r), float(col.g), float(col.b));
+    if (_scene) {
 
-    Film film(*m_window);
-    visualization::vulkan::Camera camera;
+        Film film(*m_window);
+        camera_type camera;
 
-    _scene->draw(camera, film);
+        _scene->draw_background(film);
+        _scene->draw(camera, film);
+    }
 
-    //memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
+    // memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
 
 
     // Do nothing else. We will just clear to green, changing the component on

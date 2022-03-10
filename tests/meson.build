@@ -29,3 +29,8 @@ geometry_test_sources = [
 
 test_geometry = executable('test_geometry', 'main.cpp', geometry_test_sources, dependencies: [geometry_dep,catch2_dep])
 test('geometry test', test_geometry)
+
+
+
+test_scene_graph = executable('test_scene_graph', 'test_scene_graph.cpp', dependencies: [core_dep,catch2_dep])
+test('scene_graph test', test_scene_graph)

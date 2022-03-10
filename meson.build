@@ -188,9 +188,9 @@ qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
 visualization_sources = [
   'src/visualization/vulkan/film.cpp',
   #'src/visualization/vulkan/camera.cpp',
-  'src/visualization/vulkan/scene.cpp',
-  'src/visualization/qt/vulkan/windows/triangle_mesh.cpp',
-  'src/visualization/qt/vulkan/renderers/triangle_mesh.cpp',
+  'src/visualization/vulkan/scene_base.cpp',
+  'src/visualization/qt/vulkan/windows/scene.cpp',
+  'src/visualization/qt/vulkan/renderers/scene.cpp',
   'src/visualization/qt/vulkan/film.cpp',
 
 ]
@@ -198,7 +198,7 @@ visualization_sources += colormap_shaders_sources
 
 visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep]
 visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_dep, include_directories: [include_dir, colormap_shaders_include_path])
-visualization_deps = declare_dependency(link_with: visualization_lib, dependencies: visualization_dep)
+visualization_deps = declare_dependency(link_with: visualization_lib, dependencies: visualization_dep, include_directories: [colormap_shaders_include_path])
 
 
 
