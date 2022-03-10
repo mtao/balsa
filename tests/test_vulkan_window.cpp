@@ -1,9 +1,11 @@
 #include "balsa/scene_graph/embedding_traits.hpp"
 #include <QGuiApplication>
+#include <spdlog/spdlog.h>
 #include <QVulkanInstance>
 #include <QLoggingCategory>
 #include <balsa/visualization/qt/vulkan/windows/scene.hpp>
 #include <colormap/colormap.h>
+#include <balsa/visualization/shaders/flat.hpp>
 
 
 class Scene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::embedding_traits3F>> {
@@ -53,6 +55,13 @@ int main(int argc, char *argv[]) {
 
     w.resize(1024, 768);
     w.show();
+
+
+    balsa::visualization::shaders::FlatShader fs;
+    spdlog::info("Vertex shader");
+    fs.vert_spirv();
+    spdlog::info("Fragment shader");
+    fs.frag_spirv();
     //! [1]
 
     return app.exec();

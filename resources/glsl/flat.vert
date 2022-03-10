@@ -1,9 +1,10 @@
+#version 450 core
 
 layout(location = 0)
 #if defined(TWO_DIMENSIONS)
-uniform highp mat3 transformationProjectionMatrix;
+uniform mat3 transformationProjectionMatrix;
 #elif defined(THREE_DIMENSIONS)
-uniform highp mat4 transformationProjectionMatrix;
+uniform mat4 transformationProjectionMatrix;
 #else
 #error
 #endif
