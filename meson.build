@@ -156,8 +156,8 @@ geometry_deps += TBB_dep
 if get_option('partio') 
   partio_dep = dependency('partio', required: false)
   if not partio_dep.found()
-    partio_subproj = cmake.subproject('partio')
-    partio_dep = partio_subproj.dependency('partio')
+    partio_proj = subproject('partio')
+    partio_dep = dependency('partio')
   endif
 
   geometry_deps += partio_dep
@@ -185,6 +185,8 @@ geometry_headers = [
 qt5= import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
 subdir('resources')
+
+shaderc_dep = dependency('shaderc')
 
 visualization_sources = [
   'src/visualization/vulkan/film.cpp',

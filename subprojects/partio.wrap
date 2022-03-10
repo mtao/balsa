@@ -1,0 +1,9 @@
+[wrap-git]
+url = https://github.com/wdas/partio.git
+revision = v1.14.6
+patch_url = http://www.dgp.toronto.edu/~mtao/files/partio.zip
+patch_filename = partio.zip
+patch_hash = d0cc8ec7bcce58a40d19b0909a2a8e3276f6e9990f7478ad4895ddabe4012105
+
+[provide]
+partio = partio_wrap

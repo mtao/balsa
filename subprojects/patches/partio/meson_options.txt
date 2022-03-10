@@ -1,0 +1,4 @@
+option('gtest', type : 'boolean', value : false, description : 'Enable GTest for tests')
+option('shared', type : 'boolean', value : false, description : 'Enabled shared libraries')
+option('opengl', type : 'boolean', value : false, description : 'Enable opengl')
+option('python', type : 'boolean', value : false, description : 'Enable python bindings')
