@@ -15,9 +15,9 @@ vk::Format Film::colorFormat() const {
 }
 
 
-vk::CommandBuffer Film::commandBuffer() const { return _window.currentCommandBuffer(); }
+vk::CommandBuffer Film::currentCommandBuffer() const { return _window.currentCommandBuffer(); }
 
-vk::Framebuffer Film::framebuffer() const { return _window.currentFramebuffer(); }
+vk::Framebuffer Film::currentFramebuffer() const { return _window.currentFramebuffer(); }
 
 vk::RenderPass Film::defaultRenderPass() const { return _window.defaultRenderPass(); }
 
@@ -38,7 +38,7 @@ vk::CommandPool Film::graphicsCommandPool() const { return _window.graphicsComma
 
 uint32_t Film::graphicsQueueFamilyIndex() const { return _window.graphicsQueueFamilyIndex(); }
 uint32_t Film::hostVisibleMemoryIndex() const { return _window.hostVisibleMemoryIndex(); }
-vk::Queue Film::queue() const { return _window.graphicsQueue(); }
+vk::Queue Film::graphicsQueue() const { return _window.graphicsQueue(); }
 
 
 vk::Image Film::msaaColorImage(int index) const { return _window.msaaColorImage(index); }

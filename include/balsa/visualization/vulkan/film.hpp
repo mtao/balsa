@@ -22,8 +22,8 @@ class Film {
 
     virtual vk::Format colorFormat() const = 0;
 
-    virtual vk::CommandBuffer commandBuffer() const = 0;
-    virtual vk::Framebuffer framebuffer() const = 0;
+    virtual vk::CommandBuffer currentCommandBuffer() const = 0;
+    virtual vk::Framebuffer currentFramebuffer() const = 0;
 
     virtual vk::RenderPass defaultRenderPass() const = 0;
 
@@ -44,7 +44,7 @@ class Film {
 
     virtual uint32_t graphicsQueueFamilyIndex() const = 0;
     virtual uint32_t hostVisibleMemoryIndex() const = 0;
-    virtual vk::Queue queue() const = 0;
+    virtual vk::Queue graphicsQueue() const = 0;
 
 
     virtual vk::Image msaaColorImage(int index) const = 0;

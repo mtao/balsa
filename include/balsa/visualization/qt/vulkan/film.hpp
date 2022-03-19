@@ -11,14 +11,13 @@ class Film : public visualization::vulkan::Film {
     Film(QVulkanWindow &window);
     ~Film();
 
-#if defined(USE_VULKAN_HPP)
     vk::Format colorFormat() const override;
 
 
     glm::uvec2 swapChainImageSize() const override;
 
-    vk::CommandBuffer commandBuffer() const override;
-    vk::Framebuffer framebuffer() const override;
+    vk::CommandBuffer currentCommandBuffer() const override;
+    vk::Framebuffer currentFramebuffer() const override;
 
     vk::RenderPass defaultRenderPass() const override;
 
@@ -39,7 +38,7 @@ class Film : public visualization::vulkan::Film {
 
     uint32_t graphicsQueueFamilyIndex() const override;
     uint32_t hostVisibleMemoryIndex() const override;
-    vk::Queue queue() const override;
+    vk::Queue graphicsQueue() const override;
 
 
     vk::Image msaaColorImage(int index) const override;
@@ -55,50 +54,6 @@ class Film : public visualization::vulkan::Film {
     vk::Image swapChainImage(int index) const override;
     vk::ImageView swapChainImageView(int index) const override;
 
-#else
-    VkFormat colorFormat() const override;
-
-
-    glm::uvec2 swapChainImageSize() const override;
-
-    VkCommandBuffer commandBuffer() const override;
-    VkFramebuffer framebuffer() const override;
-
-    VkRenderPass defaultRenderPass() const override;
-
-
-    VkFormat depthStencilFormat() const override;
-    VkImage depthStencilImage() const override;
-    VkImageView depthStencilImageView() const override;
-
-
-    VkDevice device() const override;
-
-    void setPhysicalDeviceIndex(int index) override;
-    VkPhysicalDevice physicalDevice() const override;
-    const VkPhysicalDeviceProperties *physicalDeviceProperties() const override;
-
-    VkCommandPool graphicsCommandPool() const override;
-
-
-    uint32_t graphicsQueueFamilyIndex() const override;
-    uint32_t hostVisibleMemoryIndex() const override;
-    VkQueue queue() const override;
-
-
-    VkImage msaaColorImage(int index) const override;
-    VkImageView msaaColorImageView(int index) const override;
-
-
-    void setSampleCount(int sampleCount) override;
-    VkSampleCountFlagBits sampleCountFlagBits() const override;
-    std::vector<int> supportedSampleCounts() override;
-
-
-    int swapChainImageCount() const override;
-    VkImage swapChainImage(int index) const override;
-    VkImageView swapChainImageView(int index) const override;
-#endif
   private:
     QVulkanWindow &_window;
 };
