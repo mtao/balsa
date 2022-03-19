@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
     spdlog::info("Fragment shader");
     auto fdata = fs.frag_spirv();
     std::cout << vdata.size() << " " << fdata.size() << std::endl;
-    fs.make_shader();
+    // fs.make_shader();
     //! [1]
 
     return app.exec();

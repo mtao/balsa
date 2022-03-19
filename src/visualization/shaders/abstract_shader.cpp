@@ -5,7 +5,7 @@
 #include <QtCore/QFile>
 #include <iostream>
 #include <shaderc/shaderc.hpp>
-#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan.hpp>
 
 void balsa_visualization_shaders_initialize_resources() {
     Q_INIT_RESOURCE(glsl);
@@ -107,25 +107,25 @@ std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &
     return compile_glsl(data.toStdString(), type);
 }
 
-namespace {
-    VkShaderModule make_shader_module(const std::vector<uint32_t> &spirv) {
-        VkShaderModuleCreateInfo createInfo{
-            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            .codeSize = sizeof(uint32_t) * spirv.size(),
-            .pCode = spirv.data()
-        };
-        VkShaderModule module;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &module) != VK_SUCCESS) {
-        }
-    }
-}// namespace
-
-void AbstractShader::make_shader() {
-    auto vs_spirv = vert_spirv();
-    auto fs_spirv = frag_spirv();
-
-    auto vs_module = make_shader_module(vs_spirv);
-    auto fs_module = make_shader_module(fs_spirv);
-}
+// namespace {
+//     vk::ShaderModule make_shader_module(const vk::Device &device, const std::vector<uint32_t> &spirv) {
+//         VkShaderModuleCreateInfo createInfo{
+//             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+//             .codeSize = sizeof(uint32_t) * spirv.size(),
+//             .pCode = spirv.data()
+//         };
+//         vk::ShaderModule module;
+//         module = device.createShaderModule(createInfo, nullptr, &module);
+//         return module;
+//     }
+// }// namespace
+//
+// void AbstractShader::make_shader(const vk::Device &device) {
+//     auto vs_spirv = vert_spirv();
+//     auto fs_spirv = frag_spirv();
+//
+//     auto vs_module = make_shader_module(device, vs_spirv);
+//     auto fs_module = make_shader_module(device, fs_spirv);
+// }
 
 }// namespace balsa::visualization::shaders

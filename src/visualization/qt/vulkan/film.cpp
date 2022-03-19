@@ -1,5 +1,6 @@
 #include "balsa/visualization/qt/vulkan/film.hpp"
 #include <QVulkanWindow>
+#include <vulkan/vulkan_enums.hpp>
 namespace balsa::visualization::qt::vulkan {
 Film::Film(QVulkanWindow &window) : _window(window) {}
 Film::~Film() {}
@@ -45,14 +46,18 @@ vk::Image Film::msaaColorImage(int index) const { return _window.msaaColorImage(
 vk::ImageView Film::msaaColorImageView(int index) const { return _window.msaaColorImageView(index); }
 
 
-void Film::setSampleCount(int sampleCount) { _window.setSampleCount(sampleCount); }
-vk::SampleCountFlagBits Film::sampleCountFlagBits() const {
+void Film::set_sample_count(vk::SampleCountFlagBits sampleCount) { _window.setSampleCount(int(sampleCount)); }
+
+vk::SampleCountFlagBits Film::sample_count() const {
     return static_cast<vk::SampleCountFlagBits>(_window.sampleCountFlagBits());
 }
-std::vector<int> Film::supportedSampleCounts() {
+vk::SampleCountFlags Film::supported_sample_counts() const {
+    vk::SampleCountFlags flags = static_cast<vk::SampleCountFlags>(0);
     auto r = _window.supportedSampleCounts();
-    std::vector<int> ret(r.begin(), r.end());
-    return ret;
+    for (auto &&v : r) {
+        flags |= vk::SampleCountFlagBits(v);
+    }
+    return flags;
 }
 
 

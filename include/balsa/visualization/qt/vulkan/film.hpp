@@ -44,10 +44,9 @@ class Film : public visualization::vulkan::Film {
     vk::Image msaaColorImage(int index) const override;
     vk::ImageView msaaColorImageView(int index) const override;
 
-
-    void setSampleCount(int sampleCount) override;
-    vk::SampleCountFlagBits sampleCountFlagBits() const override;
-    std::vector<int> supportedSampleCounts() override;
+    void set_sample_count(vk::SampleCountFlagBits) override;
+    vk::SampleCountFlagBits sample_count() const override;
+    vk::SampleCountFlags supported_sample_counts() const override;
 
 
     int swapChainImageCount() const override;

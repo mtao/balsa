@@ -32,7 +32,7 @@ void SceneBase::draw_background(Film &film) {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .pNext = nullptr,
         .renderPass = film.defaultRenderPass(),
-        .framebuffer = film.framebuffer(),
+        .framebuffer = film.currentFramebuffer(),
         .renderArea = {
           // VkRect2D
           .offset = { // VkOffset2D
@@ -49,8 +49,8 @@ void SceneBase::draw_background(Film &film) {
         //_root->draw(cam, film, glm::mat4x4);
     }
 
-    VkCommandBuffer cmdBuf = film.commandBuffer();
-    vkCmdBeginRenderPass(cmdBuf, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CommandBuffer cmdBuf = film.currentCommandBuffer();
+    cmdBuf.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
 
     vkCmdEndRenderPass(cmdBuf);
 }

@@ -4,11 +4,15 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <set>
 #include "film.hpp"
+#include "device_functions.hpp"
 
 namespace balsa::visualization::vulkan {
 
 class NativeFilm : public Film {
   public:
+    NativeFilm();
+    NativeFilm(std::nullptr_t);
+    virtual ~NativeFilm();
     glm::uvec2 swapChainImageSize() const override;
 
 
@@ -43,15 +47,22 @@ class NativeFilm : public Film {
     vk::ImageView msaaColorImageView(int index) const override;
 
 
-    void setSampleCount(int sampleCount) override;
-    vk::SampleCountFlagBits sampleCountFlagBits() const override;
-    std::vector<int> supportedSampleCounts() override;
+    void set_sample_count(vk::SampleCountFlagBits) override;
+    vk::SampleCountFlagBits sample_count() const override;
+    vk::SampleCountFlags supported_sample_counts() const override;
 
 
     int swapChainImageCount() const override;
     vk::Image swapChainImage(int index) const override;
     vk::ImageView swapChainImageView(int index) const override;
 
+    vk::Instance instance() const;
+    const vk::raii::Instance &instance_raii() const;
+
+  protected:
+    // Whatever window management tool we have is in charge of this
+    virtual vk::raii::SurfaceKHR make_surface() const = 0;
+    void initialize();
 
   private:
     struct QueueTargetIndices {
@@ -72,16 +83,15 @@ class NativeFilm : public Film {
     };
 
     bool checkValidationLayerSupport();
+    bool enable_validation_layers = true;
     virtual std::vector<const char *> getRequiredExtensions();
     vk::DebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info() const;
 
     void create_instance();
     void create_debug_messenger();
     virtual void pick_physical_device();
-    virtual void create_device() = 0;
+    void create_device();
 
-    // Whatever window management tool we have is in charge of this
-    virtual void create_surface() = 0;
 
     QueueTargetIndices available_queues(const vk::PhysicalDevice &device) const;
     virtual int score_physical_devices(const vk::PhysicalDevice &device) const;
@@ -113,12 +123,13 @@ class NativeFilm : public Film {
         bool image_semaphore_waitable = false;
     };
 
-    vk::raii::Context _context;
-    vk::raii::Instance _instance = nullptr;
-    vk::raii::DebugUtilsMessengerEXT _debug_messenger = nullptr;
-    vk::raii::PhysicalDevice _physical_device = nullptr;
-    vk::raii::Device _device = nullptr;
-    vk::raii::SurfaceKHR _surface = nullptr;
+
+    vk::raii::Context _context_raii;
+    vk::raii::Instance _instance_raii = nullptr;
+    vk::raii::DebugUtilsMessengerEXT _debug_messenger_raii = nullptr;
+    vk::raii::PhysicalDevice _physical_device_raii = nullptr;
+    vk::raii::Device _device_raii = nullptr;
+    vk::raii::SurfaceKHR _surface_raii = nullptr;
 
 
     uint32_t _graphics_queue_family_index;
@@ -126,24 +137,20 @@ class NativeFilm : public Film {
     vk::raii::Queue _graphics_queue_raii = nullptr;
     vk::raii::Queue _present_queue_raii = nullptr;
 
-    size_t _current_swapchain_index;
     vk::Extent2D _swapchain_extent;
     vk::SurfaceFormatKHR _surface_format;
-    std::vector<vk::raii::ImageView> _swapchain_image_views;
-    std::vector<vk::raii::Framebuffer> _swapchain_framebuffers;
-    vk::raii::SwapchainKHR _swapchain = nullptr;
+    vk::raii::SwapchainKHR _swapchain_raii = nullptr;
 
-    vk::raii::PipelineLayout _pipeline_layout = nullptr;
-    vk::raii::Pipeline _pipeline = nullptr;
-    vk::raii::RenderPass _default_render_pass = nullptr;
+    size_t _current_swapchain_index;
+    std::vector<ImageResources> _image_resources;
+    std::vector<FrameResources> _frame_resources;
 
-    vk::raii::CommandPool _graphics_command_pool = nullptr;
+    vk::raii::PipelineLayout _pipeline_layout_raii = nullptr;
+    vk::raii::Pipeline _pipeline_raii = nullptr;
+    vk::raii::RenderPass _default_render_pass_raii = nullptr;
 
-    std::vector<vk::raii::CommandBuffer> _command_buffers;
-
-    vk::raii::Semaphore image_available_semaphore = nullptr;
-    vk::raii::Semaphore render_finished_semaphore = nullptr;
-    vk::raii::Fence in_flight_fence = nullptr;
+    vk::raii::CommandPool _graphics_command_pool_raii = nullptr;
 };
+}// namespace balsa::visualization::vulkan
 #endif
 

@@ -52,6 +52,10 @@ if get_option('protobuf')
 endif
 
 
+if get_option('glfw')
+  glfw_dep = dependency('glfw3')
+endif
+
 if get_option('imgui')
   imgui_dep = dependency('imgui', required: false)
   if not imgui_dep.found()
@@ -189,10 +193,15 @@ qt5= import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
 subdir('resources')
 
+
 visualization_sources = [
   'src/visualization/vulkan/film.cpp',
+  'src/visualization/vulkan/native_film.cpp',
   #'src/visualization/vulkan/camera.cpp',
   'src/visualization/vulkan/scene_base.cpp',
+
+  'src/visualization/glfw/vulkan/film.cpp',
+
   'src/visualization/qt/vulkan/windows/scene.cpp',
   'src/visualization/qt/vulkan/renderers/scene.cpp',
   'src/visualization/qt/vulkan/film.cpp',
@@ -204,8 +213,12 @@ visualization_sources = [
 visualization_sources += colormap_shaders_sources
 
 visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
+if get_option('glfw')
+  visualization_dep += glfw_dep
+endif
+
 visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_dep, include_directories: [include_dir, colormap_shaders_include_path])
-visualization_deps = declare_dependency(link_with: visualization_lib, dependencies: visualization_dep, include_directories: [colormap_shaders_include_path])
+visualization_deps = declare_dependency(link_with: visualization_lib, dependencies: visualization_dep, include_directories: [colormap_shaders_include_path, include_dir])
 
 
 
