@@ -60,12 +60,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
 namespace balsa::visualization::vulkan {
 
 
-const std::vector<const char *> NativeFilm::validation_layers = {
-    "VK_LAYER_KHRONOS_validation"
-};
+void NativeFilm::set_device_extensions(const std::vector<std::string> &device_extensions) {
+    _device_extensions = device_extensions;
+}
+void NativeFilm::set_validation_layers(const std::vector<std::string> &validation_layers) {
+    _validation_layers = validation_layers;
+}
 
-
-NativeFilm::NativeFilm() {
+NativeFilm::NativeFilm(const std::vector<std::string> &device_extensions, const std::vector<std::string> &validation_layers) : _device_extensions(device_extensions), _validation_layers(validation_layers) {
     initialize();
 }
 NativeFilm::NativeFilm(std::nullptr_t) {}
@@ -78,10 +80,12 @@ void NativeFilm::initialize() {
     _surface_raii = make_surface();
     pick_physical_device();
     create_device();
-    // create_swapchain();
-    // create_swapchain_image_views();
-    // create_render_pass();
-    // create_graphics_pipeline();
+    create_swapchain();
+    create_render_pass();
+    create_graphics_command_pool();
+    create_image_resources();
+    create_frame_resources();
+    create_render_pass();
 }
 
 vk::Instance NativeFilm::instance() const {
@@ -101,7 +105,7 @@ bool NativeFilm::check_validation_layer_support() {
 
     std::vector<vk::LayerProperties> available_layers = _context_raii.enumerateInstanceLayerProperties();
 
-    for (const auto &_layer_name : validation_layers) {
+    for (const auto &_layer_name : _validation_layers) {
         bool layer_found = false;
         std::string_view layer_name{ _layer_name };
         for (const auto &layer_property : available_layers) {
@@ -120,8 +124,8 @@ bool NativeFilm::check_validation_layer_support() {
 
     return true;
 }
-std::vector<const char *> NativeFilm::get_required_extensions() {
-    std::vector<const char *> extension_names;
+std::vector<std::string> NativeFilm::get_required_extensions() {
+    std::vector<std::string> extension_names;
     if (enable_validation_layers) {
         extension_names.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
@@ -195,9 +199,10 @@ void NativeFilm::create_device() {
     create_info.setPpEnabledExtensionNames(device_extensions.data());
 
     create_info.setPEnabledFeatures(&dev_features);
+    std::vector<const char *> names = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
     if (enable_validation_layers) {
-        create_info.setEnabledLayerCount(validation_layers.size());
-        create_info.setPpEnabledLayerNames(validation_layers.data());
+        create_info.setEnabledLayerCount(names.size());
+        create_info.setPpEnabledLayerNames(names.data());
     }
 
     _device_raii = _physical_device_raii.createDevice(create_info);
@@ -221,19 +226,24 @@ void NativeFilm::create_instance() {
     app_info.setApiVersion(VK_API_VERSION_1_2);
 
     vk::InstanceCreateInfo icinfo({}, /*pApplicationInfo=*/&app_info);
-    icinfo.setEnabledLayerCount(validation_layers.size());
-    icinfo.setPpEnabledLayerNames(validation_layers.data());
+    std::vector<const char *> names = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+    {
+        icinfo.setEnabledLayerCount(names.size());
+        icinfo.setPpEnabledLayerNames(names.data());
+    }
 
-    std::vector<std::string> extension_names = get_required_extensions();
-    // for (auto &&extension : extension_names) {
-    //     spdlog::info("Require extension {}", extension);
-    // }
-    std::vector<const char*> names = extension_names | ranges::views::transform([](const std::string& str) -> const char* { return str.c_str(); }) | ranges::to_vector;
-    icinfo.setEnabledExtensionCount(names.size());
-    icinfo.setPpEnabledExtensionNames(names.data());
+    {
+        std::vector<std::string> extension_names = get_required_extensions();
+        extension_names.insert(extension_names.end(), device_extensions.begin(), device_extensions.end());
 
-    // TODO: why is this 0?
-    icinfo.setEnabledLayerCount(0);
+        // for (auto &&extension : extension_names) {
+        //     spdlog::info("Require extension {}", extension);
+        // }
+        std::vector<const char *> names = extension_names | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+        icinfo.setEnabledExtensionCount(names.size());
+        icinfo.setPpEnabledExtensionNames(names.data());
+    }
+
 
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info;
     if (enable_validation_layers) {
@@ -404,12 +414,12 @@ vk::Format NativeFilm::colorFormat() const {
     return _surface_format.format;
 }
 vk::CommandBuffer NativeFilm::currentCommandBuffer() const {
-    return _image_resources.at(_current_swapchain_index).command_buffer;
+    return *_image_resources.at(_current_swapchain_index).command_buffer_raii;
 }
 vk::Framebuffer NativeFilm::currentFramebuffer() const {
     return *_image_resources.at(_current_swapchain_index).framebuffer_raii;
 }
-vk::RenderPass NativeFilm::defaultRenderPass() const {
+vk::RenderPass NativeFilm::default_render_pass() const {
     return *_default_render_pass_raii;
 }
 vk::Format NativeFilm::depthStencilFormat() const {
@@ -424,11 +434,17 @@ vk::ImageView NativeFilm::depthStencilImageView() const {
 vk::Device NativeFilm::device() const {
     return *_device_raii;
 }
+vk::SurfaceKHR NativeFilm::surface() const {
+    return *_surface_raii;
+}
 void NativeFilm::setPhysicalDeviceIndex(int) {
     // TODO
 }
-vk::PhysicalDevice NativeFilm::physicalDevice() const {
+vk::PhysicalDevice NativeFilm::physical_device() const {
     return *_physical_device_raii;
+}
+const vk::raii::PhysicalDevice &NativeFilm::physical_device_raii() const {
+    return _physical_device_raii;
 }
 vk::PhysicalDeviceProperties NativeFilm::physicalDeviceProperties() const {
     return _physical_device_raii.getProperties();
@@ -481,4 +497,236 @@ vk::ImageView NativeFilm::swapChainImageView(int) const {
     return nullptr;// TODO
 }
 
+void NativeFilm::create_image_resources() {
+    const size_t size = _swapchain_count;
+
+
+    _image_resources.resize(size);
+
+    vk::CommandBufferAllocateInfo cba_info;
+    cba_info.setCommandPool(*_graphics_command_pool_raii);
+    cba_info.setLevel(vk::CommandBufferLevel::ePrimary);
+    cba_info.setCommandBufferCount(size);
+    auto cmd_buffers = _device_raii.allocateCommandBuffers(cba_info);
+    auto pres_cmd_buffers = _device_raii.allocateCommandBuffers(cba_info);
+
+    vk::ImageViewCreateInfo img_view_create_info;
+    img_view_create_info.setViewType(vk::ImageViewType::e2D);
+    img_view_create_info.format = _surface_format.format;
+    img_view_create_info.setComponents(vk::ComponentMapping{
+      /*.r =*/vk::ComponentSwizzle::eIdentity,
+      /*.g =*/vk::ComponentSwizzle::eIdentity,
+      /*.b =*/vk::ComponentSwizzle::eIdentity,
+      /*.a =*/vk::ComponentSwizzle::eIdentity,
+    });
+
+    img_view_create_info.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+    img_view_create_info.subresourceRange.setBaseMipLevel(0);
+    img_view_create_info.subresourceRange.setLevelCount(1);
+    img_view_create_info.subresourceRange.setBaseArrayLayer(0);
+    img_view_create_info.subresourceRange.setLayerCount(1);
+
+    vk::FramebufferCreateInfo framebuffer_ci;
+    framebuffer_ci.setRenderPass(*_default_render_pass_raii);
+    framebuffer_ci.setAttachmentCount(1);
+    framebuffer_ci.setWidth(_swapchain_extent.width);
+    framebuffer_ci.setHeight(_swapchain_extent.height);
+    framebuffer_ci.setLayers(1);
+
+
+    auto images = _swapchain_raii.getImages();
+
+    vk::FenceCreateInfo fci;
+    fci.setFlags(vk::FenceCreateFlagBits::eSignaled);
+    for (auto &&[res, buf, buf2, img] : ranges::views::zip(_image_resources, cmd_buffers, pres_cmd_buffers, images)) {
+        res.command_buffer_raii = std::move(buf);
+        res.present_command_buffer_raii = std::move(buf2);
+        res.image = img;
+        img_view_create_info.setImage(res.image);
+        res.image_view_raii = _device_raii.createImageView(img_view_create_info);
+        res.command_fence_raii = _device_raii.createFence(fci);
+        framebuffer_ci.setPAttachments(&*res.image_view_raii);
+        res.framebuffer_raii = _device_raii.createFramebuffer(framebuffer_ci);
+    }
+}
+void NativeFilm::create_frame_resources() {
+    _frame_resources.resize(_frame_count);
+
+
+    vk::FenceCreateInfo fci;
+    fci.setFlags(vk::FenceCreateFlagBits::eSignaled);
+    for (auto &&res : _frame_resources) {
+        res.image_semaphore_raii = _device_raii.createSemaphore({});
+        res.draw_semaphore_raii = _device_raii.createSemaphore({});
+        res.present_semaphore_raii = _device_raii.createSemaphore({});
+        res.fence_raii = _device_raii.createFence(fci);
+    }
+}
+uint32_t NativeFilm::choose_swapchain_image_count() const {
+    auto capabilities = _physical_device_raii.getSurfaceCapabilitiesKHR(*_surface_raii);
+
+    uint32_t image_count = capabilities.minImageCount + 1;
+
+    if (capabilities.maxImageCount != 0) {
+        image_count = std::min(image_count, capabilities.maxImageCount);
+    }
+    return image_count;
+}
+
+void NativeFilm::create_swapchain() {
+    vk::SwapchainCreateInfoKHR create_info;
+
+    create_info.setSurface(*_surface_raii);
+
+    create_info.setImageExtent(_swapchain_extent = choose_swapchain_extent());
+    create_info.setMinImageCount(_swapchain_count = choose_swapchain_image_count());// choose format
+    {
+        auto formats = (*_physical_device_raii).getSurfaceFormatsKHR(*_surface_raii);
+
+        for (const auto &format : formats) {
+            if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+                _surface_format = format;
+                goto found_format;
+            }
+        }
+        _surface_format = formats[0];
+    found_format:
+
+        create_info.setImageFormat(_surface_format.format);
+        create_info.setImageColorSpace(_surface_format.colorSpace);
+        create_info.setImageArrayLayers(1);
+        create_info.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+    }
+
+    {
+        vk::PresentModeKHR present_mode = vk::PresentModeKHR::eFifo;
+        auto modes = (*_physical_device_raii).getSurfacePresentModesKHR(*_surface_raii);
+        for (const auto &mode : modes) {
+            if (mode == vk::PresentModeKHR::eMailbox) {
+                present_mode = mode;
+            }
+        }
+        create_info.setPresentMode(present_mode);
+        create_info.clipped = VK_TRUE;
+    }
+
+    std::vector<uint32_t> queue_indices;
+    queue_indices.emplace_back(_graphics_queue_family_index);
+    if (_graphics_queue_family_index != _present_queue_family_index) {
+        queue_indices.emplace_back(_present_queue_family_index);
+    }
+
+    create_info.setPQueueFamilyIndices(queue_indices.data());
+    create_info.setQueueFamilyIndexCount(queue_indices.size());
+    if (queue_indices[0] != queue_indices[1]) {
+        create_info.setImageSharingMode(vk::SharingMode::eConcurrent);
+    } else {
+        create_info.setImageSharingMode(vk::SharingMode::eExclusive);
+    }
+    auto capabilities = _physical_device_raii.getSurfaceCapabilitiesKHR(*_surface_raii);
+    create_info.setPreTransform(capabilities.currentTransform);
+
+    create_info.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
+
+    create_info.setOldSwapchain(VK_NULL_HANDLE);
+    _swapchain_raii = _device_raii.createSwapchainKHR(create_info);
+}
+
+
+void NativeFilm::create_render_pass() {
+    vk::AttachmentDescription color_attachment;
+    color_attachment.setFormat(_surface_format.format);
+    color_attachment.setSamples(vk::SampleCountFlagBits::e1);
+
+    color_attachment.setLoadOp(vk::AttachmentLoadOp::eClear);
+    color_attachment.setStoreOp(vk::AttachmentStoreOp::eStore);
+
+    color_attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+    color_attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+    color_attachment.setInitialLayout(vk::ImageLayout::eUndefined);
+    color_attachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+    vk::AttachmentReference color_attachment_ref;
+    color_attachment_ref.setAttachment(0);
+    color_attachment_ref.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+    vk::SubpassDescription subpass;
+    subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
+    subpass.setColorAttachmentCount(1);
+    subpass.setPColorAttachments(&color_attachment_ref);
+
+    vk::RenderPassCreateInfo create_info;
+    create_info.setAttachmentCount(1);
+    create_info.setPAttachments(&color_attachment);
+    create_info.setSubpassCount(1);
+    create_info.setPSubpasses(&subpass);
+
+    vk::SubpassDependency dep;
+    dep.setSrcSubpass(VK_SUBPASS_EXTERNAL);
+    dep.setDstSubpass(0);
+
+    dep.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    dep.setSrcAccessMask(vk::AccessFlags(0));
+    dep.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    dep.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+
+    create_info.setDependencies(dep);
+    _default_render_pass_raii = _device_raii.createRenderPass(create_info);
+}
+void NativeFilm::create_graphics_command_pool() {
+
+    vk::CommandPoolCreateInfo ci;
+    ci.setQueueFamilyIndex(_graphics_queue_family_index);
+    ci.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
+    _graphics_command_pool_raii = _device_raii.createCommandPool(ci);
+}
+
+
+void pre_draw() {
+
+    auto device = this->device();
+
+    vk::Result result;
+    result = device.waitForFences(*in_flight_fence, VK_TRUE, UINT64_MAX);
+    if (result != vk::Result::eSuccess) {
+        spdlog::error("Fence failed");
+    }
+    device.resetFences(*in_flight_fence);
+
+    uint32_t image_index;
+    result = (*device).acquireNextImageKHR(*film->swapchain, UINT64_MAX, *image_available_semaphore, VK_NULL_HANDLE, &image_index);
+    if (result != vk::Result::eSuccess) {
+        spdlog::error("Failed to acquire image");
+    }
+
+    command_buffer.reset();
+}
+
+void post_draw() {
+    vk::SubmitInfo si;
+    vk::PipelineStageFlags wait_stages[] = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput
+    };
+    {
+        si.setWaitSemaphores(*image_available_semaphore);
+
+        si.setWaitDstStageMask(*wait_stages);
+        si.setCommandBuffers(*command_buffer);
+        si.setSignalSemaphores(*render_finished_semaphore);
+    }
+
+    film->graphics_queue.submit(si, *in_flight_fence);
+
+    vk::PresentInfoKHR present;
+    present.setWaitSemaphores(*render_finished_semaphore);
+
+    present.setSwapchains(*film->swapchain);
+    present.setImageIndices(image_index);
+
+    present.setPResults(nullptr);
+    result = film->presentable_queue.presentKHR(present);
+    if (result != vk::Result::eSuccess) {
+        spdlog::error("Failed to present");
+    }
+}
 }// namespace balsa::visualization::vulkan

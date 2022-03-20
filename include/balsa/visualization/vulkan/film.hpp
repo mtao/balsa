@@ -23,7 +23,7 @@ class Film {
     virtual vk::CommandBuffer currentCommandBuffer() const = 0;
     virtual vk::Framebuffer currentFramebuffer() const = 0;
 
-    virtual vk::RenderPass defaultRenderPass() const = 0;
+    virtual vk::RenderPass default_render_pass() const = 0;
 
 
     virtual vk::Format depthStencilFormat() const = 0;
@@ -34,7 +34,7 @@ class Film {
     virtual vk::Device device() const = 0;
 
     virtual void setPhysicalDeviceIndex(int index) = 0;
-    virtual vk::PhysicalDevice physicalDevice() const = 0;
+    virtual vk::PhysicalDevice physical_device() const = 0;
     virtual vk::PhysicalDeviceProperties physicalDeviceProperties() const = 0;
 
     virtual vk::CommandPool graphicsCommandPool() const = 0;

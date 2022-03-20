@@ -14,6 +14,7 @@ class Film : public visualization::vulkan::NativeFilm {
   private:
     // Whatever window management tool we have is in charge of this
     vk::raii::SurfaceKHR make_surface() const override;
+    vk::Extent2D choose_swapchain_extent() const override;
     GLFWwindow *_window;
 };
 }// namespace balsa::visualization::glfw::vulkan

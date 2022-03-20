@@ -19,7 +19,7 @@ class Film : public visualization::vulkan::Film {
     vk::CommandBuffer currentCommandBuffer() const override;
     vk::Framebuffer currentFramebuffer() const override;
 
-    vk::RenderPass defaultRenderPass() const override;
+    vk::RenderPass default_render_pass() const override;
 
 
     vk::Format depthStencilFormat() const override;
@@ -30,7 +30,7 @@ class Film : public visualization::vulkan::Film {
     vk::Device device() const override;
 
     void setPhysicalDeviceIndex(int index) override;
-    vk::PhysicalDevice physicalDevice() const override;
+    vk::PhysicalDevice physical_device() const override;
     vk::PhysicalDeviceProperties physicalDeviceProperties() const override;
 
     vk::CommandPool graphicsCommandPool() const override;

@@ -9,6 +9,7 @@ test_asset_dir = meson.current_source_dir() / 'assets'
 
 
 executable('test_vulkan_window', 'test_vulkan_window.cpp', dependencies: [visualization_deps])
+executable('test_vulkan_window_glfw', 'test_vulkan_window_glfw.cpp', dependencies: [visualization_deps])
 
 
 test_iterators= executable('test_iterators', 'test_iterators.cpp', dependencies: [core_dep,catch2_dep])

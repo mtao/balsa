@@ -13,6 +13,9 @@ eigen_version = '>=3.4.0'
 
 
 
+cc = meson.get_compiler('cpp')
+dl_lib = cc.find_library('dl')
+
 
 vulkan_dep = dependency('vulkan', required: false)
 
@@ -212,7 +215,7 @@ visualization_sources = [
 ]
 visualization_sources += colormap_shaders_sources
 
-visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
+visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
 if get_option('glfw')
   visualization_dep += glfw_dep
 endif

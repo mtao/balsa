@@ -20,7 +20,7 @@ vk::CommandBuffer Film::currentCommandBuffer() const { return _window.currentCom
 
 vk::Framebuffer Film::currentFramebuffer() const { return _window.currentFramebuffer(); }
 
-vk::RenderPass Film::defaultRenderPass() const { return _window.defaultRenderPass(); }
+vk::RenderPass Film::default_render_pass() const { return _window.defaultRenderPass(); }
 
 
 vk::Format Film::depthStencilFormat() const { return static_cast<vk::Format>(_window.depthStencilFormat()); }
@@ -31,7 +31,7 @@ vk::ImageView Film::depthStencilImageView() const { return _window.depthStencilI
 vk::Device Film::device() const { return _window.device(); }
 
 void Film::setPhysicalDeviceIndex(int index) { _window.setPhysicalDeviceIndex(index); }
-vk::PhysicalDevice Film::physicalDevice() const { return _window.physicalDevice(); }
+vk::PhysicalDevice Film::physical_device() const { return _window.physicalDevice(); }
 vk::PhysicalDeviceProperties Film::physicalDeviceProperties() const { return *_window.physicalDeviceProperties(); }
 
 vk::CommandPool Film::graphicsCommandPool() const { return _window.graphicsCommandPool(); }

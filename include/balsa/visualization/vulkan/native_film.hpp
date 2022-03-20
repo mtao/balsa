@@ -10,9 +10,9 @@ namespace balsa::visualization::vulkan {
 
 class NativeFilm : public Film {
   public:
-    NativeFilm(const std::vector<const char*> device_extensions, const std::vector<const char*> validation_layers = {});
-    void set_device_extensions(const std::vector<const char*> device_extensions);
-        void set_validation_layers(const std::vector<const char*> validation_layers);
+    NativeFilm(const std::vector<std::string> &device_extensions = {}, const std::vector<std::string> &validation_layers = {});
+    void set_device_extensions(const std::vector<std::string> &device_extensions);
+    void set_validation_layers(const std::vector<std::string> &validation_layers);
     NativeFilm(std::nullptr_t);
     virtual ~NativeFilm();
     glm::uvec2 swapChainImageSize() const override;
@@ -23,7 +23,7 @@ class NativeFilm : public Film {
     vk::CommandBuffer currentCommandBuffer() const override;
     vk::Framebuffer currentFramebuffer() const override;
 
-    vk::RenderPass defaultRenderPass() const override;
+    vk::RenderPass default_render_pass() const override;
 
 
     vk::Format depthStencilFormat() const override;
@@ -32,9 +32,11 @@ class NativeFilm : public Film {
 
 
     vk::Device device() const override;
+    vk::SurfaceKHR surface() const;
 
     void setPhysicalDeviceIndex(int index) override;
-    vk::PhysicalDevice physicalDevice() const override;
+    vk::PhysicalDevice physical_device() const override;
+    const vk::raii::PhysicalDevice &physical_device_raii() const;
     vk::PhysicalDeviceProperties physicalDeviceProperties() const override;
 
     vk::CommandPool graphicsCommandPool() const override;
@@ -64,6 +66,7 @@ class NativeFilm : public Film {
   protected:
     // Whatever window management tool we have is in charge of this
     virtual vk::raii::SurfaceKHR make_surface() const = 0;
+    virtual vk::Extent2D choose_swapchain_extent() const = 0;
     void initialize();
 
   private:
@@ -89,35 +92,31 @@ class NativeFilm : public Film {
     virtual std::vector<std::string> get_required_extensions();
     vk::DebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info() const;
 
-    void create_instance();
     void create_debug_messenger();
-    virtual void pick_physical_device();
-    void create_device();
 
 
     QueueTargetIndices available_queues(const vk::PhysicalDevice &device) const;
-    virtual int score_physical_devices(const vk::PhysicalDevice &device) const;
 
-    std::vector<const char *> validation_layers;
-    std::vector<const char *> validation_layers;
+    std::vector<std::string> _device_extensions;
+    std::vector<std::string> _validation_layers;
 
 
     // Structure borrowed from QVulkanWindow
     struct ImageResources {
         vk::Image image = nullptr;
         vk::raii::ImageView image_view_raii = nullptr;
-        vk::CommandBuffer command_buffer = nullptr;
-        vk::Fence command_fence = nullptr;
+        vk::raii::CommandBuffer command_buffer_raii = nullptr;
+        vk::raii::Fence command_fence_raii = nullptr;
         bool command_fence_waitable = false;
         vk::raii::Framebuffer framebuffer_raii = nullptr;
-        vk::CommandBuffer present_command_buffer = nullptr;
+        vk::raii::CommandBuffer present_command_buffer_raii = nullptr;
         // vk::Image msaa_image = nullptr;
         // vk::raii::Image msaa_image_view = nullptr;
     };
 
     // Structure borrowed from QVulkanWindow
     struct FrameResources {
-        vk::Fence fence = nullptr;
+        vk::raii::Fence fence_raii = nullptr;
         bool fence_waitable = false;
         vk::raii::Semaphore image_semaphore_raii = nullptr;
         vk::raii::Semaphore draw_semaphore_raii = nullptr;
@@ -128,31 +127,49 @@ class NativeFilm : public Film {
 
 
     vk::raii::Context _context_raii;
+
+    void create_instance();
     vk::raii::Instance _instance_raii = nullptr;
     vk::raii::DebugUtilsMessengerEXT _debug_messenger_raii = nullptr;
+
+    virtual void pick_physical_device();
+    virtual int score_physical_devices(const vk::PhysicalDevice &device) const;
     vk::raii::PhysicalDevice _physical_device_raii = nullptr;
+
+    void create_device();
     vk::raii::Device _device_raii = nullptr;
-    vk::raii::SurfaceKHR _surface_raii = nullptr;
-
-
     uint32_t _graphics_queue_family_index;
     uint32_t _present_queue_family_index;
     vk::raii::Queue _graphics_queue_raii = nullptr;
     vk::raii::Queue _present_queue_raii = nullptr;
 
+    // make_surface()
+    vk::raii::SurfaceKHR _surface_raii = nullptr;
+
+
+    // choose_swapchain_extent()
+    uint32_t choose_swapchain_image_count() const;
+    void create_swapchain();
     vk::Extent2D _swapchain_extent;
     vk::SurfaceFormatKHR _surface_format;
     vk::raii::SwapchainKHR _swapchain_raii = nullptr;
+    size_t _swapchain_count = 5;
+
+    void create_graphics_command_pool();
+    vk::raii::CommandPool _graphics_command_pool_raii = nullptr;
+
+
+    size_t _frame_count = 1;
 
     size_t _current_swapchain_index;
+    void create_image_resources();
     std::vector<ImageResources> _image_resources;
+    void create_frame_resources();
     std::vector<FrameResources> _frame_resources;
 
-    vk::raii::PipelineLayout _pipeline_layout_raii = nullptr;
-    vk::raii::Pipeline _pipeline_raii = nullptr;
-    vk::raii::RenderPass _default_render_pass_raii = nullptr;
 
-    vk::raii::CommandPool _graphics_command_pool_raii = nullptr;
+    void create_render_pass();
+    vk::raii::RenderPass _default_render_pass_raii = nullptr;
 };
 }// namespace balsa::visualization::vulkan
 #endif

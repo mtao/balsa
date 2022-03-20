@@ -22,4 +22,18 @@ vk::raii::SurfaceKHR Film::make_surface() const {
     }
     return vk::raii::SurfaceKHR(instance_raii(), vksurface);
 }
+
+vk::Extent2D Film::choose_swapchain_extent() const {
+    auto capabilities = physical_device_raii().getSurfaceCapabilitiesKHR(surface());
+    vk::Extent2D cur_extent = capabilities.currentExtent;
+    if (cur_extent.width == std::numeric_limits<uint32_t>::max()) {
+        int h, w;
+        glfwGetFramebufferSize(_window, &w, &h);
+        cur_extent.width =
+          std::clamp<uint32_t>(w, capabilities.minImageExtent.width, capabilities.maxImageExtent.height);
+        cur_extent.height =
+          std::clamp<uint32_t>(h, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+    }
+    return cur_extent;
+}
 }// namespace balsa::visualization::glfw::vulkan
