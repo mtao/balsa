@@ -10,7 +10,9 @@ namespace balsa::visualization::vulkan {
 
 class NativeFilm : public Film {
   public:
-    NativeFilm();
+    NativeFilm(const std::vector<const char*> device_extensions, const std::vector<const char*> validation_layers = {});
+    void set_device_extensions(const std::vector<const char*> device_extensions);
+        void set_validation_layers(const std::vector<const char*> validation_layers);
     NativeFilm(std::nullptr_t);
     virtual ~NativeFilm();
     glm::uvec2 swapChainImageSize() const override;
@@ -82,9 +84,9 @@ class NativeFilm : public Film {
         bool meets_requirements(vk::QueueFlags requirement) const;
     };
 
-    bool checkValidationLayerSupport();
+    bool check_validation_layer_support();
     bool enable_validation_layers = true;
-    virtual std::vector<const char *> getRequiredExtensions();
+    virtual std::vector<std::string> get_required_extensions();
     vk::DebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info() const;
 
     void create_instance();
@@ -96,7 +98,8 @@ class NativeFilm : public Film {
     QueueTargetIndices available_queues(const vk::PhysicalDevice &device) const;
     virtual int score_physical_devices(const vk::PhysicalDevice &device) const;
 
-    static const std::vector<const char *> validation_layers;
+    std::vector<const char *> validation_layers;
+    std::vector<const char *> validation_layers;
 
 
     // Structure borrowed from QVulkanWindow

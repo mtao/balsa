@@ -2,6 +2,8 @@
 #include <spdlog/spdlog.h>
 
 #include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/transform.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <map>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -95,7 +97,7 @@ auto NativeFilm::available_queues(
 
     return indices;
 }
-bool NativeFilm::checkValidationLayerSupport() {
+bool NativeFilm::check_validation_layer_support() {
 
     std::vector<vk::LayerProperties> available_layers = _context_raii.enumerateInstanceLayerProperties();
 
@@ -118,7 +120,7 @@ bool NativeFilm::checkValidationLayerSupport() {
 
     return true;
 }
-std::vector<const char *> NativeFilm::getRequiredExtensions() {
+std::vector<const char *> NativeFilm::get_required_extensions() {
     std::vector<const char *> extension_names;
     if (enable_validation_layers) {
         extension_names.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -204,7 +206,7 @@ void NativeFilm::create_device() {
 }
 
 void NativeFilm::create_instance() {
-    if (enable_validation_layers && !checkValidationLayerSupport()) {
+    if (enable_validation_layers && !check_validation_layer_support()) {
         throw std::runtime_error(
           "validation layers requirested but not available");
     }
@@ -220,14 +222,17 @@ void NativeFilm::create_instance() {
 
     vk::InstanceCreateInfo icinfo({}, /*pApplicationInfo=*/&app_info);
     icinfo.setEnabledLayerCount(validation_layers.size());
-    icinfo.setPpEnabledExtensionNames(validation_layers.data());
+    icinfo.setPpEnabledLayerNames(validation_layers.data());
 
-    std::vector<const char *> extension_names = getRequiredExtensions();
+    std::vector<std::string> extension_names = get_required_extensions();
     // for (auto &&extension : extension_names) {
     //     spdlog::info("Require extension {}", extension);
     // }
-    icinfo.setEnabledExtensionCount(extension_names.size());
-    icinfo.setPpEnabledExtensionNames(extension_names.data());
+    std::vector<const char*> names = extension_names | ranges::views::transform([](const std::string& str) -> const char* { return str.c_str(); }) | ranges::to_vector;
+    icinfo.setEnabledExtensionCount(names.size());
+    icinfo.setPpEnabledExtensionNames(names.data());
+
+    // TODO: why is this 0?
     icinfo.setEnabledLayerCount(0);
 
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info;
