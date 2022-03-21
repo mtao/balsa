@@ -226,44 +226,50 @@ void NativeFilm::create_instance() {
     app_info.setApiVersion(VK_API_VERSION_1_2);
 
     vk::InstanceCreateInfo icinfo({}, /*pApplicationInfo=*/&app_info);
-    std::vector<const char *> names = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+    std::vector<const char *> layer_cnames = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
     {
-        icinfo.setEnabledLayerCount(names.size());
-        icinfo.setPpEnabledLayerNames(names.data());
+        icinfo.setEnabledLayerCount(layer_cnames.size());
+        icinfo.setPpEnabledLayerNames(layer_cnames.data());
     }
 
+    std::vector<std::string> extension_names = get_required_extensions();
+    std::vector<const char *> ext_cnames;
     {
-        std::vector<std::string> extension_names = get_required_extensions();
         extension_names.insert(extension_names.end(), device_extensions.begin(), device_extensions.end());
 
         // for (auto &&extension : extension_names) {
         //     spdlog::info("Require extension {}", extension);
         // }
-        std::vector<const char *> names = extension_names | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
-        icinfo.setEnabledExtensionCount(names.size());
-        icinfo.setPpEnabledExtensionNames(names.data());
+        ext_cnames = extension_names | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+        icinfo.setEnabledExtensionCount(ext_cnames.size());
+        icinfo.setPpEnabledExtensionNames(ext_cnames.data());
     }
 
 
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info;
     if (enable_validation_layers) {
         debug_create_info = debug_utils_messenger_create_info();
+        icinfo.setPNext(&debug_create_info);
+    }
+    for (auto &&ext : ext_cnames) {
+        spdlog::info("ext: {}", ext);
+    }
+    for (auto &&ext : layer_cnames) {
+        spdlog::info("layer: {}", ext);
     }
 
-    icinfo.setPNext(&debug_create_info);
     try {
         _instance_raii = _context_raii.createInstance(icinfo);
     } catch (const std::exception &e) {
         spdlog::error("Error creating instance: {}", e.what());
+
+        std::vector<vk::ExtensionProperties> extensions = _context_raii.enumerateInstanceExtensionProperties();
+
+        for (const auto &extension : extensions) {
+            spdlog::info("Instance has extension [{}] available",
+                         extension.extensionName);
+        }
         throw e;
-    }
-
-
-    std::vector<vk::ExtensionProperties> extensions = _context_raii.enumerateInstanceExtensionProperties();
-
-    for (const auto &extension : extensions) {
-        spdlog::info("Instance has extension [{}] available",
-                     extension.extensionName);
     }
 }
 
@@ -433,6 +439,9 @@ vk::ImageView NativeFilm::depthStencilImageView() const {
 }
 vk::Device NativeFilm::device() const {
     return *_device_raii;
+}
+const vk::raii::Device &NativeFilm::device_raii() const {
+    return _device_raii;
 }
 vk::SurfaceKHR NativeFilm::surface() const {
     return *_surface_raii;

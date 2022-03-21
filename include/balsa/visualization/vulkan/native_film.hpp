@@ -32,6 +32,7 @@ class NativeFilm : public Film {
 
 
     vk::Device device() const override;
+    const vk::raii::Device &device_raii() const;
     vk::SurfaceKHR surface() const;
 
     void setPhysicalDeviceIndex(int index) override;
