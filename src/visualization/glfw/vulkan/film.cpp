@@ -36,4 +36,15 @@ vk::Extent2D Film::choose_swapchain_extent() const {
     }
     return cur_extent;
 }
+
+std::vector<std::string> Film::get_required_instance_extensions() const {
+    uint32_t glfwExtensionCount = 0;
+    const char **glfwExtensions;
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    std::vector<std::string> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    auto oext = NativeFilm::get_required_instance_extensions();
+    extensions.insert(extensions.end(), oext.begin(), oext.end());
+    return extensions;
+}
 }// namespace balsa::visualization::glfw::vulkan

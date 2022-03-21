@@ -12,6 +12,7 @@ class HelloTriangleApplication {
   public:
     HelloTriangleApplication() : window(make_window()) {
         film = std::make_unique<glfw::vulkan::Film>(window);
+        create_graphics_pipeline();
     }
 
     void run() { mainLoop(); }
@@ -277,7 +278,9 @@ int main(int argc, char *argv[]) {
     glfwInit();
 
     std::vector<std::string> validation_layers = {
-        "VK_LAYER_KHRONOS_validation"
+        "VK_LAYER_KHRONOS_validation",
+        "VK_LAYER_LUNARG_parameter_validation",
+        "VK_LAYER_LUNARG_core_validation",
     };
     //! [0]
 

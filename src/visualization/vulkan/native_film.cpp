@@ -10,9 +10,6 @@
 
 namespace {
 
-const std::vector<const char *> device_extensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
   debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -63,11 +60,14 @@ namespace balsa::visualization::vulkan {
 void NativeFilm::set_device_extensions(const std::vector<std::string> &device_extensions) {
     _device_extensions = device_extensions;
 }
+void NativeFilm::set_instance_extensions(const std::vector<std::string> &instance_extensions) {
+    _instance_extensions = instance_extensions;
+}
 void NativeFilm::set_validation_layers(const std::vector<std::string> &validation_layers) {
     _validation_layers = validation_layers;
 }
 
-NativeFilm::NativeFilm(const std::vector<std::string> &device_extensions, const std::vector<std::string> &validation_layers) : _device_extensions(device_extensions), _validation_layers(validation_layers) {
+NativeFilm::NativeFilm(const std::vector<std::string> &device_extensions, const std::vector<std::string> &instance_extensions, const std::vector<std::string> &validation_layers) : _device_extensions(device_extensions), _instance_extensions(instance_extensions), _validation_layers(validation_layers) {
     initialize();
 }
 NativeFilm::NativeFilm(std::nullptr_t) {}
@@ -124,7 +124,7 @@ bool NativeFilm::check_validation_layer_support() {
 
     return true;
 }
-std::vector<std::string> NativeFilm::get_required_extensions() {
+std::vector<std::string> NativeFilm::get_required_instance_extensions() const {
     std::vector<std::string> extension_names;
     if (enable_validation_layers) {
         extension_names.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -133,6 +133,14 @@ std::vector<std::string> NativeFilm::get_required_extensions() {
 
     return extension_names;
 }
+
+std::vector<std::string> NativeFilm::get_required_device_extensions() const {
+    std::vector<std::string> extension_names;
+    extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+    return extension_names;
+}
+
 vk::DebugUtilsMessengerCreateInfoEXT
   NativeFilm::debug_utils_messenger_create_info() const {
     vk::DebugUtilsMessengerCreateInfoEXT create_info;
@@ -195,8 +203,19 @@ void NativeFilm::create_device() {
     create_info.setPQueueCreateInfos(dqcis.data());
     create_info.setQueueCreateInfoCount(dqcis.size());
 
-    create_info.setEnabledExtensionCount(device_extensions.size());
-    create_info.setPpEnabledExtensionNames(device_extensions.data());
+    std::vector<std::string> extension_names = get_required_device_extensions();
+    std::vector<const char *> ext_cnames;
+    {
+        extension_names.insert(extension_names.end(), _device_extensions.begin(), _device_extensions.end());
+
+        // for (auto &&extension : extension_names) {
+        //     spdlog::info("Require extension {}", extension);
+        // }
+        ext_cnames = extension_names | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+        create_info.setEnabledExtensionCount(ext_cnames.size());
+        create_info.setPpEnabledExtensionNames(ext_cnames.data());
+    }
+
 
     create_info.setPEnabledFeatures(&dev_features);
     std::vector<const char *> names = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
@@ -232,10 +251,10 @@ void NativeFilm::create_instance() {
         icinfo.setPpEnabledLayerNames(layer_cnames.data());
     }
 
-    std::vector<std::string> extension_names = get_required_extensions();
+    std::vector<std::string> extension_names = get_required_instance_extensions();
     std::vector<const char *> ext_cnames;
     {
-        extension_names.insert(extension_names.end(), device_extensions.begin(), device_extensions.end());
+        extension_names.insert(extension_names.end(), _instance_extensions.begin(), _instance_extensions.end());
 
         // for (auto &&extension : extension_names) {
         //     spdlog::info("Require extension {}", extension);
@@ -250,6 +269,15 @@ void NativeFilm::create_instance() {
     if (enable_validation_layers) {
         debug_create_info = debug_utils_messenger_create_info();
         icinfo.setPNext(&debug_create_info);
+    }
+    for (auto &&ext : extension_names) {
+        spdlog::info("str ext: {}", ext);
+    }
+    for (auto &&ext : extension_names) {
+        spdlog::info("str ext: {}", ext);
+    }
+    for (auto &&ext : _validation_layers) {
+        spdlog::info("str layer: {}", ext);
     }
     for (auto &&ext : ext_cnames) {
         spdlog::info("ext: {}", ext);
@@ -268,6 +296,12 @@ void NativeFilm::create_instance() {
         for (const auto &extension : extensions) {
             spdlog::info("Instance has extension [{}] available",
                          extension.extensionName);
+        }
+        auto layer_properties = _context_raii.enumerateInstanceLayerProperties();
+
+        for (const auto &layer : layer_properties) {
+            spdlog::info("Instance has layer [{}] available",
+                         layer.layerName);
         }
         throw e;
     }

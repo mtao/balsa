@@ -10,8 +10,9 @@ namespace balsa::visualization::vulkan {
 
 class NativeFilm : public Film {
   public:
-    NativeFilm(const std::vector<std::string> &device_extensions = {}, const std::vector<std::string> &validation_layers = {});
+    NativeFilm(const std::vector<std::string> &device_extensions = {}, const std::vector<std::string> &instance_extensions = {}, const std::vector<std::string> &validation_layers = {});
     void set_device_extensions(const std::vector<std::string> &device_extensions);
+    void set_instance_extensions(const std::vector<std::string> &device_extensions);
     void set_validation_layers(const std::vector<std::string> &validation_layers);
     NativeFilm(std::nullptr_t);
     virtual ~NativeFilm();
@@ -74,6 +75,9 @@ class NativeFilm : public Film {
     virtual vk::Extent2D choose_swapchain_extent() const = 0;
     void initialize();
 
+    virtual std::vector<std::string> get_required_instance_extensions() const;
+    virtual std::vector<std::string> get_required_device_extensions() const;
+
   private:
     struct QueueTargetIndices {
         std::set<uint32_t> graphics_queue;
@@ -94,7 +98,6 @@ class NativeFilm : public Film {
 
     bool check_validation_layer_support();
     bool enable_validation_layers = true;
-    virtual std::vector<std::string> get_required_extensions();
     vk::DebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info() const;
 
     void create_debug_messenger();
@@ -103,6 +106,7 @@ class NativeFilm : public Film {
     QueueTargetIndices available_queues(const vk::PhysicalDevice &device) const;
 
     std::vector<std::string> _device_extensions;
+    std::vector<std::string> _instance_extensions;
     std::vector<std::string> _validation_layers;
 
 
