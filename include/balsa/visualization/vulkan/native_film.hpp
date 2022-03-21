@@ -20,8 +20,8 @@ class NativeFilm : public Film {
 
     vk::Format colorFormat() const override;
 
-    vk::CommandBuffer currentCommandBuffer() const override;
-    vk::Framebuffer currentFramebuffer() const override;
+    vk::CommandBuffer current_command_buffer() const override;
+    vk::Framebuffer current_framebuffer() const override;
 
     vk::RenderPass default_render_pass() const override;
 
@@ -62,6 +62,10 @@ class NativeFilm : public Film {
 
     vk::Instance instance() const;
     const vk::raii::Instance &instance_raii() const;
+
+    void pre_draw();
+
+    void post_draw();
 
   protected:
     // Whatever window management tool we have is in charge of this
@@ -161,7 +165,8 @@ class NativeFilm : public Film {
 
     size_t _frame_count = 1;
 
-    size_t _current_swapchain_index;
+    uint32_t _current_swapchain_index = 0;
+    uint32_t _current_frame_index = 0;
     void create_image_resources();
     std::vector<ImageResources> _image_resources;
     void create_frame_resources();

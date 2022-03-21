@@ -16,8 +16,8 @@ class Film : public visualization::vulkan::Film {
 
     glm::uvec2 swapChainImageSize() const override;
 
-    vk::CommandBuffer currentCommandBuffer() const override;
-    vk::Framebuffer currentFramebuffer() const override;
+    vk::CommandBuffer current_command_buffer() const override;
+    vk::Framebuffer current_framebuffer() const override;
 
     vk::RenderPass default_render_pass() const override;
 

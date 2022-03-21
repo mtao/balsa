@@ -20,8 +20,8 @@ class Film {
 
     virtual vk::Format colorFormat() const = 0;
 
-    virtual vk::CommandBuffer currentCommandBuffer() const = 0;
-    virtual vk::Framebuffer currentFramebuffer() const = 0;
+    virtual vk::CommandBuffer current_command_buffer() const = 0;
+    virtual vk::Framebuffer current_framebuffer() const = 0;
 
     virtual vk::RenderPass default_render_pass() const = 0;
 

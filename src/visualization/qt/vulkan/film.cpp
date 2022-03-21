@@ -16,9 +16,9 @@ vk::Format Film::colorFormat() const {
 }
 
 
-vk::CommandBuffer Film::currentCommandBuffer() const { return _window.currentCommandBuffer(); }
+vk::CommandBuffer Film::current_command_buffer() const { return _window.currentCommandBuffer(); }
 
-vk::Framebuffer Film::currentFramebuffer() const { return _window.currentFramebuffer(); }
+vk::Framebuffer Film::current_framebuffer() const { return _window.currentFramebuffer(); }
 
 vk::RenderPass Film::default_render_pass() const { return _window.defaultRenderPass(); }
 
