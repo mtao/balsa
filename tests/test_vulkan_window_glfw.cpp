@@ -48,23 +48,18 @@ class HelloTriangleApplication {
 
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
+            spdlog::info("Doing a frame");
             glfwPollEvents();
             film->pre_draw();
             draw_frame();
             film->post_draw();
-            film->device().waitIdle();
+            // film->device().waitIdle();
         }
     }
 
 
     void record_command_buffer() {
         auto cb = film->current_command_buffer();
-        vk::CommandBufferBeginInfo bi;
-        {
-            bi.setFlags({});// not used
-            bi.setPInheritanceInfo(nullptr);
-            cb.begin(bi);
-        }
 
         vk::ClearValue clear_color =
           vk::ClearColorValue{ std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f } };
@@ -86,16 +81,10 @@ class HelloTriangleApplication {
                         *pipeline);
 
         cb.draw(3, 1, 0, 0);
-
-        cb.endRenderPass();
-
-        cb.end();
     }
 
     void draw_frame() {
-        film->pre_draw();
         record_command_buffer();
-        film->post_draw();
     }
     void create_graphics_pipeline() {
         balsa::visualization::shaders::FlatShader<balsa::scene_graph::embedding_traits2D> fs;

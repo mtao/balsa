@@ -125,8 +125,10 @@ class NativeFilm : public Film {
 
     // Structure borrowed from QVulkanWindow
     struct FrameResources {
+        // make sure we dont mainpulate the same frame more than once
         vk::raii::Fence fence_raii = nullptr;
         bool fence_waitable = false;
+
         vk::raii::Semaphore image_semaphore_raii = nullptr;
         vk::raii::Semaphore draw_semaphore_raii = nullptr;
         vk::raii::Semaphore present_semaphore_raii = nullptr;

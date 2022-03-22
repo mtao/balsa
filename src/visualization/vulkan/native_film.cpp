@@ -581,6 +581,7 @@ void NativeFilm::create_image_resources() {
 
     vk::FenceCreateInfo fci;
     fci.setFlags(vk::FenceCreateFlagBits::eSignaled);
+
     for (auto &&[res, buf, buf2, img] : ranges::views::zip(_image_resources, cmd_buffers, pres_cmd_buffers, images)) {
         res.command_buffer_raii = std::move(buf);
         res.present_command_buffer_raii = std::move(buf2);
@@ -729,95 +730,175 @@ void NativeFilm::pre_draw() {
 
     auto device = this->device();
     auto &frame = _frame_resources[_current_frame_index];
+    spdlog::info("pre_draw: using frame {}/{}", _current_frame_index, _frame_resources.size());
 
     vk::Result result;
 
     if (!frame.image_acquired) {
         if (frame.fence_waitable) {
+            spdlog::info("pre_draw: waiting for fence_raii");
             result = device.waitForFences(*frame.fence_raii, VK_TRUE, UINT64_MAX);
+            device.resetFences(*frame.fence_raii);
+            frame.fence_waitable = false;
 
 
+            spdlog::info("pre_draw: acquiring image");
             vk::ResultValue<uint32_t> res =
-              device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, VK_NULL_HANDLE);
-            if (res.result == vk::Result::eSuccess) {
-                _current_swapchain_index = res.value;
-
+              device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
+            _current_swapchain_index = res.value;
+            if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
+                spdlog::info("Acquired image {}", res.value);
+                frame.fence_waitable = true;
                 frame.image_semaphore_waitable = true;
                 frame.image_acquired = true;
-                frame.fence_waitable = true;
+            } else if (res.result == vk::Result::eErrorOutOfDateKHR) {
+                // recreate swapchains
             } else {// TODO if device is lost or some other issue occurs
                 spdlog::error("Failed to acquire image");
             }
         }
     }
+    spdlog::info("pre_draw: using image {}/{}", _current_swapchain_index, _image_resources.size());
 
     auto &image = _image_resources[_current_swapchain_index];
 
     if (image.command_fence_waitable) {
+        spdlog::info("pre_draw: waiting for command fence");
         result = device.waitForFences(*image.command_fence_raii, VK_TRUE, UINT64_MAX);
         if (result != vk::Result::eSuccess) {
             spdlog::error("Fence failed");
         }
+        spdlog::info("pre_draw: Resetting command fence");
         device.resetFences(*image.command_fence_raii);
+        image.command_fence_waitable = false;
+    } else {
+        spdlog::warn("Image command fence was not waitable");
     }
 
 
-    vk::CommandBufferAllocateInfo ci;
-    ci.setCommandPool(*_graphics_command_pool_raii);
-    ci.setLevel(vk::CommandBufferLevel::ePrimary);
-    ci.setCommandBufferCount(1);
-    image.command_buffer_raii = std::move(_device_raii.allocateCommandBuffers(ci)[0]);
+    image.command_buffer_raii.reset();
+    {
+        vk::CommandBufferBeginInfo bi;
+        {
+            bi.setFlags({});// not used
+            bi.setPInheritanceInfo(nullptr);
+        }
+        image.command_buffer_raii.begin(bi);
+    }
+    if (false) {
+
+        auto cb = current_command_buffer();
+        vk::ClearValue clear_color =
+          vk::ClearColorValue{ std::array<float, 4>{ 1.f, 0.f, 0.f, 1.f } };
+        vk::RenderPassBeginInfo rpi;
+        {
+            rpi.setRenderPass(default_render_pass());
+            rpi.setFramebuffer(current_framebuffer());
+            rpi.renderArea.setOffset({ 0, 0 });
+            auto extent = swapChainImageSize();
+            rpi.renderArea.setExtent({ extent.x, extent.y });
+
+            rpi.setClearValueCount(1);
+            rpi.setPClearValues(&clear_color);
+        }
+
+        cb.beginRenderPass(rpi, vk::SubpassContents::eInline);
+
+        cb.endRenderPass();
+    }
+
+    //
 }
 
 void NativeFilm::post_draw() {
     auto &image = _image_resources[_current_swapchain_index];
     auto &frame = _frame_resources[_current_frame_index];
 
+    spdlog::info("post_draw: using image {}/{}", _current_frame_index, _frame_resources.size());
+    spdlog::info("post_draw: using image {}/{}", _current_swapchain_index, _image_resources.size());
+
+    if (_graphics_queue_family_index != _present_queue_family_index) {
+        spdlog::info("Transfer barrier");
+        vk::ImageMemoryBarrier presentTransfer;
+        presentTransfer.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+        presentTransfer.setOldLayout(vk::ImageLayout::ePresentSrcKHR);
+        presentTransfer.setNewLayout(vk::ImageLayout::ePresentSrcKHR);
+        presentTransfer.setSrcQueueFamilyIndex(_graphics_queue_family_index);
+        presentTransfer.setDstQueueFamilyIndex(_present_queue_family_index);
+        presentTransfer.setImage(image.image);
+        presentTransfer.setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, {}, 1, {}, 1));
+        image.command_buffer_raii.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, presentTransfer);
+    }
 
     // TODO: swapchain image release to cmd buf to send to graphics queue
     // TODO: add a readback?
     //
-    image.command_buffer_raii.endRenderPass();
+    // image.command_buffer_raii.endRenderPass();
 
     image.command_buffer_raii.end();
 
+    spdlog::info("post_draw: preparing submit info");
     vk::SubmitInfo si;
-    vk::PipelineStageFlags wait_stages[] = {
-        vk::PipelineStageFlagBits::eColorAttachmentOutput
-    };
     {
-        si.setWaitSemaphores(*frame.image_semaphore_raii);
+        if (frame.image_semaphore_waitable) {
+            spdlog::info("image -> draw semaphores");
+            spdlog::info("image semaphore raii {}", bool(*frame.image_semaphore_raii));
+            si.setWaitSemaphores(*frame.image_semaphore_raii);
+        }
 
         // if frame grabbing?
         if (true) {
+            spdlog::info("draw semaphore raii {}", bool(*frame.draw_semaphore_raii));
             si.setSignalSemaphores(*frame.draw_semaphore_raii);
         }
-        si.setWaitDstStageMask(*wait_stages);
+        vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        si.setWaitDstStageMask(flags);
         si.setCommandBuffers(*image.command_buffer_raii);
     }
 
-    _graphics_queue_raii.submit(si, *image.command_fence_raii);
-    frame.image_semaphore_waitable = false;
-    image.command_fence_waitable = true;
+    try {
+        spdlog::info("post_draw: adding image fence to graphics queue with command_fence_raii");
+        spdlog::info("command fence raii {}", bool(*image.command_fence_raii));
+        _graphics_queue_raii.submit(si, *image.command_fence_raii);
+        frame.image_semaphore_waitable = false;
+        image.command_fence_waitable = true;
+    } catch (const std::exception &e) {
+        spdlog::error("Failed: {}", e.what());
+    }
 
-    if (_present_queue_family_index != _graphics_queue_family_index) {
+    const bool graphics_present_different_familes = _present_queue_family_index != _graphics_queue_family_index;
+    if (graphics_present_different_familes) {
+        spdlog::info("post_draw: attaching semaphores because queues are different");
+        spdlog::info("draw -> present semaphores");
         si.setWaitSemaphores(*frame.draw_semaphore_raii);
         si.setSignalSemaphores(*frame.present_semaphore_raii);
         si.setCommandBuffers(*image.present_command_buffer_raii);
         _present_queue_raii.submit(si, *image.command_fence_raii);
     }
 
+    spdlog::info("post_draw: setting present wait semaphore");
     vk::PresentInfoKHR present;
-    present.setWaitSemaphores(*frame.present_semaphore_raii);
-
     present.setSwapchains(*_swapchain_raii);
     present.setImageIndices(_current_swapchain_index);
 
-    present.setPResults(nullptr);
+    // present.setPResults(nullptr);
+
+    if (graphics_present_different_familes) {
+        spdlog::info("present-> done");
+        present.setWaitSemaphores(*frame.present_semaphore_raii);
+    } else {
+        spdlog::info("draw-> done");
+        present.setWaitSemaphores(*frame.draw_semaphore_raii);
+    }
+
+    spdlog::info("post_draw: calling present");
     vk::Result result =
       _present_queue_raii.presentKHR(present);
     if (result != vk::Result::eSuccess) {
         spdlog::error("Failed to present");
     }
+    frame.image_acquired = false;
+    _current_frame_index = (_current_frame_index + 1) % _frame_resources.size();
+    spdlog::info("post_draw: Done");
 }
 }// namespace balsa::visualization::vulkan
