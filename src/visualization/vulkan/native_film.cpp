@@ -868,7 +868,7 @@ void NativeFilm::post_draw() {
 
     const bool graphics_present_different_familes = _present_queue_family_index != _graphics_queue_family_index;
     if (graphics_present_different_familes) {
-        spdlog::info("post_draw: attaching semaphores because queues are different");
+        spdlog::info("post_draw: attaching semaphores because queues are different (graphics={}, present={})", _graphics_queue_family_index, _present_queue_family_index);
         spdlog::info("draw -> present semaphores");
         si.setWaitSemaphores(*frame.draw_semaphore_raii);
         si.setSignalSemaphores(*frame.present_semaphore_raii);
