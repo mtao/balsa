@@ -16,10 +16,10 @@ class NativeFilm : public Film {
     void set_validation_layers(const std::vector<std::string> &validation_layers);
     NativeFilm(std::nullptr_t);
     virtual ~NativeFilm();
-    glm::uvec2 swapChainImageSize() const override;
+    glm::uvec2 swapchain_image_size() const override;
 
 
-    vk::Format colorFormat() const override;
+    vk::Format color_format() const override;
 
     vk::CommandBuffer current_command_buffer() const override;
     vk::Framebuffer current_framebuffer() const override;
@@ -27,30 +27,32 @@ class NativeFilm : public Film {
     vk::RenderPass default_render_pass() const override;
 
 
-    vk::Format depthStencilFormat() const override;
-    vk::Image depthStencilImage() const override;
-    vk::ImageView depthStencilImageView() const override;
+    vk::Format depth_stencil_format() const override;
+    vk::Image depth_stencil_image() const override;
+    vk::ImageView depth_stencil_image_view() const override;
 
 
     vk::Device device() const override;
     const vk::raii::Device &device_raii() const;
     vk::SurfaceKHR surface() const;
 
-    void setPhysicalDeviceIndex(int index) override;
+    void set_physical_device_index(int index) override;
     vk::PhysicalDevice physical_device() const override;
     const vk::raii::PhysicalDevice &physical_device_raii() const;
-    vk::PhysicalDeviceProperties physicalDeviceProperties() const override;
+    vk::PhysicalDeviceProperties physical_device_properties() const override;
 
-    vk::CommandPool graphicsCommandPool() const override;
-
-
-    uint32_t graphicsQueueFamilyIndex() const override;
-    uint32_t hostVisibleMemoryIndex() const override;
-    vk::Queue graphicsQueue() const override;
+    vk::CommandPool graphics_command_pool() const override;
 
 
-    vk::Image msaaColorImage(int index) const override;
-    vk::ImageView msaaColorImageView(int index) const override;
+    uint32_t graphics_queue_family_index() const override;
+    uint32_t host_visible_memory_index() const override;
+    vk::Queue graphics_queue() const override;
+    uint32_t present_queue_family_index() const;
+    vk::Queue present_queue() const;
+
+
+    vk::Image msaa_color_image(int index) const override;
+    vk::ImageView msaa_color_image_view(int index) const override;
 
 
     void set_sample_count(vk::SampleCountFlagBits) override;
@@ -58,9 +60,9 @@ class NativeFilm : public Film {
     vk::SampleCountFlags supported_sample_counts() const override;
 
 
-    int swapChainImageCount() const override;
-    vk::Image swapChainImage(int index) const override;
-    vk::ImageView swapChainImageView(int index) const override;
+    int swapchain_image_count() const override;
+    vk::Image swapchain_image(int index) const override;
+    vk::ImageView swapchain_image_view(int index) const override;
 
     vk::Instance instance() const;
     const vk::raii::Instance &instance_raii() const;
@@ -73,10 +75,12 @@ class NativeFilm : public Film {
     // Whatever window management tool we have is in charge of this
     virtual vk::raii::SurfaceKHR make_surface() const = 0;
     virtual vk::Extent2D choose_swapchain_extent() const = 0;
+    const vk::SwapchainKHR &swapchain() const;
     void initialize();
 
     virtual std::vector<std::string> get_required_instance_extensions() const;
     virtual std::vector<std::string> get_required_device_extensions() const;
+
 
   private:
     struct QueueTargetIndices {
@@ -182,6 +186,11 @@ class NativeFilm : public Film {
 
     void create_render_pass();
     vk::raii::RenderPass _default_render_pass_raii = nullptr;
+
+  public:
+    void set_swapchain_index(uint32_t index) { _current_swapchain_index = index; }
+    const ImageResources &image_resources() const { return _image_resources[_current_swapchain_index]; }
+    const FrameResources &frame_resources() const { return _frame_resources[0]; }
 };
 }// namespace balsa::visualization::vulkan
 #endif

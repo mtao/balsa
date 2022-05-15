@@ -4,14 +4,27 @@
 #include <iostream>
 #include <colormap/colormap.h>
 #include <balsa/visualization/shaders/flat.hpp>
+#include <vulkan/vulkan.hpp>
 #include <balsa/visualization/glfw//vulkan//film.hpp>
 #include <GLFW/glfw3.h>
 
 using namespace balsa::visualization;
+
+
+// this shim proves why protected is stupid
+// but maybe it's actually really cool - testing shims only add a little bit of
+// work for writing tests, but not so much that writing tests feels burdensome
+class GLFWFilmTestShim : public glfw::vulkan::Film {
+  public:
+    using Film::Film;
+    using Film::swapchain;
+};
+
+
 class HelloTriangleApplication {
   public:
     HelloTriangleApplication() : window(make_window()) {
-        film = std::make_unique<glfw::vulkan::Film>(window);
+        film = std::make_unique<GLFWFilmTestShim>(window);
         create_graphics_pipeline();
     }
 
@@ -24,7 +37,8 @@ class HelloTriangleApplication {
     const uint32_t WIDTH = 800;
     const uint32_t HEIGHT = 600;
     GLFWwindow *window = nullptr;
-    std::unique_ptr<glfw::vulkan::Film> film;
+    std::unique_ptr<GLFWFilmTestShim> film;
+    // std::unique_ptr<glfw::vulkan::Film> film;
 
 
     vk::raii::PipelineLayout pipeline_layout = nullptr;
@@ -50,10 +64,11 @@ class HelloTriangleApplication {
         while (!glfwWindowShouldClose(window)) {
             spdlog::info("Doing a frame");
             glfwPollEvents();
-            film->pre_draw();
-            draw_frame();
-            film->post_draw();
-            // film->device().waitIdle();
+            old_draw_frame();
+            // film->pre_draw();
+            // draw_frame();
+            // film->post_draw();
+            //  film->device().waitIdle();
         }
     }
 
@@ -68,7 +83,7 @@ class HelloTriangleApplication {
             rpi.setRenderPass(film->default_render_pass());
             rpi.setFramebuffer(film->current_framebuffer());
             rpi.renderArea.setOffset({ 0, 0 });
-            auto extent = film->swapChainImageSize();
+            auto extent = film->swapchain_image_size();
             rpi.renderArea.setExtent({ extent.x, extent.y });
 
             rpi.setClearValueCount(1);
@@ -81,6 +96,87 @@ class HelloTriangleApplication {
                         *pipeline);
 
         cb.draw(3, 1, 0, 0);
+    }
+    void old_record_command_buffer() {
+        auto cb = film->current_command_buffer();
+        vk::CommandBufferBeginInfo bi;
+        {
+            bi.setFlags({});// not used
+            bi.setPInheritanceInfo(nullptr);
+            cb.begin(bi);
+        }
+
+        vk::ClearValue clear_color =
+          vk::ClearColorValue{ std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f } };
+        vk::RenderPassBeginInfo rpi;
+        {
+            rpi.setRenderPass(film->default_render_pass());
+            rpi.setFramebuffer(film->current_framebuffer());
+            rpi.renderArea.setOffset({ 0, 0 });
+            auto extent = film->swapchain_image_size();
+            rpi.renderArea.setExtent({ extent.x, extent.y });
+
+            rpi.setClearValueCount(1);
+            rpi.setPClearValues(&clear_color);
+        }
+
+        cb.beginRenderPass(rpi, vk::SubpassContents::eInline);
+
+        cb.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                        *pipeline);
+
+        cb.draw(3, 1, 0, 0);
+
+        cb.endRenderPass();
+
+        cb.end();
+    }
+
+    void old_draw_frame() {
+        auto device = film->device();
+        const auto &frame = film->frame_resources();
+
+        vk::Result result;
+        result = device.waitForFences(*frame.fence_raii, VK_TRUE, UINT64_MAX);
+        if (result != vk::Result::eSuccess) {
+            spdlog::error("Fence failed");
+        }
+        device.resetFences(*frame.fence_raii);
+
+        uint32_t image_index;
+        result = device.acquireNextImageKHR(film->swapchain(), UINT64_MAX, *frame.image_semaphore_raii, VK_NULL_HANDLE, &image_index);
+        if (result != vk::Result::eSuccess) {
+            spdlog::error("Failed to acquire image");
+        }
+        auto command_buffer = film->current_command_buffer();
+
+        record_command_buffer();
+
+        vk::SubmitInfo si;
+        vk::PipelineStageFlags wait_stages[] = {
+            vk::PipelineStageFlagBits::eColorAttachmentOutput
+        };
+        {
+            si.setWaitSemaphores(*frame.image_semaphore_raii);
+
+            si.setWaitDstStageMask(*wait_stages);
+            si.setCommandBuffers(command_buffer);
+            si.setSignalSemaphores(*frame.draw_semaphore_raii);
+        }
+
+        film->graphics_queue().submit(si, *frame.fence_raii);
+
+        vk::PresentInfoKHR present;
+        present.setWaitSemaphores(*frame.draw_semaphore_raii);
+
+        present.setSwapchains(film->swapchain());
+        present.setImageIndices(image_index);
+
+        present.setPResults(nullptr);
+        result = film->present_queue().presentKHR(present);
+        if (result != vk::Result::eSuccess) {
+            spdlog::error("Failed to present");
+        }
     }
 
     void draw_frame() {
@@ -135,7 +231,7 @@ class HelloTriangleApplication {
                 ci.setPrimitiveRestartEnable(VK_FALSE);
             }
 
-            auto ssize = film->swapChainImageSize();
+            auto ssize = film->swapchain_image_size();
             vk::Extent2D swapchain_extent(ssize.x, ssize.y);
             vk::Rect2D scissor;
             {

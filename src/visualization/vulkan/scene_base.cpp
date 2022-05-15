@@ -27,7 +27,7 @@ void SceneBase::draw_background(Film &film) {
     uint32_t clear_count = _do_clear_color + _do_clear_depth;
 
 
-    const glm::uvec2 sz = film.swapChainImageSize();
+    const glm::uvec2 sz = film.swapchain_image_size();
     VkRenderPassBeginInfo rpBeginInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .pNext = nullptr,

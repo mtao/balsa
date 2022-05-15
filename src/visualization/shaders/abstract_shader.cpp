@@ -16,11 +16,14 @@ namespace {
     const std::string &get_shader_type_name(AbstractShader::ShaderType type) {
         const static std::string v0 = "Vertex";
         const static std::string v1 = "Fragment";
+        const static std::string v_ = "Unknown";
         switch (type) {
         case AbstractShader::ShaderType::Vertex:
             return v0;
         case AbstractShader::ShaderType::Fragment:
             return v1;
+            default:
+            return v_;
         }
     }
     const std::string &shaderc_compilation_status_name(shaderc_compilation_status status) {
@@ -33,6 +36,7 @@ namespace {
         const static std::string e6 = "Validation Error";
         const static std::string e7 = "Transformation Error";
         const static std::string e8 = "Configuration Error";
+        const static std::string v_ = "Unknown Error";
         switch (status) {
         case shaderc_compilation_status_success:
             return e0;
@@ -52,6 +56,8 @@ namespace {
             return e7;
         case shaderc_compilation_status_configuration_error:
             return e8;
+            default:
+            return v_;
         }
     }
 }// namespace
