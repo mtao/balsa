@@ -96,6 +96,7 @@ class NativeFilm : public Film {
         bool meets_requirements(vk::QueueFlags requirement) const;
     };
 
+    // Debug and validation functionality
     bool check_validation_layer_support();
     bool enable_validation_layers = true;
     vk::DebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info() const;
@@ -105,6 +106,7 @@ class NativeFilm : public Film {
 
     QueueTargetIndices available_queues(const vk::PhysicalDevice &device) const;
 
+    // Extensions that are specified at construction / before init
     std::vector<std::string> _device_extensions;
     std::vector<std::string> _instance_extensions;
     std::vector<std::string> _validation_layers;
@@ -112,6 +114,7 @@ class NativeFilm : public Film {
 
     // Structure borrowed from QVulkanWindow
     struct ImageResources {
+        // the Image being rendered to
         vk::Image image = nullptr;
         vk::raii::ImageView image_view_raii = nullptr;
         vk::raii::CommandBuffer command_buffer_raii = nullptr;

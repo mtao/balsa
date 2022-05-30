@@ -4,8 +4,28 @@
 #include <iostream>
 #include <colormap/colormap.h>
 #include <balsa/visualization/shaders/flat.hpp>
+#include <balsa/visualization/vulkan/scene.hpp>
+#include <balsa/scene_graph/transformations/matrix_transformation.hpp>
 #include <balsa/visualization/glfw//vulkan//film.hpp>
 #include <GLFW/glfw3.h>
+
+class Scene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::embedding_traits3F>> {
+    using embedding_traits = balsa::scene_graph::embedding_traits3F;
+    using transformation_type = balsa::scene_graph::transformations::MatrixTransformation<embedding_traits>;
+    using scene_type = balsa::visualization::vulkan::Scene<transformation_type>;
+
+  public:
+    void draw(const camera_type &, balsa::visualization::vulkan::Film &film) {
+
+        static float value = 0.0;
+        value += 0.0005f;
+        if (value > 1.0f)
+            value = 0.0f;
+        auto col = colormap::transform::LavaWaves().getColor(value);
+        set_clear_color(float(col.r), float(col.g), float(col.b));
+        draw_background(film);
+    }
+};
 
 using namespace balsa::visualization;
 class HelloTriangleApplication {
@@ -25,6 +45,7 @@ class HelloTriangleApplication {
     const uint32_t HEIGHT = 600;
     GLFWwindow *window = nullptr;
     std::unique_ptr<glfw::vulkan::Film> film;
+    Scene scene;
 
 
     vk::raii::PipelineLayout pipeline_layout = nullptr;
