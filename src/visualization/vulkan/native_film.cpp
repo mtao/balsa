@@ -95,6 +95,10 @@ const vk::raii::Instance &NativeFilm::instance_raii() const {
     return _instance_raii;
 }
 
+const vk::SwapchainKHR &NativeFilm::swapchain() const {
+    return *_swapchain_raii;
+}
+
 auto NativeFilm::available_queues(
   const vk::PhysicalDevice &device) const -> QueueTargetIndices {
     QueueTargetIndices indices(device);
@@ -447,10 +451,10 @@ bool NativeFilm::QueueTargetIndices::meets_requirements(vk::QueueFlags requireme
     return (requirement & active_flags()) == requirement;
 }
 
-glm::uvec2 NativeFilm::swapChainImageSize() const {
+glm::uvec2 NativeFilm::swapchain_image_size() const {
     return glm::uvec2(_swapchain_extent.width, _swapchain_extent.height);
 }
-vk::Format NativeFilm::colorFormat() const {
+vk::Format NativeFilm::color_format() const {
     return _surface_format.format;
 }
 vk::CommandBuffer NativeFilm::current_command_buffer() const {
@@ -462,13 +466,13 @@ vk::Framebuffer NativeFilm::current_framebuffer() const {
 vk::RenderPass NativeFilm::default_render_pass() const {
     return *_default_render_pass_raii;
 }
-vk::Format NativeFilm::depthStencilFormat() const {
+vk::Format NativeFilm::depth_stencil_format() const {
     return vk::Format{};// TODO
 }
-vk::Image NativeFilm::depthStencilImage() const {
+vk::Image NativeFilm::depth_stencil_image() const {
     return nullptr;// TODO:
 }
-vk::ImageView NativeFilm::depthStencilImageView() const {
+vk::ImageView NativeFilm::depth_stencil_image_view() const {
     return nullptr;// TODO
 }
 vk::Device NativeFilm::device() const {
@@ -480,7 +484,7 @@ const vk::raii::Device &NativeFilm::device_raii() const {
 vk::SurfaceKHR NativeFilm::surface() const {
     return *_surface_raii;
 }
-void NativeFilm::setPhysicalDeviceIndex(int) {
+void NativeFilm::set_physical_device_index(int) {
     // TODO
 }
 vk::PhysicalDevice NativeFilm::physical_device() const {
@@ -489,25 +493,31 @@ vk::PhysicalDevice NativeFilm::physical_device() const {
 const vk::raii::PhysicalDevice &NativeFilm::physical_device_raii() const {
     return _physical_device_raii;
 }
-vk::PhysicalDeviceProperties NativeFilm::physicalDeviceProperties() const {
+vk::PhysicalDeviceProperties NativeFilm::physical_device_properties() const {
     return _physical_device_raii.getProperties();
 }
-vk::CommandPool NativeFilm::graphicsCommandPool() const {
+vk::CommandPool NativeFilm::graphics_command_pool() const {
     return *_graphics_command_pool_raii;
 }
-uint32_t NativeFilm::graphicsQueueFamilyIndex() const {
+uint32_t NativeFilm::graphics_queue_family_index() const {
     return _graphics_queue_family_index;
 }
-uint32_t NativeFilm::hostVisibleMemoryIndex() const {
+uint32_t NativeFilm::present_queue_family_index() const {
+    return _present_queue_family_index;
+}
+uint32_t NativeFilm::host_visible_memory_index() const {
     return 0;// TODO
 }
-vk::Queue NativeFilm::graphicsQueue() const {
+vk::Queue NativeFilm::graphics_queue() const {
     return *_graphics_queue_raii;
 }
-vk::Image NativeFilm::msaaColorImage(int) const {
+vk::Queue NativeFilm::present_queue() const {
+    return *_present_queue_raii;
+}
+vk::Image NativeFilm::msaa_color_image(int) const {
     return nullptr;// TODO
 }
-vk::ImageView NativeFilm::msaaColorImageView(int) const {
+vk::ImageView NativeFilm::msaa_color_image_view(int) const {
     return nullptr;// TODO
 }
 void NativeFilm::set_sample_count(vk::SampleCountFlagBits) {
@@ -521,7 +531,7 @@ vk::SampleCountFlagBits NativeFilm::sample_count() const {
 }
 vk::SampleCountFlags NativeFilm::supported_sample_counts() const {
 
-    auto properties = physicalDeviceProperties();
+    auto properties = physical_device_properties();
     // TODO
     const auto &limits = properties.limits;
     const auto &color = limits.framebufferColorSampleCounts;
@@ -530,13 +540,13 @@ vk::SampleCountFlags NativeFilm::supported_sample_counts() const {
     vk::SampleCountFlags flags = color & depth & stencil;
     return flags;
 }
-int NativeFilm::swapChainImageCount() const {
+int NativeFilm::swapchain_image_count() const {
     return _image_resources.size();
 }
-vk::Image NativeFilm::swapChainImage(int) const {
+vk::Image NativeFilm::swapchain_image(int) const {
     return nullptr;// TODO
 }
-vk::ImageView NativeFilm::swapChainImageView(int) const {
+vk::ImageView NativeFilm::swapchain_image_view(int) const {
     return nullptr;// TODO
 }
 
@@ -795,7 +805,7 @@ void NativeFilm::pre_draw() {
             rpi.setRenderPass(default_render_pass());
             rpi.setFramebuffer(current_framebuffer());
             rpi.renderArea.setOffset({ 0, 0 });
-            auto extent = swapChainImageSize();
+            auto extent = swapchain_image_size();
             rpi.renderArea.setExtent({ extent.x, extent.y });
 
             rpi.setClearValueCount(1);
