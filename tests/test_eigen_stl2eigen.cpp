@@ -15,7 +15,7 @@ TEST_CASE("stl2eigen", "[ranges]") {
              | ranges::to<std::vector<std::array<int, 2>>>;
 
 
-    balsa::eigen::container_size(a);
+    REQUIRE(balsa::eigen::container_size(a) == Eigen::Dynamic);
     auto b = balsa::eigen::stl2eigen(a);
     std::cout << b << std::endl;
 
