@@ -209,9 +209,9 @@ if vis_enabled
   ]
   visualization_sources += colormap_shaders_sources
   
-  visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
-  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_dep, include_directories: [include_dir, colormap_shaders_include_path])
-  visualization_deps = declare_dependency(link_with: visualization_lib, dependencies: visualization_dep, include_directories: [colormap_shaders_include_path])
+  visualization_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
+  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_deps, include_directories: [include_dir, colormap_shaders_include_path])
+  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_deps, include_directories: [colormap_shaders_include_path])
 endif
 
 
