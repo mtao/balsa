@@ -9,11 +9,12 @@
 #include "balsa/eigen/types.hpp"
 #include "balsa/eigen/shape_checks.hpp"
 #include "balsa/eigen/concepts/index_types.hpp"
+#include "balsa/eigen/concepts/matrix_types.hpp"
 #include "balsa/utils/factorial.hpp"
 
-namespace balsa::geometry {
+namespace balsa::geometry::simplex {
 
-namespace detail::simplex_volume {
+namespace detail::volume {
     template<int RowsMinusCols, eigen::concepts::MatrixBaseDerived Mat>
     constexpr std::array<int, 2> relative_shape() {
         using namespace Eigen;
@@ -57,16 +58,16 @@ namespace detail::simplex_volume {
     }
 
 
-}// namespace detail::simplex_volume
+}// namespace detail::volume
 
 
-template<detail::simplex_volume::concepts::OneMoreColThanRows Derived>
-auto simplex_volume_signed(const Derived &V) {
+template<detail::volume::concepts::OneMoreColThanRows Derived>
+auto volume_signed(const Derived &V) {
 
-    if constexpr (detail::simplex_volume::relative_shape<-1, Derived>() == std::array<int, 2>{ { Eigen::Dynamic, Eigen::Dynamic } }) {
+    if constexpr (detail::volume::relative_shape<-1, Derived>() == std::array<int, 2>{ { Eigen::Dynamic, Eigen::Dynamic } }) {
         if (V.cols() == V.rows() + 1) {
 
-            throw std::invalid_argument(fmt::format("simplex_volume_signed expected a N,N+1 matrix, got got {} expected {}", V.rows(), V.cols()));
+            throw std::invalid_argument(fmt::format("volume_signed expected a N,N+1 matrix, got got {} expected {}", V.rows(), V.cols()));
         }
     }
     auto m = (V.rightCols(V.cols() - 1).colwise() - V.col(0)).eval();
@@ -74,23 +75,26 @@ auto simplex_volume_signed(const Derived &V) {
 }
 
 template<typename Derived>
-auto simplex_volume_unsigned(const Eigen::MatrixBase<Derived> &V) {
+auto volume_unsigned(const Eigen::MatrixBase<Derived> &V) {
     auto m = (V.rightCols(V.cols() - 1).colwise() - V.col(0)).eval();
     int quotient = balsa::utils::factorial(m.cols());
     return std::sqrt((m.transpose() * m).determinant()) / quotient;
 }
 
-template<typename Derived>
-auto simplex_volume(const Eigen::MatrixBase<Derived> &V) -> typename Derived::Scalar {
+template<eigen::concepts::PlainObjectBaseDerived MatType>
+auto volume(const MatType &V) -> typename MatType::Scalar {
+    if constexpr(eigen::concepts::RowColStaticCompatible<MatType>)
+    {
+    }
     if (V.rows() + 1 == V.cols()) {
-        return simplex_volume_signed(V);
+        return volume_signed(V);
     } else {
-        return simplex_volume_unsigned(V);
+        return volume_unsigned(V);
     }
 }
 
 template<eigen::concepts::MatrixBaseDerived VertexDerived, eigen::concepts::IntegralMatrix SimplexDerived>
-auto simplex_volumes(const VertexDerived &V,
+auto volumes(const VertexDerived &V,
                      const SimplexDerived &S) {
     constexpr static int E = VertexDerived::RowsAtCompileTime;// embed dim
     // constexpr static int N = SimplexDerived::ColsAtCompileTime;//number of
@@ -106,7 +110,7 @@ auto simplex_volumes(const VertexDerived &V,
         for (int j = 0; j < s.rows(); ++j) {
             v.col(j) = V.col(s(j));
         }
-        C(i) = simplex_volume(v);
+        C(i) = volume(v);
     });
     return C;
 }
@@ -129,7 +133,7 @@ auto brep_volume(const VertexDerived &V,
         for (int j = 0; j < s.rows(); ++j) {
             v.col(j) = V.col(s(j));
         }
-        myvol += simplex_volume(v);
+        myvol += volume(v);
     }
     return myvol;
 }
@@ -137,7 +141,7 @@ auto brep_volume(const VertexDerived &V,
 template<typename VertexDerived, eigen::concepts::IntegralMatrix SimplexDerived>
 auto dual_volumes(const VertexDerived &V,
                   const SimplexDerived &S) {
-    auto PV = simplex_volumes(V, S);
+    auto PV = volumes(V, S);
     int elementsPerCell = S.rows();
     using Scalar = typename VertexDerived::Scalar;
     balsa::eigen::VectorX<Scalar> Vo = balsa::eigen::VectorX<Scalar>::Zero(V.cols());
@@ -176,7 +180,7 @@ struct dim_specific<2, S> {
                     for (int k = 0; k < S; ++k) {
                         M.col(k + 1) = V.col(j + k);
                     }
-                    r += balsa::geometry::simplex_volume_unsigned(M);
+                    r += volume_unsigned(M);
                 }
                 return r;
             }

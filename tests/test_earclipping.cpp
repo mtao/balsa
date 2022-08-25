@@ -1,6 +1,6 @@
 #include <catch2/catch.hpp>
 #include <iostream>
-#include <balsa/geometry/simplex_volume.hpp>
+#include <balsa/geometry/simplex/volume.hpp>
 
 #include <balsa/geometry/triangle_mesh/earclipping.hpp>
 TEST_CASE("earclipping_orientation", "[earclipping]") {
@@ -38,7 +38,7 @@ TEST_CASE("earclipping_orientation", "[earclipping]") {
     //  /        |
     // 0---------1
 
-    auto vols = balsa::geometry::simplex_volumes(V, T);
+    auto vols = balsa::geometry::simplex::volumes(V, T);
 
     std::cout << "Vols: " << vols.transpose() << std::endl;
 
@@ -47,7 +47,7 @@ TEST_CASE("earclipping_orientation", "[earclipping]") {
     T = balsa::geometry::triangle_mesh::earclipping(V, loop);
     std::cout << T << std::endl;
 
-    vols = balsa::geometry::simplex_volumes(V, T);
+    vols = balsa::geometry::simplex::volumes(V, T);
     std::cout << "Vols: " << vols.transpose() << std::endl;
     CHECK(vols.minCoeff() > 0);
 }

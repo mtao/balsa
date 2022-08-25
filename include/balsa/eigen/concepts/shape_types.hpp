@@ -4,24 +4,47 @@
 
 namespace balsa::eigen::concepts {
 
-template<typename T>
-concept RowStaticCompatible = DenseBaseDerived<T> && (T::RowsAtCompileTime != Eigen::Dynamic);
+    namespace detail {
+        template <EigenBaseDerived Type>
+        constexpr int compile_row_size = Type::RowsAtCompileTime;
+        template <EigenBaseDerived Type>
+        constexpr int compile_col_size = Type::ColsAtCompileTime;
 
-template<typename T>
-concept ColStaticCompatible = DenseBaseDerived<T> && (T::ColsAtCompileTime != Eigen::Dynamic);
+        constexpr bool is_dynamic(int eigen_shape_size)
+        {
+            return eigen_shape_size == Eigen::Dynamic;
+        }
 
-template<typename T>
-concept RowDynamicCompatible = DenseBaseDerived<T> && (T::RowsAtCompileTime == Eigen::Dynamic);
+    }
 
+
+    // Specifies if a matrix has static rows
 template<typename T>
-concept ColDynamicCompatible = DenseBaseDerived<T> && (T::ColsAtCompileTime == Eigen::Dynamic);
+concept RowStaticCompatible = EigenBaseDerived<T> && !detail::is_dynamic(detail::compile_row_size<T>);
+
+    // Specifies if a matrix has static columns
+template<typename T>
+concept ColStaticCompatible = EigenBaseDerived<T> && !detail::is_dynamic(detail::compile_col_size<T>);
+
+
+// specifies if a matrix has static size
+template<typename T>
+concept RowColStaticCompatible = RowStaticCompatible<T> && ColStaticCompatible<T>;
+
+// specifies if a matrix has a dynamic number of rows
+template<typename T>
+concept RowDynamicCompatible = EigenBaseDerived<T> && detail::is_dynamic(detail::compile_row_size<T>);
+
+// specifies if a matrix has a dynamic number of columns
+template<typename T>
+concept ColDynamicCompatible = EigenBaseDerived<T> && detail::is_dynamic(detail::compile_col_size<T>);
 
 template<int R, typename T>
-concept RowCompatible = DenseBaseDerived<T> && ((T::RowsAtCompileTime == R) || (T::RowsAtCompileTime == Eigen::Dynamic));
+concept RowCompatible = EigenBaseDerived<T> && ((T::RowsAtCompileTime == R) || (T::RowsAtCompileTime == Eigen::Dynamic));
 template<int C, typename T>
-concept ColCompatible = DenseBaseDerived<T> && ((T::ColsAtCompileTime == C) || (T::ColsAtCompileTime == Eigen::Dynamic));
+concept ColCompatible = EigenBaseDerived<T> && ((T::ColsAtCompileTime == C) || (T::ColsAtCompileTime == Eigen::Dynamic));
 template<int R, int C, typename T>
-concept ShapeCompatible = DenseBaseDerived<T> &&RowCompatible<R, T> &&ColCompatible<C, T>;
+concept ShapeCompatible = EigenBaseDerived<T> &&RowCompatible<R, T> &&ColCompatible<C, T>;
 
 
 template<typename T>
