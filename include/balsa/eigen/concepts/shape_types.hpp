@@ -35,7 +35,7 @@ namespace detail {
         if (compile_size == Eigen::Dynamic) {
             return Eigen::Dynamic;
         } else {
-            return compile_size - offset;
+            return compile_size + offset;
         }
     }
 
@@ -143,8 +143,8 @@ namespace detail {
     consteval bool has_n_more_rows_than_cols(int n)
     {
         constexpr int crows = compile_row_size<MatType>;
-        constexpr int ccols = compile_row_size<MatType>;
-        return crows + n == ccols;
+        constexpr int ccols = compile_col_size<MatType>;
+        return crows  == ccols + n;
     }
 }
 
