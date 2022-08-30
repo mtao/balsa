@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <fmt/format.h>
 #include <balsa/eigen/types.hpp>
+#include <tuple>
 #include <balsa/eigen/concepts/shape_types.hpp>
 
 
@@ -12,8 +13,7 @@ namespace balsa::geometry::simplex {
 
 namespace detail {
     template<eigen::concepts::RowColStaticCompatible MatType>
-        requires (eigen::concepts::detail::has_n_more_rows_than_cols<MatType>(-1))
-    auto circumcenter_spd(const MatType &V) {
+    requires(eigen::concepts::detail::has_n_more_rows_than_cols<MatType>(-1)) auto circumcenter_spd(const MatType &V) {
         // 2 V.dot(C) = sum(V.colwise().squaredNorm()).transpose()
 
         // probably dont really need this temporary
@@ -66,7 +66,6 @@ auto circumcenter_spsd(const MatType &V) {
 }
 
 
-
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto circumcenter(const MatType &V) {
 
@@ -87,5 +86,16 @@ auto circumcenter(const MatType &V) {
     }
 }
 
+template<eigen::concepts::MatrixBaseDerived SimplexVertices>
+auto circumcenter_with_squared_radius(const SimplexVertices &S) {
+    auto C = circumcenter(S);
+    return std::make_tuple(C, (C - S.col(0)).squaredNorm());
+}
+
+template<eigen::concepts::MatrixBaseDerived SimplexVertices>
+auto circumcenter_with_radius(const SimplexVertices &S) {
+    auto [C, r2] = circumcenter_with_squared_radius(S);
+    return std::make_tuple(C, std::sqrt(r2));
+}
 }// namespace balsa::geometry::simplex
 #endif// CIRCUMCENTER_H
