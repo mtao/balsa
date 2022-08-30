@@ -13,7 +13,8 @@ namespace balsa::geometry::simplex {
 
 namespace detail {
     template<eigen::concepts::RowColStaticCompatible MatType>
-    requires(eigen::concepts::detail::has_n_more_rows_than_cols<MatType>(-1)) auto circumcenter_spd(const MatType &V) {
+        requires (eigen::concepts::detail::has_n_more_rows_than_cols<MatType>(-1))
+    auto circumcenter_spd(const MatType &V) {
         // 2 V.dot(C) = sum(V.colwise().squaredNorm()).transpose()
 
         // probably dont really need this temporary
