@@ -192,22 +192,40 @@ if vis_enabled
   # on ubuntu i had to install shaderc myself and I put it in my home directory...
   include_dir += include_directories('/home/mtao/.local/include')
   qt5= import('qt5')
-  qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
+  qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets'])
   subdir('resources')
   
   visualization_sources = [
     'src/visualization/vulkan/film.cpp',
     #'src/visualization/vulkan/camera.cpp',
-    'src/visualization/vulkan/scene_base.cpp',
-    'src/visualization/qt/vulkan/windows/scene.cpp',
-    'src/visualization/qt/vulkan/renderers/scene.cpp',
-    'src/visualization/qt/vulkan/film.cpp',
-    'src/visualization/shaders/abstract_shader.cpp',
-    'src/visualization/shaders/flat.cpp',
+    #'src/visualization/vulkan/scene_base.cpp',
+    #'src/visualization/shaders/abstract_shader.cpp',
+    #'src/visualization/shaders/flat.cpp',
     glsl_resource_sources
-  
   ]
+
+  visualization_qt_sources = [
+    #'src/visualization/qt/vulkan/windows/scene.cpp',
+    #'src/visualization/qt/vulkan/renderers/scene.cpp',
+    'src/visualization/qt/vulkan/film.cpp',
+    'src/visualization/qt/mesh_viewer/main_window.cpp',
+    'src/visualization/qt/mesh_viewer/widget.cpp',
+    ]
+
+  visualization_moc_headers = [
+    'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
+    ]
+
+  visualization_qt_mocced = qt5.compile_moc(
+    headers: visualization_moc_headers,
+    include_directories: include_dir,
+    dependencies: qt5_dep
+    )
+
+
   visualization_sources += colormap_shaders_sources
+  visualization_sources += visualization_qt_sources
+  visualization_sources += visualization_qt_mocced
   
   visualization_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
   visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_deps, include_directories: [include_dir, colormap_shaders_include_path])
@@ -217,4 +235,5 @@ endif
 
 
 subdir('tests')
+subdir('examples')
 subdir('tools')
