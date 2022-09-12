@@ -47,7 +47,7 @@ if get_option('protobuf')
   protobuf_dep = dependency('protobuf', required: false)
   if not protobuf_dep.found()
     protobuf_proj = subproject('protobuf')
-    protobuf_dep = dependency('protobuf')
+    #protobuf_dep = protobuf_proj.get_variable('protobuf
   endif
 endif
 
