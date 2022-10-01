@@ -11,7 +11,7 @@ test_asset_dir = meson.current_source_dir() / 'assets'
 vis_enabled = get_option('visualization')
 
 if vis_enabled
-test_scene_graph = executable('test_scene_graph', 'test_scene_graph.cpp', dependencies: [visualization_deps,catch2_dep])
+test_scene_graph = executable('test_scene_graph', 'test_scene_graph.cpp', dependencies: [visualization_dep,catch2_dep])
 test('scene_graph test', test_scene_graph)
 endif
 

@@ -113,7 +113,7 @@ core_headers = [
 include_dir = [include_directories('include')]
 
 
-core_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep]
+core_required_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep]
 
 if get_option('json')
   nlohmann_json_dep = dependency('nlohmann_json', required: false)
@@ -121,12 +121,12 @@ if get_option('json')
     nlohmann_json_proj = subproject('nlohmann_json')
     nlohmann_json_dep = dependency('nlohmann_json')
   endif
-  core_deps += nlohmann_json_dep
+  core_required_deps += nlohmann_json_dep
 endif
 
-core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_deps)
+core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
 
-core_dep = declare_dependency(link_with: core_lib, dependencies: core_deps, include_directories: include_dir)
+core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)
 
 
 #===========================================
@@ -155,8 +155,8 @@ geometry_sources = [
   'src/geometry/triangle_mesh/read_obj.cpp', 
 ]
 
-geometry_deps = core_deps 
-geometry_deps += TBB_dep
+geometry_required_deps = core_required_deps 
+geometry_required_deps += TBB_dep
 
 if get_option('partio') 
   partio_dep = dependency('partio', required: false)
@@ -165,12 +165,12 @@ if get_option('partio')
     partio_dep = partio_subproj.dependency('partio')
   endif
 
-  geometry_deps += partio_dep
+  geometry_required_deps += partio_dep
   geometry_sources += 'src/geometry/point_cloud/partio_loader.cpp'
 endif
 
-geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_deps)
-geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_deps, include_directories: include_dir)
+geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)
+geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_required_deps, include_directories: include_dir)
 
 
 geometry_headers = [
@@ -227,9 +227,9 @@ if vis_enabled
   visualization_sources += visualization_qt_sources
   visualization_sources += visualization_qt_mocced
   
-  visualization_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
-  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_deps, include_directories: [include_dir, colormap_shaders_include_path])
-  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_deps, include_directories: [colormap_shaders_include_path])
+  visualization_required_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
+  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_required_deps, include_directories: [include_dir, colormap_shaders_include_path])
+  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_required_deps, include_directories: [colormap_shaders_include_path])
 endif
 
 
