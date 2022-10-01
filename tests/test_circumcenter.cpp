@@ -36,3 +36,29 @@ TEST_CASE("circumcenter", "[simplex]") {
         random_simplex_test(std::integral_constant<int, 5>{});
     }
 }
+
+TEST_CASE("smallest_circle", "[simplex]") {
+    auto random_simplex_test = [](int n, int m) {
+        balsa::eigen::MatrixX<double> V(n,m);
+        V.setRandom();
+
+        auto [C, radius] = balsa::geometry::simplex::circumcenter_with_radius(V);
+
+        auto  D = V.colwise() - C;
+        balsa::eigen::VectorX<double> R = D.colwise().norm().transpose();
+
+        double mean = R.mean();
+        CHECK(radius == Approx(mean));
+
+                spdlog::info("{} points in R^{} got radius {}, distances to center were {}", m, n, mean, fmt::join(R,","));
+    };
+
+    for (int j = 0; j < 10; ++j) {
+        for (int i = 2; i < 5; ++i) {
+            for(int k = 1; k <= i+1; ++k)
+            {
+                random_simplex_test(i,k);
+            }
+        }
+    }
+}

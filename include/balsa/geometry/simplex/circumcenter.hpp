@@ -2,6 +2,7 @@
 #define BALSA_GEOMETRY_SIMPLEX_CIRCUMCENTER_HPP
 #include <stdexcept>
 #include <fmt/format.h>
+#include <spdlog/spdlog.h>
 #include <balsa/eigen/types.hpp>
 #include <tuple>
 #include <balsa/eigen/concepts/shape_types.hpp>
@@ -12,20 +13,6 @@
 namespace balsa::geometry::simplex {
 
 namespace detail {
-    template<eigen::concepts::RowColStaticCompatible MatType>
-        requires (eigen::concepts::detail::has_n_more_rows_than_cols<MatType>(-1))
-    auto circumcenter_spd(const MatType &V) {
-        // 2 V.dot(C) = sum(V.colwise().squaredNorm()).transpose()
-
-        // probably dont really need this temporary
-        auto m = (V.rightCols(V.cols() - 1).colwise() - V.col(0)).eval();
-        auto A = (2 * m.transpose() * m).eval();
-        auto b = m.colwise().squaredNorm().transpose().eval();
-        A.llt().solveInPlace(b);
-
-        auto c = (V.col(0) + m * b).eval();
-        return c;
-    }
     template<eigen::concepts::MatrixBaseDerived MatType>
     auto circumcenter_spsd(const MatType &V) {
         constexpr static int compile_cols = eigen::concepts::detail::compile_col_size<MatType>;
@@ -44,6 +31,30 @@ namespace detail {
         auto x = A.colPivHouseholderQr().solve(b).eval();
 
         return (V * x.topRows(V.cols())).eval();
+    }
+
+    // should be a N,N+1 shape matrix
+    // if RowCol static then get a shape guarantee
+    template<eigen::concepts::MatrixBaseDerived MatType>
+        requires (!eigen::concepts::RowColStaticCompatible<MatType> || eigen::concepts::detail::has_n_more_rows_than_cols<MatType>(-1))
+    auto circumcenter_spd(const MatType &V) {
+        // 2 V.dot(C) = sum(V.colwise().squaredNorm()).transpose()
+
+        // probably dont really need this temporary
+        auto m = (V.rightCols(V.cols() - 1).colwise() - V.col(0)).eval();
+        auto A = (2 * m.transpose() * m).eval();
+        auto b = m.colwise().squaredNorm().transpose().eval();
+        auto llt = A.llt();
+        if(llt.info() != Eigen::ComputationInfo::Success)
+        {
+            spdlog::debug("circumcenter_spd: Degenerate simplex detected, using circumcenter_spsd");
+            return circumcenter_spsd(V);
+        }
+
+        llt.solveInPlace(b);
+
+        auto c = (V.col(0) + m * b).eval();
+        return c;
     }
 }// namespace detail
 
