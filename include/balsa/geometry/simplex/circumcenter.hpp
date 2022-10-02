@@ -81,19 +81,24 @@ auto circumcenter_spsd(const MatType &V) {
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto circumcenter(const MatType &V) {
 
+    constexpr static int rows = eigen::concepts::detail::compile_row_size<MatType>;
     if constexpr (eigen::concepts::RowColStaticCompatible<MatType>) {
-        constexpr static int rows = eigen::concepts::detail::compile_row_size<MatType>;
         constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
-        if constexpr (rows + 1 == cols) {
+        if constexpr (cols == 2) {
+            return V.rowwise().mean();
+        } else if constexpr (rows + 1 == cols) {
             return detail::circumcenter_spd(V);
         } else {
             return detail::circumcenter_spsd(V);
         }
     } else {
-        if (V.rows() + 1 == V.cols()) {
-            return detail::circumcenter_spd(V);
+        using RetType = eigen::Vector<typename MatType::Scalar, rows>;
+        if (V.cols() == 2) {
+            return RetType(V.rowwise().mean());
+        } else if (V.rows() + 1 == V.cols()) {
+            return RetType(detail::circumcenter_spd(V));
         } else {
-            return detail::circumcenter_spsd(V);
+            return RetType(detail::circumcenter_spsd(V));
         }
     }
 }

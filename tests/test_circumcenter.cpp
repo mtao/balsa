@@ -50,7 +50,7 @@ TEST_CASE("smallest_circle", "[simplex]") {
         double mean = R.mean();
         CHECK(radius == Approx(mean));
 
-                spdlog::info("{} points in R^{} got radius {}, distances to center were {}", m, n, mean, fmt::join(R,","));
+        //spdlog::info("{} points in R^{} got radius {}, distances to center were {}", m, n, mean, fmt::join(R,","));
     };
 
     for (int j = 0; j < 10; ++j) {
