@@ -55,16 +55,12 @@ if get_option('protobuf')
 endif
 
 
-<<<<<<< HEAD
 if get_option('glfw')
   glfw_dep = dependency('glfw3')
 endif
 
-if get_option('imgui')
-=======
 vis_enabled = get_option('visualization')
 if vis_enabled and get_option('imgui')
->>>>>>> main
   imgui_dep = dependency('imgui', required: false)
   if not imgui_dep.found()
     imgui_proj = subproject('imgui')
