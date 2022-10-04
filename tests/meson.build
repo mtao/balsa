@@ -7,9 +7,15 @@ endif
 
 test_asset_dir = meson.current_source_dir() / 'assets'
 
+vis_enabled = get_option('visualization')
 
-executable('test_vulkan_window', 'test_vulkan_window.cpp', dependencies: [visualization_deps])
-executable('test_vulkan_window_glfw', 'test_vulkan_window_glfw.cpp', dependencies: [visualization_deps])
+if vis_enabled
+  executable('test_vulkan_window', 'test_vulkan_window.cpp', dependencies: [visualization_dep])
+
+
+test_scene_graph = executable('test_scene_graph', 'test_scene_graph.cpp', dependencies: [visualization_dep,catch2_dep])
+test('scene_graph test', test_scene_graph)
+endif
 
 
 test_iterators= executable('test_iterators', 'test_iterators.cpp', dependencies: [core_dep,catch2_dep])
@@ -29,6 +35,9 @@ test('mesh_loading test', test_mesh_loading)
 geometry_test_sources = [
   'test_winding_number.cpp',
   'test_earclipping.cpp',
+  'test_circumcenter.cpp',
+  'test_volume.cpp',
+  'test_smallest_enclosing_sphere.cpp',
 ]
 
 test_geometry = executable('test_geometry', 'main.cpp', geometry_test_sources, dependencies: [geometry_dep,catch2_dep])
@@ -36,5 +45,3 @@ test('geometry test', test_geometry)
 
 
 
-test_scene_graph = executable('test_scene_graph', 'test_scene_graph.cpp', dependencies: [visualization_deps,catch2_dep])
-test('scene_graph test', test_scene_graph)

@@ -8,7 +8,7 @@
 
 namespace balsa::eigen::concepts {
 
-namespace internal {
+namespace detail {
     template<typename T>
     concept MatrixBaseDerived = std::derived_from<T, typename Eigen::MatrixBase<T>>;
 
@@ -34,22 +34,23 @@ namespace internal {
 
     template<typename T>
     using derived_type = std::decay_t<decltype(std::declval<T>().derived())>;
-}// namespace internal
-template<typename T>
-concept MatrixBaseDerived = internal::MatrixBaseDerived<internal::derived_type<T>>;
+}// namespace detail
 
 template<typename T>
-concept ArrayBaseDerived = internal::ArrayBaseDerived<internal::derived_type<T>>;
+concept MatrixBaseDerived = detail::MatrixBaseDerived<detail::derived_type<T>>;
 
 template<typename T>
-concept DenseBaseDerived = internal::DenseBaseDerived<internal::derived_type<T>>;
+concept ArrayBaseDerived = detail::ArrayBaseDerived<detail::derived_type<T>>;
+
+template<typename T>
+concept DenseBaseDerived = detail::DenseBaseDerived<detail::derived_type<T>>;
 
 
 template<typename T>
-concept PlainObjectBaseDerived = internal::PlainObjectBaseDerived<internal::derived_type<T>>;
+concept PlainObjectBaseDerived = detail::PlainObjectBaseDerived<detail::derived_type<T>>;
 
 template<typename T>
-concept EigenBaseDerived = internal::EigenBaseDerived<internal::derived_type<T>>;
+concept EigenBaseDerived = detail::EigenBaseDerived<detail::derived_type<T>>;
 
 template<typename T>
 concept SparseCompressedBaseDerived = std::derived_from<T, typename Eigen::SparseCompressedBase<T>>;

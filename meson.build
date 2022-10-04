@@ -50,16 +50,21 @@ if get_option('protobuf')
   protobuf_dep = dependency('protobuf', required: false)
   if not protobuf_dep.found()
     protobuf_proj = subproject('protobuf')
-    protobuf_dep = dependency('protobuf')
+    #protobuf_dep = protobuf_proj.get_variable('protobuf
   endif
 endif
 
 
+<<<<<<< HEAD
 if get_option('glfw')
   glfw_dep = dependency('glfw3')
 endif
 
 if get_option('imgui')
+=======
+vis_enabled = get_option('visualization')
+if vis_enabled and get_option('imgui')
+>>>>>>> main
   imgui_dep = dependency('imgui', required: false)
   if not imgui_dep.found()
     imgui_proj = subproject('imgui')
@@ -67,10 +72,12 @@ if get_option('imgui')
   endif
 endif
 
-glm_dep = dependency('glm', required: false)
-if not glm_dep.found()
-  glm_proj = subproject('glm')
-  glm_dep = dependency('glm')
+if vis_enabled
+  glm_dep = dependency('glm', required: false)
+  if not glm_dep.found()
+    glm_proj = subproject('glm')
+    glm_dep = dependency('glm')
+  endif
 endif
 
 
@@ -84,9 +91,11 @@ if get_option('embree')
 endif
 
 
-colormap_proj = subproject('colormap-shaders')
-colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
-colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
+if vis_enabled
+  colormap_proj = subproject('colormap-shaders')
+  colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
+  colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
+endif
 # 'src/algebra/pascal_triangle.cpp',
 
 
@@ -189,39 +198,43 @@ geometry_headers = [
 # Visualization 
 #===========================================
 
-shaderc_dep = dependency('shaderc')
-# on ubuntu i had to install shaderc myself and I put it in my home directory...
-include_dir += include_directories('/home/mtao/.local/include')
-qt5= import('qt5')
-qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
-subdir('resources')
+if vis_enabled
+  shaderc_dep = dependency('shaderc')
+  # on ubuntu i had to install shaderc myself and I put it in my home directory...
+  include_dir += include_directories('/home/mtao/.local/include')
+  qt5= import('qt5')
+  qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
+  subdir('resources')
+  
+  visualization_sources = [
+    'src/visualization/vulkan/film.cpp',
+    #'src/visualization/vulkan/camera.cpp',
+    'src/visualization/vulkan/scene_base.cpp',
 
 
-visualization_sources = [
-  'src/visualization/vulkan/film.cpp',
-  'src/visualization/vulkan/native_film.cpp',
-  #'src/visualization/vulkan/camera.cpp',
-  'src/visualization/vulkan/scene_base.cpp',
+    'src/visualization/qt/vulkan/windows/scene.cpp',
+    'src/visualization/qt/vulkan/renderers/scene.cpp',
+    'src/visualization/qt/vulkan/film.cpp',
+    'src/visualization/shaders/abstract_shader.cpp',
+    'src/visualization/shaders/flat.cpp',
+  
+  ]
+  visualization_sources += glsl_resource_sources
+  visualization_sources += colormap_shaders_sources
 
-  'src/visualization/glfw/vulkan/film.cpp',
+  visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
 
-  'src/visualization/qt/vulkan/windows/scene.cpp',
-  'src/visualization/qt/vulkan/renderers/scene.cpp',
-  'src/visualization/qt/vulkan/film.cpp',
-  'src/visualization/shaders/abstract_shader.cpp',
-  'src/visualization/shaders/flat.cpp',
-  glsl_resource_sources
-
-]
-visualization_sources += colormap_shaders_sources
-
-visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
-if get_option('glfw')
-  visualization_dep += glfw_dep
+  if get_option('glfw')
+    visualization_dep += glfw_dep
+    visualization_sources += [
+      'src/visualization/glfw/vulkan/film.cpp',
+    ]
+  endif
+  
+  visualization_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
+  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_deps, include_directories: [include_dir, colormap_shaders_include_path])
+  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_deps, include_directories: [colormap_shaders_include_path, include_dir])
 endif
-
-visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_dep, include_directories: [include_dir, colormap_shaders_include_path])
-visualization_deps = declare_dependency(link_with: visualization_lib, dependencies: visualization_dep, include_directories: [colormap_shaders_include_path, include_dir])
 
 
 
