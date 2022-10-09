@@ -20,78 +20,31 @@ dl_lib = cc.find_library('dl')
 vulkan_dep = dependency('vulkan', required: false)
 
 
-fmt_dep = dependency('fmt', required: false, version: fmt_version)
-if not fmt_dep.found()
-  fmt_proj = subproject('fmt')
-  fmt_dep = dependency('fmt', version: fmt_version)
-endif
+fmt_dep = dependency('fmt', version: fmt_version)
 
-spdlog_dep = dependency('spdlog', required: false, version: spdlog_version)
-if not spdlog_dep.found()
-  spdlog_proj = subproject('spdlog')
-  spdlog_dep = dependency('spdlog', version: spdlog_version)
-endif
+spdlog_dep = dependency('spdlog', version: spdlog_version)
 
-eigen_dep = dependency('eigen3', required: false, version: eigen_version)
-if not eigen_dep.found()
-  eigen_proj = subproject('eigen')
-  eigen_dep = dependency('eigen3',version: eigen_version)
-endif
+eigen_dep = dependency('eigen3', version: eigen_version)
 
-range_v3_dep = dependency('range-v3', required: false)
-if not range_v3_dep.found()
-  range_v3_proj = subproject('range-v3')
-  range_v3_dep = dependency('range-v3')
-
-  #range_v3_dep = range_v3_proj.dependency('range-v3')
-endif
+range_v3_dep = dependency('range-v3')
 
 if get_option('protobuf')
-  protobuf_dep = dependency('protobuf', required: false)
-  if not protobuf_dep.found()
-    protobuf_proj = subproject('protobuf')
-    #protobuf_dep = protobuf_proj.get_variable('protobuf
-  endif
+  protobuf_dep = dependency('protobuf')
 endif
 
 
-if get_option('glfw')
-  glfw_dep = dependency('glfw3')
-endif
-
-vis_enabled = get_option('visualization')
-if vis_enabled and get_option('imgui')
-  imgui_dep = dependency('imgui', required: false)
-  if not imgui_dep.found()
-    imgui_proj = subproject('imgui')
-    imgui_dep = dependency('imgui')
-  endif
-endif
-
-if vis_enabled
-  glm_dep = dependency('glm', required: false)
-  if not glm_dep.found()
-    glm_proj = subproject('glm')
-    glm_dep = dependency('glm')
-  endif
-endif
 
 
-TBB_dep = dependency('TBB')
+TBB_dep = dependency('tbb')
 
 
 cmake = import('cmake')
 
 if get_option('embree')
-  embree_subproj = cmake.subproject('embree')
+  embree_dep = dependency('embree3')
 endif
 
 
-if vis_enabled
-  colormap_proj = subproject('colormap-shaders')
-  colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
-  colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
-endif
 # 'src/algebra/pascal_triangle.cpp',
 
 
@@ -123,11 +76,7 @@ include_dir = [include_directories('include')]
 core_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep]
 
 if get_option('json')
-  nlohmann_json_dep = dependency('nlohmann_json', required: false)
-  if not nlohmann_json_dep.found()
-    nlohmann_json_proj = subproject('nlohmann_json')
-    nlohmann_json_dep = dependency('nlohmann_json')
-  endif
+  nlohmann_json_dep = dependency('nlohmann_json')
   core_deps += nlohmann_json_dep
 endif
 
@@ -194,13 +143,22 @@ geometry_headers = [
 # Visualization 
 #===========================================
 
-if vis_enabled
+if get_option('visualization')
   shaderc_dep = dependency('shaderc')
   # on ubuntu i had to install shaderc myself and I put it in my home directory...
   include_dir += include_directories('/home/mtao/.local/include')
   qt5= import('qt5')
   qt5_dep = dependency('qt5', modules: ['Core', 'Gui'])
   subdir('resources')
+
+  if get_option('imgui')
+    imgui_dep = dependency('imgui')
+  endif
+
+  glm_dep = dependency('glm')
+  colormap_proj = subproject('colormap-shaders')
+  colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
+  colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
   
   visualization_sources = [
     'src/visualization/vulkan/film.cpp',
@@ -218,16 +176,16 @@ if vis_enabled
   visualization_sources += glsl_resource_sources
   visualization_sources += colormap_shaders_sources
 
-  visualization_dep = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
+  visualization_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
 
   if get_option('glfw')
-    visualization_dep += glfw_dep
+    glfw_dep = dependency('glfw3')
+    visualization_deps += glfw_dep
     visualization_sources += [
       'src/visualization/glfw/vulkan/film.cpp',
     ]
   endif
   
-  visualization_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
   visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_deps, include_directories: [include_dir, colormap_shaders_include_path])
   visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_deps, include_directories: [colormap_shaders_include_path, include_dir])
 endif

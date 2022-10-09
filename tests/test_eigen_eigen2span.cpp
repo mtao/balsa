@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 #include <balsa/eigen/eigen2span.hpp>
 #include <range/v3/view/zip.hpp>

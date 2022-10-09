@@ -1,7 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <range/v3/view/repeat.hpp>
 #include <range/v3/view/take_exactly.hpp>
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/concat.hpp>
 #include <range/v3/view/take.hpp>
@@ -15,6 +15,7 @@
 #include <range/v3/view/join.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/range/conversion.hpp>
+#include <iostream>
 TEST_CASE("ranges iota", "[ranges]") {
 
     int index = 0;

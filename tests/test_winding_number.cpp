@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 #include <balsa/geometry/winding_number.hpp>
 #include <balsa/eigen/types.hpp>

@@ -1,8 +1,9 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 
 #include <balsa/geometry/simplex/circumcenter.hpp>
 
+using namespace Catch;
 TEST_CASE("circumcenter", "[simplex]") {
     auto random_simplex_test = []<int N>(std::integral_constant<int, N>) {
         balsa::eigen::Matrix<double, N, N + 1> V;

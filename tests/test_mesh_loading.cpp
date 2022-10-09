@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/geometry/polygon_mesh/read_obj.hpp>

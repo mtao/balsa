@@ -1,7 +1,7 @@
 option('eltopo', type : 'boolean', value : true, description : 'Should we build the el topo submodule')
 option('embree', type: 'boolean', value: false, description: 'Use embree')
 option('openvdb', type : 'boolean', value : false, description : 'Build openvdb stuff')
-#option('pngpp', type : 'boolean', value : true, description : 'Use PNG++ for screenshots')
+option('pngpp', type : 'boolean', value : true, description : 'Use PNG++ for screenshots')
 option('json', type : 'boolean', value : true, description : 'Use json')
 option('protobuf', type : 'boolean', value : true, description : 'Use protobuf')
 option('partio', type : 'boolean', value : true, description : 'Use partio')
