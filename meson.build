@@ -164,6 +164,7 @@ if get_option('visualization')
     'src/visualization/vulkan/film.cpp',
     #'src/visualization/vulkan/camera.cpp',
     'src/visualization/vulkan/scene_base.cpp',
+    'src/visualization/vulkan/native_film.cpp',
 
 
     'src/visualization/qt/vulkan/windows/scene.cpp',
