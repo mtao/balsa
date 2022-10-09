@@ -70,7 +70,6 @@ class Balsa(ConanFile):
             value = getattr(self.options,name)
             args.append("-D{}={}".format(name,  value))
 
-        print(args)
                 
 
         meson.configure(args=args)  
