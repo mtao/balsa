@@ -60,9 +60,11 @@ class NativeFilm : public Film {
     vk::SampleCountFlags supported_sample_counts() const override;
 
 
-    int swapchain_image_count() const override;
+    uint32_t swapchain_image_count() const override;
     vk::Image swapchain_image(int index) const override;
     vk::ImageView swapchain_image_view(int index) const override;
+    const vk::Extent2D& swapchain_extent() const;
+    const vk::SurfaceFormatKHR surface_format() const;
 
     vk::Instance instance() const;
     const vk::raii::Instance &instance_raii() const;
@@ -71,7 +73,7 @@ class NativeFilm : public Film {
 
     void post_draw();
 
-  protected:
+  //protected:
     // Whatever window management tool we have is in charge of this
     virtual vk::raii::SurfaceKHR make_surface() const = 0;
     virtual vk::Extent2D choose_swapchain_extent() const = 0;
@@ -82,7 +84,7 @@ class NativeFilm : public Film {
     virtual std::vector<std::string> get_required_device_extensions() const;
 
 
-  private:
+  //private:
     struct QueueTargetIndices {
         std::set<uint32_t> graphics_queue;
         std::set<uint32_t> compute_queue;

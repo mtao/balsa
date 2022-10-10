@@ -99,8 +99,8 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
 
     return ret;
 }
-
-std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
+    std::string AbstractShader::read_path_to_string(const std::string& path) 
+{
     QFile file(path.c_str());
     if (!file.open(QFile::ReadOnly | QIODevice::Text)) {
         spdlog::error("Was unable to read []", path);
@@ -109,8 +109,12 @@ std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &
 
     QTextStream _ts(&file);
     QString data = _ts.readAll();
+    return data.toStdString();
+}
 
-    return compile_glsl(data.toStdString(), type);
+std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
+
+    return compile_glsl(read_path_to_string(path), type);
 }
 
 // namespace {

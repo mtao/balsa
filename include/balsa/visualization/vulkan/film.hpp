@@ -54,7 +54,7 @@ class Film {
     virtual vk::SampleCountFlags supported_sample_counts() const = 0;
 
 
-    virtual int swapchain_image_count() const = 0;
+    virtual uint32_t swapchain_image_count() const = 0;
     virtual vk::Image swapchain_image(int index) const = 0;
     virtual vk::ImageView swapchain_image_view(int index) const = 0;
 

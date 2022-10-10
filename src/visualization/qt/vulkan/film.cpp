@@ -61,7 +61,7 @@ vk::SampleCountFlags Film::supported_sample_counts() const {
 }
 
 
-int Film::swapchain_image_count() const {
+uint32_t Film::swapchain_image_count() const {
     return _window.swapChainImageCount();
 }
 vk::Image Film::swapchain_image(int index) const { return _window.swapChainImage(index); }

@@ -36,7 +36,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
         logger = spdlog::default_logger();
     }
 
-    std::string type;
+    std::string_view type;
     switch (vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) {
     case vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral:
         type = "General";
@@ -540,7 +540,7 @@ vk::SampleCountFlags NativeFilm::supported_sample_counts() const {
     vk::SampleCountFlags flags = color & depth & stencil;
     return flags;
 }
-int NativeFilm::swapchain_image_count() const {
+uint32_t NativeFilm::swapchain_image_count() const {
     return _image_resources.size();
 }
 vk::Image NativeFilm::swapchain_image(int) const {
@@ -548,6 +548,14 @@ vk::Image NativeFilm::swapchain_image(int) const {
 }
 vk::ImageView NativeFilm::swapchain_image_view(int) const {
     return nullptr;// TODO
+}
+    const vk::Extent2D& NativeFilm::swapchain_extent() const
+{
+    return _swapchain_extent;
+}
+    const vk::SurfaceFormatKHR NativeFilm::surface_format() const
+{
+    return _surface_format;
 }
 
 void NativeFilm::create_image_resources() {

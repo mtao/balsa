@@ -49,7 +49,7 @@ class Film : public visualization::vulkan::Film {
     vk::SampleCountFlags supported_sample_counts() const override;
 
 
-    int swapchain_image_count() const override;
+    uint32_t swapchain_image_count() const override;
     vk::Image swapchain_image(int index) const override;
     vk::ImageView swapchain_image_view(int index) const override;
 
