@@ -13,6 +13,6 @@ This package is build using `meson` and dependencies can be installed using
 mkdir build # make build directory
 pushd build # enter build directory
 conan install .. --build-missing # pull dependencies, build as needed
-conan build .. -build-folder=. # set up meson and build
+conan build .. --build-folder=. # set up meson and build
 ```
 Subsequent build can be done with Ninja.
