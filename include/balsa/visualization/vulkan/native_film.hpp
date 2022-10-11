@@ -181,7 +181,7 @@ class NativeFilm : public Film {
 
     size_t _frame_count = 1;
 
-    uint32_t _current_swapchain_index = 0;
+    uint32_t _current_image_index = 0;
     uint32_t _current_frame_index = 0;
     void create_image_resources();
     std::vector<ImageResources> _image_resources;
@@ -193,9 +193,11 @@ class NativeFilm : public Film {
     vk::raii::RenderPass _default_render_pass_raii = nullptr;
 
   public:
-    void set_swapchain_index(uint32_t index) { _current_swapchain_index = index; }
-    const ImageResources &image_resources() const { return _image_resources[_current_swapchain_index]; }
+    void set_swapchain_index(uint32_t index) { _current_image_index = index; }
+    const ImageResources &image_resources() const { return _image_resources[_current_image_index]; }
     const FrameResources &frame_resources() const { return _frame_resources[0]; }
+    const ImageResources &image_resources(size_t index) const { return _image_resources.at(index); }
+    const FrameResources &frame_resources(size_t index) const { return _frame_resources.at(index); }
 };
 }// namespace balsa::visualization::vulkan
 #endif

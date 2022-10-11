@@ -13,8 +13,12 @@ SceneBase::SceneBase() {}
 SceneBase::~SceneBase() {
 }
 
+void SceneBase::end_render_pass(Film &film) {
+    vk::CommandBuffer cmdBuf = film.current_command_buffer();
+    cmdBuf.endRenderPass();
+}
 
-void SceneBase::draw_background(Film &film) {
+void SceneBase::begin_render_pass(Film &film) {
 
     VkClearValue clearValues[2];
     if (_do_clear_color) {
@@ -45,14 +49,10 @@ void SceneBase::draw_background(Film &film) {
         .clearValueCount = clear_count,
         .pClearValues = clear_count > 0 ? clearValues : nullptr
     };
-    if (bool(_root)) {
-        //_root->draw(cam, film, glm::mat4x4);
-    }
 
     vk::CommandBuffer cmdBuf = film.current_command_buffer();
     cmdBuf.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
 
-    vkCmdEndRenderPass(cmdBuf);
 }
 void SceneBase::set_clear_color(float r, float g, float b, float a) {
     _clear_color.float32[0] = r;

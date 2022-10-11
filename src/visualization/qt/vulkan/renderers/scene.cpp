@@ -48,8 +48,9 @@ void SceneRenderer::startNextFrame() {
         Film film(*m_window);
         camera_type camera;
 
-        _scene->draw_background(film);
+        _scene->begin_render_pass(film);
         _scene->draw(camera, film);
+        _scene->end_render_pass(film);
     }
 
     // memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));

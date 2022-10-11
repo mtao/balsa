@@ -7,7 +7,7 @@ test_asset_dir = meson.current_source_dir() / 'assets'
 vis_enabled = get_option('visualization')
 
 if vis_enabled
-  executable('test_vulkan_window', 'test_vulkan_window.cpp', dependencies: [visualization_dep])
+  #executable('test_vulkan_window', 'test_vulkan_window.cpp', dependencies: [visualization_dep])
   executable('test_vulkan_window_glfw', 'test_vulkan_window_glfw.cpp', dependencies: [visualization_dep])
 
 

@@ -458,10 +458,10 @@ vk::Format NativeFilm::color_format() const {
     return _surface_format.format;
 }
 vk::CommandBuffer NativeFilm::current_command_buffer() const {
-    return *_image_resources.at(_current_swapchain_index).command_buffer_raii;
+    return *_image_resources.at(_current_image_index).command_buffer_raii;
 }
 vk::Framebuffer NativeFilm::current_framebuffer() const {
-    return *_image_resources.at(_current_swapchain_index).framebuffer_raii;
+    return *_image_resources.at(_current_image_index).framebuffer_raii;
 }
 vk::RenderPass NativeFilm::default_render_pass() const {
     return *_default_render_pass_raii;
@@ -543,11 +543,11 @@ vk::SampleCountFlags NativeFilm::supported_sample_counts() const {
 uint32_t NativeFilm::swapchain_image_count() const {
     return _image_resources.size();
 }
-vk::Image NativeFilm::swapchain_image(int) const {
-    return nullptr;// TODO
+vk::Image NativeFilm::swapchain_image(int index) const {
+    return _image_resources.at(index).image;
 }
-vk::ImageView NativeFilm::swapchain_image_view(int) const {
-    return nullptr;// TODO
+vk::ImageView NativeFilm::swapchain_image_view(int index) const {
+    return *_image_resources.at(index).image_view_raii;
 }
     const vk::Extent2D& NativeFilm::swapchain_extent() const
 {
@@ -758,27 +758,27 @@ void NativeFilm::pre_draw() {
             result = device.waitForFences(*frame.fence_raii, VK_TRUE, UINT64_MAX);
             device.resetFences(*frame.fence_raii);
             frame.fence_waitable = false;
+        }
 
 
-            spdlog::info("pre_draw: acquiring image");
-            vk::ResultValue<uint32_t> res =
-              device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
-            _current_swapchain_index = res.value;
-            if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
-                spdlog::info("Acquired image {}", res.value);
-                frame.fence_waitable = true;
-                frame.image_semaphore_waitable = true;
-                frame.image_acquired = true;
-            } else if (res.result == vk::Result::eErrorOutOfDateKHR) {
-                // recreate swapchains
-            } else {// TODO if device is lost or some other issue occurs
-                spdlog::error("Failed to acquire image");
-            }
+        spdlog::info("pre_draw: acquiring image");
+        vk::ResultValue<uint32_t> res =
+            device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
+        _current_image_index = res.value;
+        if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
+            spdlog::info("Acquired image {}", res.value);
+            frame.fence_waitable = true;
+            frame.image_semaphore_waitable = true;
+            frame.image_acquired = true;
+        } else if (res.result == vk::Result::eErrorOutOfDateKHR) {
+            // recreate swapchains
+        } else {// TODO if device is lost or some other issue occurs
+            spdlog::error("Failed to acquire image");
         }
     }
-    spdlog::info("pre_draw: using image {}/{}", _current_swapchain_index, _image_resources.size());
+    spdlog::info("pre_draw: using image {}/{}", _current_image_index, _image_resources.size());
 
-    auto &image = _image_resources[_current_swapchain_index];
+    auto &image = _image_resources[_current_image_index];
 
     if (image.command_fence_waitable) {
         spdlog::info("pre_draw: waiting for command fence");
@@ -803,37 +803,37 @@ void NativeFilm::pre_draw() {
         }
         image.command_buffer_raii.begin(bi);
     }
-    if (false) {
+    //if (false) {
 
-        auto cb = current_command_buffer();
-        vk::ClearValue clear_color =
-          vk::ClearColorValue{ std::array<float, 4>{ 1.f, 0.f, 0.f, 1.f } };
-        vk::RenderPassBeginInfo rpi;
-        {
-            rpi.setRenderPass(default_render_pass());
-            rpi.setFramebuffer(current_framebuffer());
-            rpi.renderArea.setOffset({ 0, 0 });
-            auto extent = swapchain_image_size();
-            rpi.renderArea.setExtent({ extent.x, extent.y });
+    //    auto cb = current_command_buffer();
+    //    vk::ClearValue clear_color =
+    //      vk::ClearColorValue{ std::array<float, 4>{ 1.f, 0.f, 0.f, 1.f } };
+    //    vk::RenderPassBeginInfo rpi;
+    //    {
+    //        rpi.setRenderPass(default_render_pass());
+    //        rpi.setFramebuffer(current_framebuffer());
+    //        rpi.renderArea.setOffset({ 0, 0 });
+    //        auto extent = swapchain_image_size();
+    //        rpi.renderArea.setExtent({ extent.x, extent.y });
 
-            rpi.setClearValueCount(1);
-            rpi.setPClearValues(&clear_color);
-        }
+    //        rpi.setClearValueCount(1);
+    //        rpi.setPClearValues(&clear_color);
+    //    }
 
-        cb.beginRenderPass(rpi, vk::SubpassContents::eInline);
+    //    cb.beginRenderPass(rpi, vk::SubpassContents::eInline);
 
-        cb.endRenderPass();
-    }
+    //    cb.endRenderPass();
+    //}
 
     //
 }
 
 void NativeFilm::post_draw() {
-    auto &image = _image_resources[_current_swapchain_index];
+    auto &image = _image_resources[_current_image_index];
     auto &frame = _frame_resources[_current_frame_index];
 
-    spdlog::info("post_draw: using image {}/{}", _current_frame_index, _frame_resources.size());
-    spdlog::info("post_draw: using image {}/{}", _current_swapchain_index, _image_resources.size());
+    spdlog::info("post_draw: using frame {}/{}", _current_frame_index, _frame_resources.size());
+    spdlog::info("post_draw: using image {}/{}", _current_image_index, _image_resources.size());
 
     if (_graphics_queue_family_index != _present_queue_family_index) {
         spdlog::info("Transfer barrier");
@@ -851,7 +851,7 @@ void NativeFilm::post_draw() {
     // TODO: swapchain image release to cmd buf to send to graphics queue
     // TODO: add a readback?
     //
-    // image.command_buffer_raii.endRenderPass();
+    //image.command_buffer_raii.endRenderPass();
 
     image.command_buffer_raii.end();
 
@@ -897,7 +897,7 @@ void NativeFilm::post_draw() {
     spdlog::info("post_draw: setting present wait semaphore");
     vk::PresentInfoKHR present;
     present.setSwapchains(*_swapchain_raii);
-    present.setImageIndices(_current_swapchain_index);
+    present.setImageIndices(_current_image_index);
 
     // present.setPResults(nullptr);
 
