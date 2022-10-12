@@ -1,8 +1,11 @@
 #include "balsa/visualization/qt/vulkan/film.hpp"
 #include <QVulkanWindow>
+#include <spdlog/spdlog.h>
 #include <vulkan/vulkan_enums.hpp>
 namespace balsa::visualization::qt::vulkan {
-Film::Film(QVulkanWindow &window) : _window(window) {}
+Film::Film(QVulkanWindow &window) : _window(window) {
+    spdlog::info("First time calling myself on a window! {}", swapchain_image_count());
+}
 Film::~Film() {}
 
 glm::uvec2 Film::swapchain_image_size() const {

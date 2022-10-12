@@ -9,7 +9,8 @@ namespace balsa::visualization::qt::vulkan {
 
 
 template<typename RendererType>
-requires std::is_base_of_v<RendererType, QVulkanWindowRenderer> class Window : public QVulkanWindow {
+requires std::is_base_of_v<RendererType, QVulkanWindowRenderer>
+class Window : public QVulkanWindow {
     virtual QVulkanWindowRenderer *createRenderer() override {
         return new RendererType(this);
     }

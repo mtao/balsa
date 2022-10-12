@@ -17,7 +17,7 @@ namespace visualization::vulkan {
       public:
         SceneBase();
         // SceneBase(const  &root = nullptr);
-        ~SceneBase();
+        virtual ~SceneBase();
 
         virtual void begin_render_pass(Film &film);
         virtual void end_render_pass(Film &film);
