@@ -49,17 +49,17 @@ void SceneRenderer::releaseResources() {
 
 void SceneRenderer::startNextFrame() {
 
-    return;
-    spdlog::info("Do we have a scene? {}", bool(_scene));
+    //return;
+    //spdlog::info("Do we have a scene? {}", bool(_scene));
 
     if (_scene) {
 
         Film film(*m_window);
         camera_type camera;
 
-        _scene->begin_render_pass(film);
-        _scene->draw(camera, film);
-        _scene->end_render_pass(film);
+        //_scene->begin_render_pass(film);
+        //_scene->draw(camera, film);
+        //_scene->end_render_pass(film);
     }
 
     // memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));

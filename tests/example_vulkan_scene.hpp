@@ -19,6 +19,8 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
 
     void draw(balsa::visualization::vulkan::Film &film);
 
+    void begin_render_pass(balsa::visualization::vulkan::Film& film) override;
+
 
   private:
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);

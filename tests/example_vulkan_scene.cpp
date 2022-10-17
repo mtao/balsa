@@ -37,15 +37,20 @@ HelloTriangleScene::~HelloTriangleScene() {
     }
 }
 
-
-void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
-
+void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film& film) 
+{
     if (!device.has_value()) {
         device = film.device();
     }
     if (!pipeline.has_value()) {
         create_graphics_pipeline(film);
     }
+
+    SceneBase::begin_render_pass(film);
+}
+
+void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
+
     assert(film.device() == *device);
 
     static float value = 0.0;
