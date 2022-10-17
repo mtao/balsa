@@ -5,7 +5,7 @@
 #include <QtCore/QFile>
 #include <iostream>
 #include <shaderc/shaderc.hpp>
-#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan.hpp>
 
 void balsa_visualization_shaders_initialize_resources() {
     Q_INIT_RESOURCE(glsl);
@@ -16,11 +16,14 @@ namespace {
     const std::string &get_shader_type_name(AbstractShader::ShaderType type) {
         const static std::string v0 = "Vertex";
         const static std::string v1 = "Fragment";
+        const static std::string v_ = "Unknown";
         switch (type) {
         case AbstractShader::ShaderType::Vertex:
             return v0;
         case AbstractShader::ShaderType::Fragment:
             return v1;
+            default:
+            return v_;
         }
     }
     const std::string &shaderc_compilation_status_name(shaderc_compilation_status status) {
@@ -33,6 +36,7 @@ namespace {
         const static std::string e6 = "Validation Error";
         const static std::string e7 = "Transformation Error";
         const static std::string e8 = "Configuration Error";
+        const static std::string v_ = "Unknown Error";
         switch (status) {
         case shaderc_compilation_status_success:
             return e0;
@@ -52,6 +56,8 @@ namespace {
             return e7;
         case shaderc_compilation_status_configuration_error:
             return e8;
+            default:
+            return v_;
         }
     }
 }// namespace
@@ -93,8 +99,8 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
 
     return ret;
 }
-
-std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
+    std::string AbstractShader::read_path_to_string(const std::string& path) 
+{
     QFile file(path.c_str());
     if (!file.open(QFile::ReadOnly | QIODevice::Text)) {
         spdlog::error("Was unable to read []", path);
@@ -103,29 +109,33 @@ std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &
 
     QTextStream _ts(&file);
     QString data = _ts.readAll();
-
-    return compile_glsl(data.toStdString(), type);
+    return data.toStdString();
 }
 
-namespace {
-    VkShaderModule make_shader_module(const std::vector<uint32_t> &spirv) {
-        VkShaderModuleCreateInfo createInfo{
-            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            .codeSize = sizeof(uint32_t) * spirv.size(),
-            .pCode = spirv.data()
-        };
-        VkShaderModule module;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &module) != VK_SUCCESS) {
-        }
-    }
-}// namespace
+std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
 
-void AbstractShader::make_shader() {
-    auto vs_spirv = vert_spirv();
-    auto fs_spirv = frag_spirv();
-
-    auto vs_module = make_shader_module(vs_spirv);
-    auto fs_module = make_shader_module(fs_spirv);
+    return compile_glsl(read_path_to_string(path), type);
 }
+
+// namespace {
+//     vk::ShaderModule make_shader_module(const vk::Device &device, const std::vector<uint32_t> &spirv) {
+//         VkShaderModuleCreateInfo createInfo{
+//             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+//             .codeSize = sizeof(uint32_t) * spirv.size(),
+//             .pCode = spirv.data()
+//         };
+//         vk::ShaderModule module;
+//         module = device.createShaderModule(createInfo, nullptr, &module);
+//         return module;
+//     }
+// }// namespace
+//
+// void AbstractShader::make_shader(const vk::Device &device) {
+//     auto vs_spirv = vert_spirv();
+//     auto fs_spirv = frag_spirv();
+//
+//     auto vs_module = make_shader_module(device, vs_spirv);
+//     auto fs_module = make_shader_module(device, fs_spirv);
+// }
 
 }// namespace balsa::visualization::shaders

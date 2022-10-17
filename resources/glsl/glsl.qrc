@@ -2,5 +2,7 @@
 <qresource prefix="/glsl">
     <file>flat.vert</file>
     <file>flat.frag</file>
+    <file>triangle.vert</file>
+    <file>triangle.frag</file>
 </qresource>
 </RCC>

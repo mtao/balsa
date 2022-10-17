@@ -1,7 +1,8 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <iostream>
 
 #include <balsa/geometry/simplex/volume.hpp>
+using namespace Catch;
 
 TEST_CASE("volume", "[simplex]") {
     {

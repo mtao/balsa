@@ -31,6 +31,9 @@ class AbstractShader {
     virtual ~AbstractShader() {}
     virtual std::vector<uint32_t> vert_spirv() const { return {}; }
     virtual std::vector<uint32_t> frag_spirv() const { return {}; }
+
+    static std::string read_path_to_string(const std::string& path);
+
 };
 }// namespace balsa::visualization::shaders
 #endif

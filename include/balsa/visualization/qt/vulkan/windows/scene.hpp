@@ -11,7 +11,10 @@ class SceneWindow : public QVulkanWindow {
     using scene_type = renderers::SceneRenderer::scene_type;
     QVulkanWindowRenderer *createRenderer() override;
 
-    SceneWindow(std::shared_ptr<scene_type> scene = nullptr) : _scene(std::move(scene)) {}
+    SceneWindow(std::shared_ptr<scene_type> scene = nullptr);
+
+    void set_scene(std::shared_ptr<scene_type> scene);
+
 
   private:
     std::shared_ptr<scene_type> _scene;

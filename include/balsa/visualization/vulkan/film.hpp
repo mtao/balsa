@@ -16,93 +16,48 @@ class Film {
   public:
     virtual ~Film();
 
-    virtual glm::uvec2 swapChainImageSize() const = 0;
+    virtual glm::uvec2 swapchain_image_size() const = 0;
 
-#if defined(USE_VULKAN_HPP)
+    virtual vk::Format color_format() const = 0;
 
-    virtual vk::Format colorFormat() const = 0;
+    virtual vk::CommandBuffer current_command_buffer() const = 0;
+    virtual vk::Framebuffer current_framebuffer() const = 0;
 
-    virtual vk::CommandBuffer commandBuffer() const = 0;
-    virtual vk::Framebuffer framebuffer() const = 0;
-
-    virtual vk::RenderPass defaultRenderPass() const = 0;
+    virtual vk::RenderPass default_render_pass() const = 0;
 
 
-    virtual vk::Format depthStencilFormat() const = 0;
-    virtual vk::Image depthStencilImage() const = 0;
-    virtual vk::ImageView depthStencilImageView() const = 0;
+    virtual vk::Format depth_stencil_format() const = 0;
+    virtual vk::Image depth_stencil_image() const = 0;
+    virtual vk::ImageView depth_stencil_image_view() const = 0;
 
 
     virtual vk::Device device() const = 0;
 
-    virtual void setPhysicalDeviceIndex(int index) = 0;
-    virtual vk::PhysicalDevice physicalDevice() const = 0;
-    virtual vk::PhysicalDeviceProperties physicalDeviceProperties() const = 0;
+    virtual void set_physical_device_index(int index) = 0;
+    virtual vk::PhysicalDevice physical_device() const = 0;
+    virtual vk::PhysicalDeviceProperties physical_device_properties() const = 0;
 
-    virtual vk::CommandPool graphicsCommandPool() const = 0;
-
-
-    virtual uint32_t graphicsQueueFamilyIndex() const = 0;
-    virtual uint32_t hostVisibleMemoryIndex() const = 0;
-    virtual vk::Queue queue() const = 0;
+    virtual vk::CommandPool graphics_command_pool() const = 0;
 
 
-    virtual vk::Image msaaColorImage(int index) const = 0;
-    virtual vk::ImageView msaaColorImageView(int index) const = 0;
+    virtual uint32_t graphics_queue_family_index() const = 0;
+    virtual uint32_t host_visible_memory_index() const = 0;
+    virtual vk::Queue graphics_queue() const = 0;
 
 
-    virtual void setSampleCount(int sampleCount) = 0;
-    virtual vk::SampleCountFlagBits sampleCountFlagBits() const = 0;
-    virtual std::vector<int> supportedSampleCounts() = 0;
+    virtual vk::Image msaa_color_image(int index) const = 0;
+    virtual vk::ImageView msaa_color_image_view(int index) const = 0;
 
 
-    virtual int swapChainImageCount() const = 0;
-    virtual vk::Image swapChainImage(int index) const = 0;
-    virtual vk::ImageView swapChainImageView(int index) const = 0;
-
-#else
-
-    virtual VkFormat colorFormat() const = 0;
-
-    virtual VkCommandBuffer commandBuffer() const = 0;
-    virtual VkFramebuffer framebuffer() const = 0;
-
-    virtual VkRenderPass defaultRenderPass() const = 0;
+    virtual void set_sample_count(vk::SampleCountFlagBits) = 0;
+    virtual vk::SampleCountFlagBits sample_count() const = 0;
+    virtual vk::SampleCountFlags supported_sample_counts() const = 0;
 
 
-    virtual VkFormat depthStencilFormat() const = 0;
-    virtual VkImage depthStencilImage() const = 0;
-    virtual VkImageView depthStencilImageView() const = 0;
+    virtual uint32_t swapchain_image_count() const = 0;
+    virtual vk::Image swapchain_image(int index) const = 0;
+    virtual vk::ImageView swapchain_image_view(int index) const = 0;
 
-
-    virtual VkDevice device() const = 0;
-
-    virtual void setPhysicalDeviceIndex(int index) = 0;
-    virtual VkPhysicalDevice physicalDevice() const = 0;
-    virtual const VkPhysicalDeviceProperties *physicalDeviceProperties() const = 0;
-
-    virtual VkCommandPool graphicsCommandPool() const = 0;
-
-
-    virtual uint32_t graphicsQueueFamilyIndex() const = 0;
-    virtual uint32_t hostVisibleMemoryIndex() const = 0;
-    virtual VkQueue queue() const = 0;
-
-
-    virtual VkImage msaaColorImage(int index) const = 0;
-    virtual VkImageView msaaColorImageView(int index) const = 0;
-
-
-    virtual void setSampleCount(int sampleCount) = 0;
-    virtual VkSampleCountFlagBits sampleCountFlagBits() const = 0;
-    virtual std::vector<int> supportedSampleCounts() = 0;
-
-
-    virtual int swapChainImageCount() const = 0;
-    virtual VkImage swapChainImage(int index) const = 0;
-    virtual VkImageView swapChainImageView(int index) const = 0;
-
-#endif
   private:
 };
 }// namespace balsa::visualization::vulkan

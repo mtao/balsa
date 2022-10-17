@@ -1,4 +1,4 @@
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/repeat.hpp>
 #include <range/v3/view/transform.hpp>

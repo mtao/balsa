@@ -11,94 +11,48 @@ class Film : public visualization::vulkan::Film {
     Film(QVulkanWindow &window);
     ~Film();
 
-#if defined(USE_VULKAN_HPP)
-    vk::Format colorFormat() const override;
+    vk::Format color_format() const override;
 
 
-    glm::uvec2 swapChainImageSize() const override;
+    glm::uvec2 swapchain_image_size() const override;
 
-    vk::CommandBuffer commandBuffer() const override;
-    vk::Framebuffer framebuffer() const override;
+    vk::CommandBuffer current_command_buffer() const override;
+    vk::Framebuffer current_framebuffer() const override;
 
-    vk::RenderPass defaultRenderPass() const override;
+    vk::RenderPass default_render_pass() const override;
 
 
-    vk::Format depthStencilFormat() const override;
-    vk::Image depthStencilImage() const override;
-    vk::ImageView depthStencilImageView() const override;
+    vk::Format depth_stencil_format() const override;
+    vk::Image depth_stencil_image() const override;
+    vk::ImageView depth_stencil_image_view() const override;
 
 
     vk::Device device() const override;
 
-    void setPhysicalDeviceIndex(int index) override;
-    vk::PhysicalDevice physicalDevice() const override;
-    vk::PhysicalDeviceProperties physicalDeviceProperties() const override;
+    void set_physical_device_index(int index) override;
+    vk::PhysicalDevice physical_device() const override;
+    vk::PhysicalDeviceProperties physical_device_properties() const override;
 
-    vk::CommandPool graphicsCommandPool() const override;
-
-
-    uint32_t graphicsQueueFamilyIndex() const override;
-    uint32_t hostVisibleMemoryIndex() const override;
-    vk::Queue queue() const override;
+    vk::CommandPool graphics_command_pool() const override;
 
 
-    vk::Image msaaColorImage(int index) const override;
-    vk::ImageView msaaColorImageView(int index) const override;
+    uint32_t graphics_queue_family_index() const override;
+    uint32_t host_visible_memory_index() const override;
+    vk::Queue graphics_queue() const override;
 
 
-    void setSampleCount(int sampleCount) override;
-    vk::SampleCountFlagBits sampleCountFlagBits() const override;
-    std::vector<int> supportedSampleCounts() override;
+    vk::Image msaa_color_image(int index) const override;
+    vk::ImageView msaa_color_image_view(int index) const override;
+
+    void set_sample_count(vk::SampleCountFlagBits) override;
+    vk::SampleCountFlagBits sample_count() const override;
+    vk::SampleCountFlags supported_sample_counts() const override;
 
 
-    int swapChainImageCount() const override;
-    vk::Image swapChainImage(int index) const override;
-    vk::ImageView swapChainImageView(int index) const override;
+    uint32_t swapchain_image_count() const override;
+    vk::Image swapchain_image(int index) const override;
+    vk::ImageView swapchain_image_view(int index) const override;
 
-#else
-    VkFormat colorFormat() const override;
-
-
-    glm::uvec2 swapChainImageSize() const override;
-
-    VkCommandBuffer commandBuffer() const override;
-    VkFramebuffer framebuffer() const override;
-
-    VkRenderPass defaultRenderPass() const override;
-
-
-    VkFormat depthStencilFormat() const override;
-    VkImage depthStencilImage() const override;
-    VkImageView depthStencilImageView() const override;
-
-
-    VkDevice device() const override;
-
-    void setPhysicalDeviceIndex(int index) override;
-    VkPhysicalDevice physicalDevice() const override;
-    const VkPhysicalDeviceProperties *physicalDeviceProperties() const override;
-
-    VkCommandPool graphicsCommandPool() const override;
-
-
-    uint32_t graphicsQueueFamilyIndex() const override;
-    uint32_t hostVisibleMemoryIndex() const override;
-    VkQueue queue() const override;
-
-
-    VkImage msaaColorImage(int index) const override;
-    VkImageView msaaColorImageView(int index) const override;
-
-
-    void setSampleCount(int sampleCount) override;
-    VkSampleCountFlagBits sampleCountFlagBits() const override;
-    std::vector<int> supportedSampleCounts() override;
-
-
-    int swapChainImageCount() const override;
-    VkImage swapChainImage(int index) const override;
-    VkImageView swapChainImageView(int index) const override;
-#endif
   private:
     QVulkanWindow &_window;
 };

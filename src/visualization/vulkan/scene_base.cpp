@@ -13,8 +13,12 @@ SceneBase::SceneBase() {}
 SceneBase::~SceneBase() {
 }
 
+void SceneBase::end_render_pass(Film &film) {
+    vk::CommandBuffer cmdBuf = film.current_command_buffer();
+    cmdBuf.endRenderPass();
+}
 
-void SceneBase::draw_background(Film &film) {
+void SceneBase::begin_render_pass(Film &film) {
 
     VkClearValue clearValues[2];
     if (_do_clear_color) {
@@ -27,12 +31,12 @@ void SceneBase::draw_background(Film &film) {
     uint32_t clear_count = _do_clear_color + _do_clear_depth;
 
 
-    const glm::uvec2 sz = film.swapChainImageSize();
+    const glm::uvec2 sz = film.swapchain_image_size();
     VkRenderPassBeginInfo rpBeginInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .pNext = nullptr,
-        .renderPass = film.defaultRenderPass(),
-        .framebuffer = film.framebuffer(),
+        .renderPass = film.default_render_pass(),
+        .framebuffer = film.current_framebuffer(),
         .renderArea = {
           // VkRect2D
           .offset = { // VkOffset2D
@@ -45,14 +49,10 @@ void SceneBase::draw_background(Film &film) {
         .clearValueCount = clear_count,
         .pClearValues = clear_count > 0 ? clearValues : nullptr
     };
-    if (bool(_root)) {
-        //_root->draw(cam, film, glm::mat4x4);
-    }
 
-    VkCommandBuffer cmdBuf = film.commandBuffer();
-    vkCmdBeginRenderPass(cmdBuf, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vk::CommandBuffer cmdBuf = film.current_command_buffer();
+    cmdBuf.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
 
-    vkCmdEndRenderPass(cmdBuf);
 }
 void SceneBase::set_clear_color(float r, float g, float b, float a) {
     _clear_color.float32[0] = r;

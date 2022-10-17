@@ -2,6 +2,7 @@
 #include "balsa/visualization/vulkan/scene.hpp"
 #include <QVulkanFunctions>
 #include <QFile>
+#include <spdlog/spdlog.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic pop
@@ -13,6 +14,7 @@ namespace balsa::visualization::qt::vulkan::renderers {
 
 SceneRenderer::SceneRenderer(QVulkanWindow *w, std::shared_ptr<scene_type> scene, bool msaa)
   : m_window(w), _scene(std::move(scene)) {
+    spdlog::info("Making renderer");
     if (msaa) {
         const QVector<int> counts = w->supportedSampleCounts();
         qDebug() << "Supported sample counts:" << counts;
@@ -28,28 +30,36 @@ SceneRenderer::SceneRenderer(QVulkanWindow *w, std::shared_ptr<scene_type> scene
 SceneRenderer::~SceneRenderer() {}
 
 void SceneRenderer::initResources() {
+    spdlog::info("Making device functions");
     m_devFuncs = m_window->vulkanInstance()->deviceFunctions(m_window->device());
+    spdlog::info("Done making device functions");
 }
 
 void SceneRenderer::initSwapChainResources() {
+    spdlog::info("intiializing swapchain res");
 }
 
 void SceneRenderer::releaseSwapChainResources() {
+    spdlog::info("releasing swapchain objects");
 }
 
 void SceneRenderer::releaseResources() {
+    spdlog::info("releasing resources");
 }
 
 void SceneRenderer::startNextFrame() {
 
+    //return;
+    //spdlog::info("Do we have a scene? {}", bool(_scene));
 
     if (_scene) {
 
         Film film(*m_window);
         camera_type camera;
 
-        _scene->draw_background(film);
-        _scene->draw(camera, film);
+        //_scene->begin_render_pass(film);
+        //_scene->draw(camera, film);
+        //_scene->end_render_pass(film);
     }
 
     // memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));

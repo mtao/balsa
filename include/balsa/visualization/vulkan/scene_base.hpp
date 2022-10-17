@@ -17,9 +17,10 @@ namespace visualization::vulkan {
       public:
         SceneBase();
         // SceneBase(const  &root = nullptr);
-        ~SceneBase();
+        virtual ~SceneBase();
 
-        void draw_background(Film &film);
+        virtual void begin_render_pass(Film &film);
+        virtual void end_render_pass(Film &film);
 
         void set_clear_color(float r, float g, float b, float a = 1.f);
         void set_clear_color(int32_t r, int32_t g, int32_t b, int32_t a = std::numeric_limits<int32_t>::max());
