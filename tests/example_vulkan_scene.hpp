@@ -17,6 +17,8 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     ~HelloTriangleScene();
 
 
+    void initialize(balsa::visualization::vulkan::Film& film);
+
     void draw(balsa::visualization::vulkan::Film &film);
 
     void begin_render_pass(balsa::visualization::vulkan::Film& film) override;
@@ -25,7 +27,7 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
   private:
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);
 
-    std::optional<vk::Device> device;
-    std::optional<vk::PipelineLayout> pipeline_layout;
-    std::optional<vk::Pipeline> pipeline;
+    vk::Device device;
+    vk::PipelineLayout pipeline_layout;
+    vk::Pipeline pipeline;
 };

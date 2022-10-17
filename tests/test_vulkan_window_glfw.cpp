@@ -30,7 +30,10 @@ class HelloTriangleApplication {
         // device = *film->device();
     }
 
-    void run() { main_loop(); }
+    void run() { 
+        scene.initialize(*film);
+        main_loop(); 
+    }
     ~HelloTriangleApplication() {
         glfwDestroyWindow(window);
     }

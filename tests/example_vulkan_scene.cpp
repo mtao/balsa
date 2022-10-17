@@ -29,29 +29,35 @@ HelloTriangleScene::HelloTriangleScene() {}
 HelloTriangleScene::~HelloTriangleScene() {
     if (device) {
         if (pipeline) {
-            device->destroyPipeline(*pipeline);
+            device.destroyPipeline(pipeline);
         }
         if (pipeline_layout) {
-            device->destroyPipelineLayout(*pipeline_layout);
+            device.destroyPipelineLayout(pipeline_layout);
         }
     }
+}
+    void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film& film)
+{
+    if (!bool(device)) {
+        device = film.device();
+    }
+    if (!bool(pipeline)) {
+        create_graphics_pipeline(film);
+    }
+
+
 }
 
 void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film& film) 
 {
-    if (!device.has_value()) {
-        device = film.device();
-    }
-    if (!pipeline.has_value()) {
-        create_graphics_pipeline(film);
-    }
-
+    initialize(film);
     SceneBase::begin_render_pass(film);
 }
 
 void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
-    assert(film.device() == *device);
+    spdlog::info("{} {}", long(VkDevice(film.device())), long(VkDevice(device)));
+    assert(film.device() == device);
 
     static float value = 0.0;
     value += 0.0005f;
@@ -63,7 +69,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
     auto cb = film.current_command_buffer();
     cb.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                    *pipeline);
+                    pipeline);
 
     vk::Viewport viewport{};
     auto extent = film.swapchain_image_size();
@@ -100,7 +106,7 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         vk::ShaderModuleCreateInfo ci;
         ci.setCodeSize(sizeof(uint32_t) * spv.size());
         ci.setPCode(spv.data());
-        return film.device().createShaderModule(ci);
+        return device.createShaderModule(ci);
     };
 
     vk::ShaderModule vert_shader_module = create_shader_module(vert_spv);
@@ -127,7 +133,7 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         ci.setSetLayoutCount(
           0);// automatic bindings have cool names, but why
         ci.setPushConstantRangeCount(0);
-        pipeline_layout = film.device().createPipelineLayout(ci);
+        pipeline_layout = device.createPipelineLayout(ci);
     }
 
     vk::PipelineVertexInputStateCreateInfo vertex_input;
@@ -246,12 +252,12 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         ci.setPMultisampleState(&multisampling);
         ci.setPColorBlendState(&color_blend);
         ci.setPDynamicState(&dynamic_state);
-        ci.setLayout(*pipeline_layout);
+        ci.setLayout(pipeline_layout);
         ci.setRenderPass(film.default_render_pass());
         ci.setSubpass(0);
         ci.setBasePipelineHandle(VK_NULL_HANDLE);
 
-        auto res = film.device().createGraphicsPipeline(VK_NULL_HANDLE, pipeline_info);
+        auto res = device.createGraphicsPipeline(VK_NULL_HANDLE, pipeline_info);
         if (res.result == vk::Result::eSuccess) {
             pipeline = res.value;
         } else {
@@ -260,8 +266,8 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     }
 
 
-    film.device().destroyShaderModule(vert_shader_module);
-    film.device().destroyShaderModule(frag_shader_module);
+    device.destroyShaderModule(vert_shader_module);
+    device.destroyShaderModule(frag_shader_module);
     spdlog::info("HelloTriangleScene: Finished building pipeline");
 }
 
