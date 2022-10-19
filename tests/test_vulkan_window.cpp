@@ -7,6 +7,7 @@
 #include <balsa/visualization/qt/vulkan/windows/scene.hpp>
 #include <colormap/colormap.h>
 #include <balsa/visualization/shaders/flat.hpp>
+#include <balsa/qt/spdlog_logger.hpp>
 
 #include "example_vulkan_scene.hpp"
 #include <balsa/visualization/qt/vulkan/film.hpp>
@@ -16,7 +17,9 @@
 //! [0]
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
+    spdlog::set_level(spdlog::level::trace);
 
+    balsa::qt::activateSpdlogOutput();
     QLoggingCategory::setFilterRules(QStringLiteral("qt.vulkan=true"));
 
     //! [0]
@@ -37,12 +40,12 @@ int main(int argc, char *argv[]) {
 
     //! [1]
 
-     balsa::visualization::qt::vulkan::windows::SceneWindow w;
+    balsa::visualization::qt::vulkan::windows::SceneWindow w;
     w.setVulkanInstance(&inst);
 
-     auto scene = std::make_shared<HelloTriangleScene>();
+    auto scene = std::make_shared<HelloTriangleScene>();
 
-     w.set_scene(scene);
+    w.set_scene(scene);
 
 
     w.resize(1024, 768);

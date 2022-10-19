@@ -1,1 +1,1 @@
-glsl_resource_sources = qt5.preprocess(qresources: 'glsl.qrc')
+glsl_resource_sources = qt.preprocess(qresources: 'glsl.qrc')

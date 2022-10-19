@@ -5,7 +5,6 @@
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan.hpp>
 #include <glm/vec2.hpp>
-#define USE_VULKAN_HPP
 
 namespace balsa::visualization::vulkan {
 namespace objects {

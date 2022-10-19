@@ -45,6 +45,15 @@ if get_option('embree')
 endif
 
 
+if get_option('qt')
+  qt= import('qt5')
+  qt_required_modules = ['Core']
+  if get_option('visualization')
+    qt_required_modules += ['Gui','Widgets']
+  endif
+  qt_dep = dependency('qt5', modules: qt_required_modules)
+endif
+
 # 'src/algebra/pascal_triangle.cpp',
 
 
@@ -72,17 +81,20 @@ core_headers = [
 
 include_dir = [include_directories('include')]
 
-
 core_required_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep]
+
+if get_option('qt')
+  core_sources += 'src/qt/spdlog_logger.cpp'
+  core_required_deps += qt_dep
+endif
+
+
 
 if get_option('json')
   nlohmann_json_dep = dependency('nlohmann_json')
   core_required_deps += nlohmann_json_dep
 endif
 
-core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
-
-core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)
 
 
 #===========================================
@@ -125,8 +137,6 @@ if get_option('partio')
   geometry_sources += 'src/geometry/point_cloud/partio_loader.cpp'
 endif
 
-geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)
-geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_required_deps, include_directories: include_dir)
 
 
 geometry_headers = [
@@ -144,11 +154,13 @@ geometry_headers = [
 #===========================================
 
 if get_option('visualization')
+  if not get_option('qt')
+    error('Qt required for shader storage, please enable to use visualization!')
+  endif
+
   shaderc_dep = dependency('shaderc')
   # on ubuntu i had to install shaderc myself and I put it in my home directory...
   include_dir += include_directories('/home/mtao/.local/include')
-  qt5= import('qt5')
-  qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets'])
   subdir('resources')
 
   if get_option('imgui')
@@ -181,10 +193,10 @@ if get_option('visualization')
     'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
     ]
 
-  visualization_qt_mocced = qt5.compile_moc(
+  visualization_qt_mocced = qt.compile_moc(
     headers: visualization_moc_headers,
     include_directories: include_dir,
-    dependencies: qt5_dep
+    dependencies: qt_dep
     )
 
 
@@ -193,8 +205,7 @@ if get_option('visualization')
   visualization_sources += visualization_qt_mocced
   visualization_sources += glsl_resource_sources
   
-  visualization_required_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep]
-  visualization_required_deps = [core_dep,qt5_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
+  visualization_required_deps = [qt_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
 
 
   
@@ -207,6 +218,24 @@ if get_option('visualization')
       'src/visualization/glfw/vulkan/film.cpp',
     ]
   endif
+
+endif
+
+core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
+
+core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)
+
+
+geometry_required_deps += core_dep
+
+geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)
+geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_required_deps, include_directories: include_dir)
+
+
+
+if get_option('visualization')
+  visualization_required_deps += core_dep
+  visualization_required_deps += geometry_dep
 
   visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_required_deps, include_directories: [include_dir, colormap_shaders_include_path])
   visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_required_deps, include_directories: [colormap_shaders_include_path])

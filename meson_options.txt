@@ -10,3 +10,4 @@ option('igl', type : 'boolean', value : true, description : 'Use libigl')
 
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
 option('glfw', type : 'boolean', value : true, description : 'Use glfw')
+option('qt', type : 'boolean', value : true, description : 'Use qt')
