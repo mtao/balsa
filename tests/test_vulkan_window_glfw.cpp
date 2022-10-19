@@ -66,7 +66,6 @@ class HelloTriangleApplication {
 
     void main_loop() {
         while (!glfwWindowShouldClose(window)) {
-            spdlog::info("Doing a frame");
             glfwPollEvents();
             film->pre_draw();
             draw_frame();

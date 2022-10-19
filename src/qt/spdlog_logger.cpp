@@ -67,6 +67,7 @@ void spdlogMessageOutput(QtMsgType type, const QMessageLogContext &context, cons
 }
 void activateSpdlogOutput(const std::string_view &logger_name) {
     // TODO: figure out how to output categories
+    setSpdlogLoggerName(logger_name);
     qInstallMessageHandler(spdlogMessageOutput);
 }
 }// namespace balsa::qt

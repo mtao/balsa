@@ -8,8 +8,10 @@ test_asset_dir = meson.current_source_dir() / 'assets'
 vis_enabled = get_option('visualization')
 
 if vis_enabled
+  test_example_scene_dep = static_library('example_scene', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
   executable('test_vulkan_window', 'test_vulkan_window.cpp', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
-  executable('test_vulkan_window_glfw', 'test_vulkan_window_glfw.cpp', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
+  #executable('test_vulkan_window', 'test_vulkan_window.cpp', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
+  executable('test_vulkan_window_glfw', 'test_vulkan_window_glfw.cpp', dependencies: [visualization_dep], link_with: [test_example_scene_dep])
 
 
   test_scene_graph = executable('test_scene_graph', 'test_scene_graph.cpp', dependencies: [visualization_dep,catch2_with_main_dep])
@@ -44,3 +46,4 @@ test('geometry test', test_geometry)
 
 
 
+subdir('qt_example')

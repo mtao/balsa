@@ -1,17 +1,17 @@
-#include "balsa/scene_graph/embedding_traits.hpp"
 #include <QGuiApplication>
-#include <spdlog/spdlog.h>
-#include <iostream>
 #include <QVulkanInstance>
 #include <QLoggingCategory>
-#include <balsa/visualization/qt/vulkan/windows/scene.hpp>
-#include <colormap/colormap.h>
-#include <balsa/visualization/shaders/flat.hpp>
+#include <spdlog/spdlog.h>
+//#include <iostream>
+//#include "balsa/scene_graph/embedding_traits.hpp"
+//#include <balsa/visualization/qt/vulkan/windows/scene.hpp>
+//#include <colormap/colormap.h>
+//#include <balsa/visualization/shaders/flat.hpp>
 #include <balsa/qt/spdlog_logger.hpp>
-
-#include "example_vulkan_scene.hpp"
-#include <balsa/visualization/qt/vulkan/film.hpp>
-#include <QVulkanWindow>
+//
+//#include "example_vulkan_scene.hpp"
+//#include <balsa/visualization/qt/vulkan/film.hpp>
+//#include <QVulkanWindow>
 
 
 //! [0]
@@ -22,34 +22,32 @@ int main(int argc, char *argv[]) {
     balsa::qt::activateSpdlogOutput();
     QLoggingCategory::setFilterRules(QStringLiteral("qt.vulkan=true"));
 
-    //! [0]
+//! [0]
     QVulkanInstance inst;
-
-    inst.setLayers(QByteArrayList()
-                   << "VK_LAYER_GOOGLE_threading"
-                   << "VK_LAYER_LUNARG_parameter_validation"
-                   << "VK_LAYER_LUNARG_object_tracker"
-                   << "VK_LAYER_LUNARG_core_validation"
-                   << "VK_LAYER_LUNARG_image"
-                   << "VK_LAYER_LUNARG_swapchain"
-                   << "VK_LAYER_GOOGLE_unique_objects");
-
+    inst.setLayers({ "VK_LAYER_KHRONOS_validation" });
     if (!inst.create())
         qFatal("Failed to create Vulkan instance: %d", inst.errorCode());
-    //! [0]
 
-    //! [1]
+    // if (!inst.create())
+    //     qFatal("Failed to create Vulkan instance: %d", inst.errorCode());
+    ////! [0]
+    // if (!inst.extensions().contains("VK_KHR_surface")) {
+    //     spdlog::info("Extension surface didnt get instantiated");
+    // }
+    // for (const auto &ext : inst.extensions()) {
+    //     spdlog::info("Ext: {}", ext.constData());
+    // }
 
-    balsa::visualization::qt::vulkan::windows::SceneWindow w;
-    w.setVulkanInstance(&inst);
+    //balsa::visualization::qt::vulkan::windows::SceneWindow w;
+    //w.setVulkanInstance(&inst);
 
-    auto scene = std::make_shared<HelloTriangleScene>();
+    //auto scene = std::make_shared<HelloTriangleScene>();
 
-    w.set_scene(scene);
+    //w.set_scene(scene);
 
 
-    w.resize(1024, 768);
-    w.show();
+    //w.resize(1024, 768);
+    //w.show();
 
     // using embedding_traits = balsa::scene_graph::embedding_traits3F;
 
@@ -62,5 +60,5 @@ int main(int argc, char *argv[]) {
     //  fs.make_shader();
     //! [1]
 
-    return app.exec();
+    //return app.exec();
 }

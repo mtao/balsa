@@ -1,3 +1,5 @@
+#if defined(SKIP_ALL)
+#else
 #include <balsa/visualization//vulkan//film.hpp>
 #include <vulkan/vulkan.hpp>
 #include <optional>
@@ -31,3 +33,4 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     vk::PipelineLayout pipeline_layout;
     vk::Pipeline pipeline;
 };
+#endif

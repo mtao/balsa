@@ -1,3 +1,5 @@
+#if defined(SKIP_ALL)
+#else
 #include <spdlog/spdlog.h>
 #include <balsa/visualization/shaders/flat.hpp>
 #include "example_vulkan_scene.hpp"
@@ -59,7 +61,6 @@ void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film& f
 
 void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
-    spdlog::info("{} {}", long(VkDevice(film.device())), long(VkDevice(device)));
     assert(film.device() == device);
 
     static float value = 0.0;
@@ -274,3 +275,4 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     spdlog::info("HelloTriangleScene: Finished building pipeline");
 }
 
+#endif
