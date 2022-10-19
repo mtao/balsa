@@ -16,13 +16,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
                 const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                 void * /*pUserData*/) {
-    spdlog::level::level_enum slevel;
+    spdlog::level::level_enum slevel = spdlog::level::debug;
     switch (vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) {
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
-        slevel = spdlog::level::trace;
+        slevel = spdlog::level::debug;
         break;
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
-        slevel = spdlog::level::trace;
+        slevel = spdlog::level::info;
         break;
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning:
         slevel = spdlog::level::warn;
@@ -31,7 +31,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
         slevel = spdlog::level::err;
         break;
     }
-    std::shared_ptr<spdlog::logger> logger = spdlog::get("vulkan");
+    std::shared_ptr<spdlog::logger> logger = spdlog::get("balsa.vulkan");
     if (!bool(logger)) {
         logger = spdlog::default_logger();
     }
