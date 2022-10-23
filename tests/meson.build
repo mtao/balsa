@@ -4,11 +4,15 @@ catch2_with_main_dep = dependency('catch2-with-main')
 
 test_asset_dir = meson.current_source_dir() / 'assets'
 
+subdir('resources')
 
 vis_enabled = get_option('visualization')
 
 if vis_enabled
-  test_example_scene_dep = static_library('example_scene', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
+
+  example_scene_sources = ['example_vulkan_scene.cpp']
+  example_scene_sources += test_glsl_resource_sources
+  test_example_scene_dep = static_library('example_scene', example_scene_sources, dependencies: [visualization_dep])
   executable('test_vulkan_window', 'test_vulkan_window.cpp', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
   #executable('test_vulkan_window', 'test_vulkan_window.cpp', 'example_vulkan_scene.cpp', dependencies: [visualization_dep])
   executable('test_vulkan_window_glfw', 'test_vulkan_window_glfw.cpp', dependencies: [visualization_dep], link_with: [test_example_scene_dep])

@@ -7,24 +7,32 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <colormap/colormap.h>
 #pragma GCC diagnostic pop
+#include <QtCore/QFile>
+
+void balsa_visualization_tests_shaders_initialize_resources() {
+    Q_INIT_RESOURCE(glsl);
+}
 namespace balsa::visualization::shaders {
 
 template<scene_graph::concepts::embedding_traits ET>
 class TriangleShader : public Shader<ET> {
   public:
-    TriangleShader() {}
+    TriangleShader() {
+
+    balsa_visualization_tests_shaders_initialize_resources();
+    }
     std::vector<uint32_t> vert_spirv() const override final;
     std::vector<uint32_t> frag_spirv() const override final;
 };
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
-    const static std::string fname = ":/glsl/triangle.vert";
+    const static std::string fname = ":/tests/glsl/triangle.vert";
     return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderType::Vertex);
 }
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
-    const static std::string fname = ":/glsl/triangle.frag";
+    const static std::string fname = ":/tests/glsl/triangle.frag";
     return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderType::Fragment);
 }
 }// namespace balsa::visualization::shaders
