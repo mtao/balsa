@@ -179,12 +179,14 @@ if get_option('visualization')
     'src/visualization/shaders/abstract_shader.cpp',
     'src/visualization/shaders/flat.cpp',
     'src/visualization/vulkan/native_film.cpp',
+    'src/visualization/vulkan/window.cpp',
   ]
 
   visualization_qt_sources = [
     'src/visualization/qt/vulkan/windows/scene.cpp',
     'src/visualization/qt/vulkan/renderers/scene.cpp',
     'src/visualization/qt/vulkan/film.cpp',
+    #'src/visualization/qt/vulkan/window.cpp',
     'src/visualization/qt/mesh_viewer/main_window.cpp',
     'src/visualization/qt/mesh_viewer/widget.cpp',
     ]
@@ -215,7 +217,9 @@ if get_option('visualization')
     glfw_dep = dependency('glfw3')
     visualization_required_deps += glfw_dep
     visualization_sources += [
+      'src/visualization/glfw/window.cpp',
       'src/visualization/glfw/vulkan/film.cpp',
+      'src/visualization/glfw/vulkan/window.cpp',
     ]
   endif
 

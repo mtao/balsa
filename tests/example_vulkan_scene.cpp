@@ -56,6 +56,13 @@ HelloTriangleScene::~HelloTriangleScene() {
 void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film& film) 
 {
     initialize(film);
+    static float value = 0.0;
+    value += 0.0001f;
+    if (value > 1.0f)
+        value = 0.0f;
+    spdlog::info("value: {}", value);
+    auto col = colormap::transform::LavaWaves().getColor(value);
+    set_clear_color(float(col.r), float(col.g), float(col.b));
     SceneBase::begin_render_pass(film);
 }
 
@@ -63,13 +70,6 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
     assert(film.device() == device);
 
-    static float value = 0.0;
-    value += 0.0005f;
-    if (value > 1.0f)
-        value = 0.0f;
-    auto col = colormap::transform::LavaWaves().getColor(value);
-    set_clear_color(float(col.r), float(col.g), float(col.b));
-    begin_render_pass(film);
 
     auto cb = film.current_command_buffer();
     cb.bindPipeline(vk::PipelineBindPoint::eGraphics,
@@ -95,7 +95,6 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
 
     cb.draw(3, 1, 0, 0);
-    end_render_pass(film);
 }
 
 

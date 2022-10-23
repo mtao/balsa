@@ -7,9 +7,6 @@
 #include <glm/vec2.hpp>
 
 namespace balsa::visualization::vulkan {
-namespace objects {
-    class Node;
-}
 
 class Film {
   public:
@@ -56,6 +53,9 @@ class Film {
     virtual uint32_t swapchain_image_count() const = 0;
     virtual vk::Image swapchain_image(int index) const = 0;
     virtual vk::ImageView swapchain_image_view(int index) const = 0;
+
+    virtual void pre_draw_hook() {}
+    virtual void post_draw_hook() {}
 
   private:
 };

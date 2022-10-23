@@ -18,6 +18,9 @@ void SceneBase::end_render_pass(Film &film) {
     cmdBuf.endRenderPass();
 }
 
+void SceneBase::initialize(Film &) {
+}
+
 void SceneBase::begin_render_pass(Film &film) {
 
     VkClearValue clearValues[2];
@@ -52,7 +55,6 @@ void SceneBase::begin_render_pass(Film &film) {
 
     vk::CommandBuffer cmdBuf = film.current_command_buffer();
     cmdBuf.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
-
 }
 void SceneBase::set_clear_color(float r, float g, float b, float a) {
     _clear_color.float32[0] = r;

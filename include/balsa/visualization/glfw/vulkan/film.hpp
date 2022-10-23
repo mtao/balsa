@@ -9,6 +9,8 @@ namespace balsa::visualization::glfw::vulkan {
 class Film : public visualization::vulkan::NativeFilm {
   public:
     Film(GLFWwindow *window);
+    Film(Film&&) = default;
+    Film& operator=(Film&&) = default;
     ~Film();
 
   private:

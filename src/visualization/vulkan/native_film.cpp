@@ -299,13 +299,13 @@ void NativeFilm::create_instance() {
 
         for (const auto &extension : extensions) {
             spdlog::trace("Instance has extension [{}] available",
-                         extension.extensionName);
+                          extension.extensionName);
         }
         auto layer_properties = _context_raii.enumerateInstanceLayerProperties();
 
         for (const auto &layer : layer_properties) {
             spdlog::trace("Instance has layer [{}] available",
-                         layer.layerName);
+                          layer.layerName);
         }
         throw e;
     }
@@ -355,7 +355,7 @@ int NativeFilm::score_physical_devices(const vk::PhysicalDevice &device) const {
 
     if (!features.geometryShader) {
         spdlog::trace("Skipped device from {} due lack of geometry shading",
-                     to_string(vk::VendorId(properties.vendorID)));
+                      to_string(vk::VendorId(properties.vendorID)));
         return 0;
     }
     // check for complete queues
@@ -373,9 +373,9 @@ void NativeFilm::pick_physical_device() {
         int score = score_physical_devices(*device);
         auto properties = device.getProperties();
         spdlog::trace("physical device: Vendor={} type={} got score {}",
-                     to_string(vk::VendorId(properties.vendorID)),
-                     to_string(properties.deviceType),
-                     score);
+                      to_string(vk::VendorId(properties.vendorID)),
+                      to_string(properties.deviceType),
+                      score);
         if (score > 0) {
             candidates.emplace(std::make_pair(score, *device));
         }
@@ -396,8 +396,8 @@ void NativeFilm::pick_physical_device() {
     auto properties = device.getProperties();
     // auto features = device.getFeatures();
     spdlog::trace("Chosen physical device: Vendor={} type={}",
-                 to_string(vk::VendorId(properties.vendorID)),
-                 to_string(properties.deviceType));
+                  to_string(vk::VendorId(properties.vendorID)),
+                  to_string(properties.deviceType));
     _physical_device_raii = vk::raii::PhysicalDevice(_instance_raii, device);
 }
 
@@ -549,20 +549,17 @@ vk::Image NativeFilm::swapchain_image(int index) const {
 vk::ImageView NativeFilm::swapchain_image_view(int index) const {
     return *_image_resources.at(index).image_view_raii;
 }
-    const vk::Extent2D& NativeFilm::swapchain_extent() const
-{
+const vk::Extent2D &NativeFilm::swapchain_extent() const {
     return _swapchain_extent;
 }
-    const vk::SurfaceFormatKHR NativeFilm::surface_format() const
-{
+const vk::SurfaceFormatKHR NativeFilm::surface_format() const {
     return _surface_format;
 }
 
 void NativeFilm::create_image_resources() {
 
     auto images = _swapchain_raii.getImages();
-    if(_swapchain_count != images.size())
-    {
+    if (_swapchain_count != images.size()) {
         spdlog::error("Swapchain requested more images than we requested: {} vs {}", images.size(), _swapchain_count);
     }
     const size_t size = images.size();
@@ -598,7 +595,6 @@ void NativeFilm::create_image_resources() {
     framebuffer_ci.setWidth(_swapchain_extent.width);
     framebuffer_ci.setHeight(_swapchain_extent.height);
     framebuffer_ci.setLayers(1);
-
 
 
     vk::FenceCreateInfo fci;
@@ -749,7 +745,8 @@ void NativeFilm::create_graphics_command_pool() {
 }
 
 
-void NativeFilm::pre_draw() {
+void NativeFilm::pre_draw_hook() {
+    
 
     auto device = this->device();
     auto &frame = _frame_resources[_current_frame_index];
@@ -768,7 +765,7 @@ void NativeFilm::pre_draw() {
 
         spdlog::trace("pre_draw: acquiring image");
         vk::ResultValue<uint32_t> res =
-            device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
+          device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
         _current_image_index = res.value;
         if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
             spdlog::trace("Acquired image {}", res.value);
@@ -808,7 +805,7 @@ void NativeFilm::pre_draw() {
         }
         image.command_buffer_raii.begin(bi);
     }
-    //if (false) {
+    // if (false) {
 
     //    auto cb = current_command_buffer();
     //    vk::ClearValue clear_color =
@@ -833,7 +830,8 @@ void NativeFilm::pre_draw() {
     //
 }
 
-void NativeFilm::post_draw() {
+void NativeFilm::post_draw_hook() {
+
     auto &image = _image_resources[_current_image_index];
     auto &frame = _frame_resources[_current_frame_index];
 
@@ -856,7 +854,7 @@ void NativeFilm::post_draw() {
     // TODO: swapchain image release to cmd buf to send to graphics queue
     // TODO: add a readback?
     //
-    //image.command_buffer_raii.endRenderPass();
+    // image.command_buffer_raii.endRenderPass();
 
     image.command_buffer_raii.end();
 

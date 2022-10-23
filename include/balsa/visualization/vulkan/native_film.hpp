@@ -3,7 +3,7 @@
 
 #include <vulkan/vulkan_raii.hpp>
 #include <set>
-#include "film.hpp"
+#include "balsa/visualization/vulkan/film.hpp"
 #include "device_functions.hpp"
 
 namespace balsa::visualization::vulkan {
@@ -11,11 +11,14 @@ namespace balsa::visualization::vulkan {
 class NativeFilm : public Film {
   public:
     NativeFilm(const std::vector<std::string> &device_extensions = {}, const std::vector<std::string> &instance_extensions = {}, const std::vector<std::string> &validation_layers = {});
+    NativeFilm(NativeFilm&&) = default;
+    NativeFilm& operator=(NativeFilm&&) = default;
     void set_device_extensions(const std::vector<std::string> &device_extensions);
     void set_instance_extensions(const std::vector<std::string> &device_extensions);
     void set_validation_layers(const std::vector<std::string> &validation_layers);
     NativeFilm(std::nullptr_t);
-    virtual ~NativeFilm();
+    virtual ~NativeFilm() override;
+
     glm::uvec2 swapchain_image_size() const override;
 
 
@@ -63,18 +66,18 @@ class NativeFilm : public Film {
     uint32_t swapchain_image_count() const override;
     vk::Image swapchain_image(int index) const override;
     vk::ImageView swapchain_image_view(int index) const override;
-    const vk::Extent2D& swapchain_extent() const;
+    const vk::Extent2D &swapchain_extent() const;
     const vk::SurfaceFormatKHR surface_format() const;
 
     vk::Instance instance() const;
     const vk::raii::Instance &instance_raii() const;
 
-    void pre_draw();
+    void pre_draw_hook() override;
 
-    void post_draw();
+    void post_draw_hook() override;
 
-  //protected:
-    // Whatever window management tool we have is in charge of this
+    // protected:
+    //  Whatever window management tool we have is in charge of this
     virtual vk::raii::SurfaceKHR make_surface() const = 0;
     virtual vk::Extent2D choose_swapchain_extent() const = 0;
     const vk::SwapchainKHR &swapchain() const;
@@ -84,7 +87,7 @@ class NativeFilm : public Film {
     virtual std::vector<std::string> get_required_device_extensions() const;
 
 
-  //private:
+    // private:
     struct QueueTargetIndices {
         std::set<uint32_t> graphics_queue;
         std::set<uint32_t> compute_queue;
