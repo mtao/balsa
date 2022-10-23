@@ -14,9 +14,9 @@ class BasicImGuiScene: public balsa::visualization::vulkan::SceneBase {
     ~BasicImGuiScene();
 
 
-    void initialize(balsa::visualization::vulkan::Film& film);
+    void initialize(balsa::visualization::vulkan::Film& film) override;
 
-    void draw(balsa::visualization::vulkan::Film &film);
+    void draw(balsa::visualization::vulkan::Film &film) override;
 
     void begin_render_pass(balsa::visualization::vulkan::Film& film) override;
 
@@ -40,9 +40,9 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     ~HelloTriangleScene();
 
 
-    void initialize(balsa::visualization::vulkan::Film& film);
+    void initialize(balsa::visualization::vulkan::Film& film) override;
 
-    void draw(balsa::visualization::vulkan::Film &film);
+    void draw(balsa::visualization::vulkan::Film &film) override;
 
     void begin_render_pass(balsa::visualization::vulkan::Film& film) override;
 

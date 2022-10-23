@@ -29,6 +29,8 @@ class Window : public glfw::Window
 
     void draw_frame() override;
 
+    void set_window_size(int w, int h) override;
+
   private:
     Film m_film;
 };

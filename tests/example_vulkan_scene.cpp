@@ -60,7 +60,6 @@ void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film& f
     value += 0.0001f;
     if (value > 1.0f)
         value = 0.0f;
-    spdlog::info("value: {}", value);
     auto col = colormap::transform::LavaWaves().getColor(value);
     set_clear_color(float(col.r), float(col.g), float(col.b));
     SceneBase::begin_render_pass(film);

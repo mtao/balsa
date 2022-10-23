@@ -7,6 +7,7 @@
 #include <mutex>
 #include <map>
 
+// TODO: I do my own management
 
 class GLFWwindow;
 namespace balsa::visualization::glfw {
@@ -27,12 +28,16 @@ namespace {
     }
 }// namespace
 
+bool Window::is_GLFWwindow_managed(GLFWwindow *window) {
+    std::scoped_lock sl(active_window_registry_mutex);
+    return active_window_registry.find(window) != active_window_registry.end();
+}
 
 Window::Window(const std::string_view &title, int width, int height) {
 
     // don't want to make glfw accidentally create an opengl context
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     m_window =
       glfwCreateWindow(width, height, title.data(), nullptr, nullptr);
 

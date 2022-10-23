@@ -3,6 +3,7 @@
 //#include "balsa/visualization/vulkan/objects/node.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 #include <glm/mat4x4.hpp>
+#include <spdlog/spdlog.h>
 #include "balsa/scene_graph/camera.hpp"
 
 

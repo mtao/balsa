@@ -33,9 +33,6 @@ class Window {
 
     virtual Film &film() = 0;
 
-  protected:
-    void rebuild_swapchains();
-
   private:
     std::shared_ptr<SceneBase> m_scene;
 };

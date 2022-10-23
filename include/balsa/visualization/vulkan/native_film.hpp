@@ -11,8 +11,8 @@ namespace balsa::visualization::vulkan {
 class NativeFilm : public Film {
   public:
     NativeFilm(const std::vector<std::string> &device_extensions = {}, const std::vector<std::string> &instance_extensions = {}, const std::vector<std::string> &validation_layers = {});
-    NativeFilm(NativeFilm&&) = default;
-    NativeFilm& operator=(NativeFilm&&) = default;
+    NativeFilm(NativeFilm &&) = default;
+    NativeFilm &operator=(NativeFilm &&) = default;
     void set_device_extensions(const std::vector<std::string> &device_extensions);
     void set_instance_extensions(const std::vector<std::string> &device_extensions);
     void set_validation_layers(const std::vector<std::string> &validation_layers);
@@ -75,6 +75,7 @@ class NativeFilm : public Film {
     void pre_draw_hook() override;
 
     void post_draw_hook() override;
+    void framebuffer_was_resized();
 
     // protected:
     //  Whatever window management tool we have is in charge of this
@@ -128,7 +129,7 @@ class NativeFilm : public Film {
         vk::raii::ImageView image_view_raii = nullptr;
         vk::raii::CommandBuffer command_buffer_raii = nullptr;
         vk::raii::Fence command_fence_raii = nullptr;
-        bool command_fence_waitable = false;
+        bool command_fence_waitable = true;
         vk::raii::Framebuffer framebuffer_raii = nullptr;
         vk::raii::CommandBuffer present_command_buffer_raii = nullptr;
         // vk::Image msaa_image = nullptr;
@@ -166,17 +167,20 @@ class NativeFilm : public Film {
     vk::raii::Queue _graphics_queue_raii = nullptr;
     vk::raii::Queue _present_queue_raii = nullptr;
 
-    // make_surface()
     vk::raii::SurfaceKHR _surface_raii = nullptr;
+
+    void select_surface_format();
+    vk::SurfaceFormatKHR _surface_format;
 
 
     // choose_swapchain_extent()
     uint32_t choose_swapchain_image_count() const;
     void create_swapchain();
+    void recreate_swapchain();
     vk::Extent2D _swapchain_extent;
-    vk::SurfaceFormatKHR _surface_format;
     vk::raii::SwapchainKHR _swapchain_raii = nullptr;
-    size_t _swapchain_count = 5;
+    size_t _swapchain_count = 4;
+    bool _framebuffer_size_dirty = false;
 
     void create_graphics_command_pool();
     vk::raii::CommandPool _graphics_command_pool_raii = nullptr;
@@ -187,6 +191,8 @@ class NativeFilm : public Film {
     uint32_t _current_image_index = 0;
     uint32_t _current_frame_index = 0;
     void create_image_resources();
+    void create_image_views();
+    void create_framebuffers();
     std::vector<ImageResources> _image_resources;
     void create_frame_resources();
     std::vector<FrameResources> _frame_resources;

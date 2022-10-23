@@ -34,10 +34,12 @@ int Window::exec() {
 void Window::draw_frame() {
     VulkanParentType::draw_frame();
 }
+void Window::set_window_size(int w, int h) {
+    resize(w, h);
+}
 
-void Window::resize(int w, int h) {
-    spdlog::error("Implement resize {} {}", w, h);
-    GLFWParentType::set_window_size(w,h);
+void Window::resize(int , int ) {
+    m_film.framebuffer_was_resized();
 }
 
 visualization::vulkan::Film &Window::film() {

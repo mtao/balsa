@@ -10,6 +10,7 @@ class Window {
     virtual ~Window();
     GLFWwindow *window() const { return m_window; }
 
+    static bool is_GLFWwindow_managed(GLFWwindow *);
 
     virtual void pre_draw_hook();
     virtual void post_draw_hook();

@@ -80,12 +80,65 @@ void NativeFilm::initialize() {
     _surface_raii = make_surface();
     pick_physical_device();
     create_device();
+    select_surface_format();
     create_swapchain();
     create_render_pass();
     create_graphics_command_pool();
     create_image_resources();
     create_frame_resources();
     create_render_pass();
+}
+
+void NativeFilm::recreate_swapchain() {
+    spdlog::trace("recreate_swapchain");
+    device().waitIdle();
+
+
+    //for (auto &image_res : _image_resources) {
+    //    image_res.framebuffer_raii.clear();
+    //    image_res.image_view_raii.clear();
+    //}
+
+
+    create_swapchain();
+    create_image_resources();
+    //create_image_views();
+    //create_framebuffers();
+}
+void NativeFilm::create_image_views() {
+    spdlog::trace("Creating image views");
+    vk::ImageViewCreateInfo img_view_create_info;
+    img_view_create_info.setViewType(vk::ImageViewType::e2D);
+    img_view_create_info.format = _surface_format.format;
+    img_view_create_info.setComponents(vk::ComponentMapping{
+      /*.r =*/vk::ComponentSwizzle::eIdentity,
+      /*.g =*/vk::ComponentSwizzle::eIdentity,
+      /*.b =*/vk::ComponentSwizzle::eIdentity,
+      /*.a =*/vk::ComponentSwizzle::eIdentity,
+    });
+
+    img_view_create_info.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+    img_view_create_info.subresourceRange.setBaseMipLevel(0);
+    img_view_create_info.subresourceRange.setLevelCount(1);
+    img_view_create_info.subresourceRange.setBaseArrayLayer(0);
+    img_view_create_info.subresourceRange.setLayerCount(1);
+    for (auto &res : _image_resources) {
+        img_view_create_info.setImage(res.image);
+        res.image_view_raii = _device_raii.createImageView(img_view_create_info);
+    }
+}
+void NativeFilm::create_framebuffers() {
+    spdlog::trace("Creating framebuffers");
+    vk::FramebufferCreateInfo framebuffer_ci;
+    framebuffer_ci.setRenderPass(*_default_render_pass_raii);
+    framebuffer_ci.setAttachmentCount(1);
+    framebuffer_ci.setWidth(_swapchain_extent.width);
+    framebuffer_ci.setHeight(_swapchain_extent.height);
+    framebuffer_ci.setLayers(1);
+    for (auto &res : _image_resources) {
+        framebuffer_ci.setPAttachments(&*res.image_view_raii);
+        res.framebuffer_raii = _device_raii.createFramebuffer(framebuffer_ci);
+    }
 }
 
 vk::Instance NativeFilm::instance() const {
@@ -573,29 +626,6 @@ void NativeFilm::create_image_resources() {
     auto cmd_buffers = _device_raii.allocateCommandBuffers(cba_trace);
     auto pres_cmd_buffers = _device_raii.allocateCommandBuffers(cba_trace);
 
-    vk::ImageViewCreateInfo img_view_create_info;
-    img_view_create_info.setViewType(vk::ImageViewType::e2D);
-    img_view_create_info.format = _surface_format.format;
-    img_view_create_info.setComponents(vk::ComponentMapping{
-      /*.r =*/vk::ComponentSwizzle::eIdentity,
-      /*.g =*/vk::ComponentSwizzle::eIdentity,
-      /*.b =*/vk::ComponentSwizzle::eIdentity,
-      /*.a =*/vk::ComponentSwizzle::eIdentity,
-    });
-
-    img_view_create_info.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
-    img_view_create_info.subresourceRange.setBaseMipLevel(0);
-    img_view_create_info.subresourceRange.setLevelCount(1);
-    img_view_create_info.subresourceRange.setBaseArrayLayer(0);
-    img_view_create_info.subresourceRange.setLayerCount(1);
-
-    vk::FramebufferCreateInfo framebuffer_ci;
-    framebuffer_ci.setRenderPass(*_default_render_pass_raii);
-    framebuffer_ci.setAttachmentCount(1);
-    framebuffer_ci.setWidth(_swapchain_extent.width);
-    framebuffer_ci.setHeight(_swapchain_extent.height);
-    framebuffer_ci.setLayers(1);
-
 
     vk::FenceCreateInfo fci;
     fci.setFlags(vk::FenceCreateFlagBits::eSignaled);
@@ -604,12 +634,10 @@ void NativeFilm::create_image_resources() {
         res.command_buffer_raii = std::move(buf);
         res.present_command_buffer_raii = std::move(buf2);
         res.image = img;
-        img_view_create_info.setImage(res.image);
-        res.image_view_raii = _device_raii.createImageView(img_view_create_info);
         res.command_fence_raii = _device_raii.createFence(fci);
-        framebuffer_ci.setPAttachments(&*res.image_view_raii);
-        res.framebuffer_raii = _device_raii.createFramebuffer(framebuffer_ci);
     }
+    create_image_views();
+    create_framebuffers();
 }
 void NativeFilm::create_frame_resources() {
     _frame_resources.resize(_frame_count);
@@ -636,24 +664,35 @@ uint32_t NativeFilm::choose_swapchain_image_count() const {
     return image_count;
 }
 
+
+void NativeFilm::select_surface_format() {
+    auto formats = (*_physical_device_raii).getSurfaceFormatsKHR(*_surface_raii);
+
+    for (const auto &format : formats) {
+        if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+            _surface_format = format;
+            return;
+        }
+    }
+    _surface_format = formats[0];
+}
+
 void NativeFilm::create_swapchain() {
+    spdlog::trace("Creating swapchain");
     vk::SwapchainCreateInfoKHR create_info;
 
+    if(bool(*_swapchain_raii))
+    {
+        spdlog::trace("Old swapchain existed");
+        create_info.setOldSwapchain(*_swapchain_raii);
+    } else {
+        create_info.setOldSwapchain(VK_NULL_HANDLE);
+    }
     create_info.setSurface(*_surface_raii);
 
     create_info.setImageExtent(_swapchain_extent = choose_swapchain_extent());
     create_info.setMinImageCount(_swapchain_count = choose_swapchain_image_count());// choose format
     {
-        auto formats = (*_physical_device_raii).getSurfaceFormatsKHR(*_surface_raii);
-
-        for (const auto &format : formats) {
-            if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-                _surface_format = format;
-                goto found_format;
-            }
-        }
-        _surface_format = formats[0];
-    found_format:
 
         create_info.setImageFormat(_surface_format.format);
         create_info.setImageColorSpace(_surface_format.colorSpace);
@@ -691,7 +730,6 @@ void NativeFilm::create_swapchain() {
 
     create_info.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
 
-    create_info.setOldSwapchain(VK_NULL_HANDLE);
     _swapchain_raii = _device_raii.createSwapchainKHR(create_info);
 }
 
@@ -746,7 +784,7 @@ void NativeFilm::create_graphics_command_pool() {
 
 
 void NativeFilm::pre_draw_hook() {
-    
+
 
     auto device = this->device();
     auto &frame = _frame_resources[_current_frame_index];
@@ -773,9 +811,10 @@ void NativeFilm::pre_draw_hook() {
             frame.image_semaphore_waitable = true;
             frame.image_acquired = true;
         } else if (res.result == vk::Result::eErrorOutOfDateKHR) {
-            // recreate swapchains
+            recreate_swapchain();
+            return;
         } else {// TODO if device is lost or some other issue occurs
-            spdlog::error("Failed to acquire image");
+            spdlog::error("Failed to acquire image: {}", vk::to_string(result));
         }
     }
     spdlog::trace("pre_draw: using image {}/{}", _current_image_index, _image_resources.size());
@@ -786,7 +825,7 @@ void NativeFilm::pre_draw_hook() {
         spdlog::trace("pre_draw: waiting for command fence");
         result = device.waitForFences(*image.command_fence_raii, VK_TRUE, UINT64_MAX);
         if (result != vk::Result::eSuccess) {
-            spdlog::error("Fence failed");
+            spdlog::error("Fence failed: {}", vk::to_string(result));
         }
         spdlog::trace("pre_draw: Resetting command fence");
         device.resetFences(*image.command_fence_raii);
@@ -915,11 +954,20 @@ void NativeFilm::post_draw_hook() {
     spdlog::trace("post_draw: calling present");
     vk::Result result =
       _present_queue_raii.presentKHR(present);
-    if (result != vk::Result::eSuccess) {
-        spdlog::error("Failed to present");
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || _framebuffer_size_dirty) {
+        _framebuffer_size_dirty = false;
+        recreate_swapchain();
+    } else if (result != vk::Result::eSuccess) {
+        spdlog::error("Failed to present: {}", vk::to_string(result));
     }
     frame.image_acquired = false;
     _current_frame_index = (_current_frame_index + 1) % _frame_resources.size();
     spdlog::trace("post_draw: Done");
 }
+
+void NativeFilm::framebuffer_was_resized() {
+    _framebuffer_size_dirty = true;
+}
+
 }// namespace balsa::visualization::vulkan

@@ -18,8 +18,6 @@ void Window::post_draw_hook() {
     }
 }
 
-void Window::rebuild_swapchains() {
-}
 void Window::set_scene(std::shared_ptr<SceneBase> scene) {
     m_scene = std::move(scene);
 }

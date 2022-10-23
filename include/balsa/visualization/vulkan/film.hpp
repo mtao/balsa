@@ -57,6 +57,7 @@ class Film {
     virtual void pre_draw_hook() {}
     virtual void post_draw_hook() {}
 
+
   private:
 };
 }// namespace balsa::visualization::vulkan

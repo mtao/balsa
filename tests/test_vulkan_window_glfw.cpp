@@ -21,6 +21,7 @@ int main(int argc, char *argv[]) {
     };
     //! [0]
 
+    //spdlog::set_level(spdlog::level::trace);
     int retvalue = 0;
     try {
         balsa::visualization::glfw::vulkan::Window window("Hello");
