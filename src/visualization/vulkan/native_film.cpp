@@ -612,9 +612,7 @@ const vk::SurfaceFormatKHR NativeFilm::surface_format() const {
 void NativeFilm::create_image_resources() {
 
     auto images = _swapchain_raii.getImages();
-    if (_swapchain_count != images.size()) {
-        spdlog::error("Swapchain requested more images than we requested: {} vs {}", images.size(), _swapchain_count);
-    }
+    
     const size_t size = images.size();
 
     _image_resources.resize(size);
@@ -660,7 +658,7 @@ uint32_t NativeFilm::choose_swapchain_image_count() const {
     if (capabilities.maxImageCount != 0) {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
-    spdlog::error("Desired swapchain image count: {}", image_count);
+    spdlog::trace("Desired swapchain image count: {} (min was {}, max was {})", image_count, capabilities.minImageCount, capabilities.maxImageCount);
     return image_count;
 }
 
@@ -691,7 +689,7 @@ void NativeFilm::create_swapchain() {
     create_info.setSurface(*_surface_raii);
 
     create_info.setImageExtent(_swapchain_extent = choose_swapchain_extent());
-    create_info.setMinImageCount(_swapchain_count = choose_swapchain_image_count());// choose format
+    create_info.setMinImageCount(choose_swapchain_image_count());// choose format
     {
 
         create_info.setImageFormat(_surface_format.format);

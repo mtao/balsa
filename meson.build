@@ -154,24 +154,7 @@ geometry_headers = [
 #===========================================
 
 if get_option('visualization')
-  if not get_option('qt')
-    error('Qt required for shader storage, please enable to use visualization!')
-  endif
 
-  shaderc_dep = dependency('shaderc')
-  # on ubuntu i had to install shaderc myself and I put it in my home directory...
-  include_dir += include_directories('/home/mtao/.local/include')
-  subdir('resources')
-
-  if get_option('imgui')
-    imgui_dep = dependency('imgui')
-  endif
-
-  glm_dep = dependency('glm')
-  colormap_proj = subproject('colormap-shaders')
-  colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
-  colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
-  
   visualization_sources = [
     'src/visualization/vulkan/film.cpp',
     #'src/visualization/vulkan/camera.cpp',
@@ -181,33 +164,68 @@ if get_option('visualization')
     'src/visualization/vulkan/native_film.cpp',
     'src/visualization/vulkan/window.cpp',
   ]
+  
+  visualization_required_deps = [vulkan_dep, dl_lib]
 
-  visualization_qt_sources = [
-    'src/visualization/qt/vulkan/windows/scene.cpp',
-    'src/visualization/qt/vulkan/renderers/scene.cpp',
-    'src/visualization/qt/vulkan/film.cpp',
-    #'src/visualization/qt/vulkan/window.cpp',
-    'src/visualization/qt/mesh_viewer/main_window.cpp',
-    'src/visualization/qt/mesh_viewer/widget.cpp',
+
+  if not get_option('qt')
+    error('Qt required for shader storage, please enable to use visualization!')
+  endif
+
+
+  shaderc_dep = dependency('shaderc')
+  # on ubuntu i had to install shaderc myself and I put it in my home directory...
+  include_dir += include_directories('/home/mtao/.local/include')
+  visualization_required_deps += shaderc_dep
+  subdir('resources')
+
+  if get_option('imgui')
+    imgui_dep = dependency('imgui')
+    visualization_imgui_sources = [
+      'src/visualization/imgui/vulkan/backend.cpp'
     ]
+    visualization_sources += visualization_imgui_sources
+    visualization_required_deps += imgui_dep
+  endif
 
-  visualization_moc_headers = [
-    'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
-    ]
+  glm_dep = dependency('glm')
+  visualization_required_deps += glm_dep
+  
 
-  visualization_qt_mocced = qt.compile_moc(
-    headers: visualization_moc_headers,
-    include_directories: include_dir,
-    dependencies: qt_dep
-    )
-
+  colormap_proj = subproject('colormap-shaders')
+  colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
+  colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
 
   visualization_sources += colormap_shaders_sources
-  visualization_sources += visualization_qt_sources
-  visualization_sources += visualization_qt_mocced
-  visualization_sources += glsl_resource_sources
+
+
+
+  if get_option('qt')
+    visualization_qt_sources = [
+      'src/visualization/qt/vulkan/windows/scene.cpp',
+      'src/visualization/qt/vulkan/renderers/scene.cpp',
+      'src/visualization/qt/vulkan/film.cpp',
+      #'src/visualization/qt/vulkan/window.cpp',
+      'src/visualization/qt/mesh_viewer/main_window.cpp',
+      'src/visualization/qt/mesh_viewer/widget.cpp',
+      ]
   
-  visualization_required_deps = [qt_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
+    visualization_moc_headers = [
+      'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
+      ]
+  
+    visualization_qt_mocced = qt.compile_moc(
+      headers: visualization_moc_headers,
+      include_directories: include_dir,
+      dependencies: qt_dep
+      )
+  
+  
+    visualization_sources += visualization_qt_sources
+    visualization_sources += visualization_qt_mocced
+    visualization_sources += glsl_resource_sources
+    visualization_required_deps += qt_dep
+  endif
 
 
   
