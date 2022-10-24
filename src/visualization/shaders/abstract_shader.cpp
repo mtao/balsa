@@ -13,16 +13,16 @@ void balsa_visualization_shaders_initialize_resources() {
 namespace balsa::visualization::shaders {
 
 namespace {
-    const std::string &get_shader_type_name(AbstractShader::ShaderType type) {
+    const std::string &get_shader_stage_name(AbstractShader::ShaderStage stage) {
         const static std::string v0 = "Vertex";
         const static std::string v1 = "Fragment";
         const static std::string v_ = "Unknown";
-        switch (type) {
-        case AbstractShader::ShaderType::Vertex:
+        switch (stage) {
+        case AbstractShader::ShaderStage::Vertex:
             return v0;
-        case AbstractShader::ShaderType::Fragment:
+        case AbstractShader::ShaderStage::Fragment:
             return v1;
-            default:
+        default:
             return v_;
         }
     }
@@ -56,7 +56,7 @@ namespace {
             return e7;
         case shaderc_compilation_status_configuration_error:
             return e8;
-            default:
+        default:
             return v_;
         }
     }
@@ -66,15 +66,15 @@ namespace {
 AbstractShader::AbstractShader() {
     balsa_visualization_shaders_initialize_resources();
 }
-std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, ShaderType type) const {
+std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, ShaderStage stage) const {
 
-    const std::string &stage_name = get_shader_type_name(type);
+    const std::string &stage_name = get_shader_stage_name(stage);
     shaderc_shader_kind kind;
-    switch (type) {
-    case ShaderType::Vertex:
+    switch (stage) {
+    case ShaderStage::Vertex:
         kind = shaderc_glsl_default_vertex_shader;
         break;
-    case ShaderType::Fragment:
+    case ShaderStage::Fragment:
         kind = shaderc_glsl_default_fragment_shader;
         break;
     }
@@ -85,7 +85,7 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
     auto status = result.GetCompilationStatus();
     if (status != shaderc_compilation_status_success) {
         const std::string &status_name = shaderc_compilation_status_name(status);
-        const std::string &stage_name = get_shader_type_name(type);
+        const std::string &stage_name = get_shader_stage_name(stage);
         spdlog::error("shaderc failed to build {} shader due to a ({}) with {} errors and {} warnings:\n {}", stage_name, status_name, result.GetNumErrors(), result.GetNumWarnings(), result.GetErrorMessage());
         return {};
     }
@@ -99,8 +99,7 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
 
     return ret;
 }
-    std::string AbstractShader::read_path_to_string(const std::string& path) 
-{
+std::string AbstractShader::read_path_to_string(const std::string &path) {
     QFile file(path.c_str());
     if (!file.open(QFile::ReadOnly | QIODevice::Text)) {
         spdlog::error("Was unable to read []", path);
@@ -112,9 +111,9 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
     return data.toStdString();
 }
 
-std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
+std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderStage stage) const {
 
-    return compile_glsl(read_path_to_string(path), type);
+    return compile_glsl(read_path_to_string(path), stage);
 }
 
 // namespace {
@@ -137,5 +136,18 @@ std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &
 //     auto vs_module = make_shader_module(device, vs_spirv);
 //     auto fs_module = make_shader_module(device, fs_spirv);
 // }
+std::vector<AbstractShader::SpirvShader> AbstractShader::compile_spirv() {
+    std::vector<SpirvShader> ret(2);
+
+    auto &vert = ret[0];
+    auto &frag = ret[1];
+
+    vert.stage = ShaderStage::Vertex;
+    frag.stage = ShaderStage::Fragment;
+
+    vert.spirv_data = vert_spirv();
+    frag.spirv_data = frag_spirv();
+    return ret;
+}
 
 }// namespace balsa::visualization::shaders

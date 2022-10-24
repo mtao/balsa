@@ -163,6 +163,7 @@ if get_option('visualization')
     'src/visualization/shaders/flat.cpp',
     'src/visualization/vulkan/native_film.cpp',
     'src/visualization/vulkan/window.cpp',
+    'src/visualization/vulkan/pipeline_factory.cpp',
   ]
   
   visualization_required_deps = [vulkan_dep, dl_lib]
@@ -182,7 +183,8 @@ if get_option('visualization')
   if get_option('imgui')
     imgui_dep = dependency('imgui')
     visualization_imgui_sources = [
-      'src/visualization/imgui/vulkan/backend.cpp'
+      'src/visualization/imgui/vulkan/backend.cpp',
+      'src/visualization/imgui/vulkan/drawable.cpp'
     ]
     visualization_sources += visualization_imgui_sources
     visualization_required_deps += imgui_dep

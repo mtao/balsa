@@ -6,28 +6,8 @@
 #include <balsa/visualization/vulkan/scene.hpp>
 #include <balsa/scene_graph/transformations/matrix_transformation.hpp>
 #include <balsa/scene_graph/embedding_traits.hpp>
+#include <balsa/visualization/imgui//vulkan//drawable.hpp>
 
-class BasicImGuiScene: public balsa::visualization::vulkan::SceneBase {
-  public:
-    // HelloTriangleScene(balsa::visualization::vulkan::Film &film);
-    BasicImGuiScene();
-    ~BasicImGuiScene();
-
-
-    void initialize(balsa::visualization::vulkan::Film& film) override;
-
-    void draw(balsa::visualization::vulkan::Film &film) override;
-
-    void begin_render_pass(balsa::visualization::vulkan::Film& film) override;
-
-
-  private:
-    void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);
-
-    vk::Device device;
-    vk::PipelineLayout pipeline_layout;
-    vk::Pipeline pipeline;
-};
 
 class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::embedding_traits3F>> {
     using embedding_traits = balsa::scene_graph::embedding_traits3F;
@@ -40,15 +20,21 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     ~HelloTriangleScene();
 
 
-    void initialize(balsa::visualization::vulkan::Film& film) override;
+    void initialize(balsa::visualization::vulkan::Film &film) override;
 
     void draw(balsa::visualization::vulkan::Film &film) override;
 
-    void begin_render_pass(balsa::visualization::vulkan::Film& film) override;
+    void begin_render_pass(balsa::visualization::vulkan::Film &film) override;
+    void end_render_pass(balsa::visualization::vulkan::Film &film) override;
 
+    void toggle_mode(balsa::visualization::vulkan::Film &film);
 
   private:
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);
+
+    balsa::visualization::imgui::vulkan::Drawable _imgui;
+    bool static_triangle_mode = true;
+    bool changed = false;
 
     vk::Device device;
     vk::PipelineLayout pipeline_layout;

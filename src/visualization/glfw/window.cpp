@@ -67,63 +67,100 @@ Window::~Window() {
 
 void Window::initialize_glfw_callbacks() {
     spdlog::info("Initializing callbacks");
-    glfwSetWindowPosCallback(m_window, Window::setWindowPos_callback);
-    glfwSetWindowSizeCallback(m_window, Window::setWindowSize_callback);
-    glfwSetWindowCloseCallback(m_window, Window::setWindowClose_callback);
-    glfwSetWindowRefreshCallback(m_window, Window::setWindowRefresh_callback);
-    glfwSetWindowFocusCallback(m_window, Window::setWindowFocus_callback);
-    glfwSetWindowIconifyCallback(m_window, Window::setWindowIconify_callback);
-    glfwSetWindowMaximizeCallback(m_window, Window::setWindowMaximize_callback);
-    glfwSetFramebufferSizeCallback(m_window, Window::setFramebufferSize_callback);
-    glfwSetWindowContentScaleCallback(m_window, Window::setWindowContentScale_callback);
+    glfwSetWindowPosCallback(m_window, Window::windowPos_callback);
+    glfwSetWindowSizeCallback(m_window, Window::windowSize_callback);
+    glfwSetWindowCloseCallback(m_window, Window::windowClose_callback);
+    glfwSetWindowRefreshCallback(m_window, Window::windowRefresh_callback);
+    glfwSetWindowFocusCallback(m_window, Window::windowFocus_callback);
+    glfwSetWindowIconifyCallback(m_window, Window::windowIconify_callback);
+    glfwSetWindowMaximizeCallback(m_window, Window::windowMaximize_callback);
+    glfwSetFramebufferSizeCallback(m_window, Window::framebufferSize_callback);
+    glfwSetWindowContentScaleCallback(m_window, Window::windowContentScale_callback);
+
+    glfwSetKeyCallback(m_window, Window::key_callback);
+    glfwSetCharCallback(m_window, Window::character_callback);
+    glfwSetCursorPosCallback(m_window, Window::cursor_position_callback);
+    glfwSetMouseButtonCallback(m_window, Window::mouse_button_callback);
+    glfwSetScrollCallback(m_window, Window::scroll_callback);
 }
 
-void Window::setWindowPos_callback(GLFWwindow *window, int xpos, int ypos) {
+void Window::windowPos_callback(GLFWwindow *window, int xpos, int ypos) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_pos(xpos, ypos); }
+    if (mywin != nullptr) { mywin->window_pos(xpos, ypos); }
 }
-void Window::setWindowSize_callback(GLFWwindow *window, int width, int height) {
+void Window::windowSize_callback(GLFWwindow *window, int width, int height) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_size(width, height); }
+    if (mywin != nullptr) { mywin->window_size(width, height); }
 }
-void Window::setWindowClose_callback(GLFWwindow *window) {
+void Window::windowClose_callback(GLFWwindow *window) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_close(); }
+    if (mywin != nullptr) { mywin->window_close(); }
 }
-void Window::setWindowRefresh_callback(GLFWwindow *window) {
+void Window::windowRefresh_callback(GLFWwindow *window) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_refresh(); }
+    if (mywin != nullptr) { mywin->window_refresh(); }
 }
-void Window::setWindowFocus_callback(GLFWwindow *window, int focused) {
+void Window::windowFocus_callback(GLFWwindow *window, int focused) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_focus(focused); }
+    if (mywin != nullptr) { mywin->window_focus(focused); }
 }
-void Window::setWindowIconify_callback(GLFWwindow *window, int iconified) {
+void Window::windowIconify_callback(GLFWwindow *window, int iconified) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_iconify(iconified); }
+    if (mywin != nullptr) { mywin->window_iconify(iconified); }
 }
-void Window::setWindowMaximize_callback(GLFWwindow *window, int maximized) {
+void Window::windowMaximize_callback(GLFWwindow *window, int maximized) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_maximize(maximized); }
+    if (mywin != nullptr) { mywin->window_maximize(maximized); }
 }
-void Window::setFramebufferSize_callback(GLFWwindow *window, int width, int height) {
+void Window::framebufferSize_callback(GLFWwindow *window, int width, int height) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_framebuffer_size(width, height); }
+    if (mywin != nullptr) { mywin->framebuffer_size(width, height); }
 }
-void Window::setWindowContentScale_callback(GLFWwindow *window, float xscale, float yscale) {
+void Window::windowContentScale_callback(GLFWwindow *window, float xscale, float yscale) {
     Window *mywin = get_window_from_registry(window);
-    if (mywin != nullptr) { mywin->set_window_content_scale(xscale, yscale); }
+    if (mywin != nullptr) { mywin->window_content_scale(xscale, yscale); }
 }
 
-void Window::set_window_pos(int, int) {}
-void Window::set_window_size(int, int) {}
-void Window::set_window_close() {}
-void Window::set_window_refresh() {}
-void Window::set_window_focus(int) {}
-void Window::set_window_iconify(int) {}
-void Window::set_window_maximize(int) {}
-void Window::set_framebuffer_size(int, int) {}
-void Window::set_window_content_scale(float, float) {}
+void Window::key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    Window *mywin = get_window_from_registry(window);
+    if (mywin != nullptr) { mywin->key(key, scancode, action, mods); }
+}
+
+void Window::character_callback(GLFWwindow *window, unsigned int codepoint) {
+    Window *mywin = get_window_from_registry(window);
+    if (mywin != nullptr) { mywin->character(codepoint); }
+}
+void Window::cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
+    Window *mywin = get_window_from_registry(window);
+    if (mywin != nullptr) { mywin->cursor_position(xpos, ypos); }
+}
+
+
+void Window::mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
+    Window *mywin = get_window_from_registry(window);
+    if (mywin != nullptr) { mywin->mouse_button(button, action, mods); }
+}
+
+void Window::scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+    Window *mywin = get_window_from_registry(window);
+    if (mywin != nullptr) { mywin->scroll(xoffset, yoffset); }
+}
+
+void Window::window_pos(int, int) {}
+void Window::window_size(int, int) {}
+void Window::window_close() {}
+void Window::window_refresh() {}
+void Window::window_focus(int) {}
+void Window::window_iconify(int) {}
+void Window::window_maximize(int) {}
+void Window::framebuffer_size(int, int) {}
+void Window::window_content_scale(float, float) {}
+
+void Window::key(int, int, int, int) {}
+void Window::character(unsigned int) {}
+void Window::cursor_position(double, double) {}
+void Window::mouse_button(int, int, int) {}
+void Window::scroll(double, double) {}
 
 
 void Window::pre_draw_hook() {
@@ -136,6 +173,16 @@ void Window::main_loop() {
         draw_frame();
     }
 }
+
+// glfwSetMonitorCallback(monitor_callback);
+//
+// void Window::monitor_callback(GLFWmonitor *monitor, int event) {
+//     if (event == GLFW_CONNECTED) {
+//         // The monitor was connected
+//     } else if (event == GLFW_DISCONNECTED) {
+//         // The monitor was disconnected
+//     }
+// }
 
 
 }// namespace balsa::visualization::glfw

@@ -34,11 +34,11 @@ int Window::exec() {
 void Window::draw_frame() {
     VulkanParentType::draw_frame();
 }
-void Window::set_window_size(int w, int h) {
+void Window::window_size(int w, int h) {
     resize(w, h);
 }
 
-void Window::resize(int , int ) {
+void Window::resize(int, int) {
     m_film.framebuffer_was_resized();
 }
 

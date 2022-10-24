@@ -7,18 +7,33 @@
 
 namespace balsa::visualization::vulkan {
 class Film;
-template<scene_graph::concepts::abstract_transformation TransformationType>
-class Drawable : public scene_graph::AbstractFeature<typename TransformationType::embedding_traits> {
+// template<scene_graph::concepts::abstract_transformation TransformationType>
+// class Drawable : public scene_graph::AbstractFeature<typename TransformationType::embedding_traits> {
+//
+//   public:
+//     using embedding_traits = typename TransformationType::embedding_traits;
+//     using camera_type = scene_graph::Camera<TransformationType>;
+//     using abstract_feature_type = scene_graph::AbstractFeature<embedding_traits>;
+//     using abstract_object_type = scene_graph::AbstractObject<embedding_traits>;
+//
+//   private:
+//     virtual ~Drawable() {}
+//     // Drawable(const Object::Ptr& obj, const Shader::Ptr& shader);
+//     virtual void draw(const camera_type &cam, Film &film) = 0;
+// };
 
+
+class Drawable {
   public:
-    using embedding_traits = typename TransformationType::embedding_traits;
-    using camera_type = scene_graph::Camera<TransformationType>;
-    using abstract_feature_type = scene_graph::AbstractFeature<embedding_traits>;
-    using abstract_object_type = scene_graph::AbstractObject<embedding_traits>;
-
-  private:
     virtual ~Drawable() {}
-    // Drawable(const Object::Ptr& obj, const Shader::Ptr& shader);
-    virtual void draw(const camera_type &cam, Film &film) = 0;
+    virtual void initialize(Film &) {}
+    virtual void begin_render_pass(Film &) {}
+    virtual void end_render_pass(Film &) {}
+    virtual void draw(Film &film) = 0;
+
+    // TODO: surface_image_format requests
+    // TODO: surface color space requests
+    // TODO: present mode requests
 };
 }// namespace balsa::visualization::vulkan
+#endif

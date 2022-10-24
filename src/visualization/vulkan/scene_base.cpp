@@ -4,7 +4,6 @@
 #include "balsa/visualization/vulkan/film.hpp"
 #include <glm/mat4x4.hpp>
 #include <spdlog/spdlog.h>
-#include "balsa/scene_graph/camera.hpp"
 
 
 namespace balsa::visualization::vulkan {
@@ -19,8 +18,6 @@ void SceneBase::end_render_pass(Film &film) {
     cmdBuf.endRenderPass();
 }
 
-void SceneBase::initialize(Film &) {
-}
 
 void SceneBase::begin_render_pass(Film &film) {
 

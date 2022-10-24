@@ -9,7 +9,21 @@
 
 using namespace balsa::visualization;
 
+class TestWindow : public balsa::visualization::glfw::vulkan::Window {
+  public:
+    TestWindow() : balsa::visualization::glfw::vulkan::Window("Hello") {
+        scene = std::make_shared<HelloTriangleScene>();
 
+        set_scene(scene);
+    }
+
+    void key(int key, int scancode, int action, int mods) override {
+        if (key == GLFW_KEY_SPACE) {
+            scene->toggle_mode(film());
+        }
+    }
+    std::shared_ptr<HelloTriangleScene> scene;
+};
 
 int main(int argc, char *argv[]) {
     glfwInit();
@@ -21,14 +35,11 @@ int main(int argc, char *argv[]) {
     };
     //! [0]
 
-    //spdlog::set_level(spdlog::level::trace);
+    // spdlog::set_level(spdlog::level::trace);
     int retvalue = 0;
     try {
-        balsa::visualization::glfw::vulkan::Window window("Hello");
+        TestWindow window;
 
-        auto scene = std::make_shared<HelloTriangleScene>();
-
-        window.set_scene(scene);
 
         retvalue = window.exec();
 
