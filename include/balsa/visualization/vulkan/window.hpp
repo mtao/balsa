@@ -21,10 +21,8 @@ class Window {
     // run the main loop
     virtual int exec() = 0;
     void draw_frame();
-    void set_scene(std::shared_ptr<SceneBase> scene);
+    virtual SceneBase *scene() const { return nullptr; }
 
-  protected:
-    const std::shared_ptr<SceneBase> &scene() const;
 
     virtual void pre_draw_hook();
     virtual void post_draw_hook();
@@ -32,9 +30,6 @@ class Window {
     virtual void resize(int w, int h) = 0;
 
     virtual Film &film() = 0;
-
-  private:
-    std::shared_ptr<SceneBase> m_scene;
 };
 }// namespace balsa::visualization::vulkan
 

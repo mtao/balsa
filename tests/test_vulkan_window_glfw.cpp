@@ -12,17 +12,23 @@ using namespace balsa::visualization;
 class TestWindow : public balsa::visualization::glfw::vulkan::Window {
   public:
     TestWindow() : balsa::visualization::glfw::vulkan::Window("Hello") {
-        scene = std::make_shared<HelloTriangleScene>();
-
-        set_scene(scene);
+        m_scene = std::make_shared<HelloTriangleScene>();
+    }
+    balsa::visualization::vulkan::SceneBase *scene() const override {
+        return m_scene.get();
     }
 
-    void key(int key, int scancode, int action, int mods) override {
-        if (key == GLFW_KEY_SPACE) {
-            scene->toggle_mode(film());
+    void
+      key(int key, int scancode, int action, int mods) override {
+        if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+            m_scene->toggle_mode(film());
         }
     }
-    std::shared_ptr<HelloTriangleScene> scene;
+    ~TestWindow() {
+        m_scene = {};
+        spdlog::info("Deleting scene done");
+    }
+    std::shared_ptr<HelloTriangleScene> m_scene;
 };
 
 int main(int argc, char *argv[]) {

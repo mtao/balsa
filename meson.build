@@ -164,6 +164,7 @@ if get_option('visualization')
     'src/visualization/vulkan/native_film.cpp',
     'src/visualization/vulkan/window.cpp',
     'src/visualization/vulkan/pipeline_factory.cpp',
+    'src/visualization/vulkan/utils.cpp',
   ]
   
   visualization_required_deps = [vulkan_dep, dl_lib]

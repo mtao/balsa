@@ -39,5 +39,8 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     vk::Device device;
     vk::PipelineLayout pipeline_layout;
     vk::Pipeline pipeline;
+
+    vk::Buffer vertex_buffer;
+    vk::DeviceMemory vertex_buffer_memory;
 };
 #endif

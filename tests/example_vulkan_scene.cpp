@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <balsa/visualization/shaders/flat.hpp>
 #include <balsa/visualization/vulkan/pipeline_factory.hpp>
+#include <balsa/visualization/vulkan/utils.hpp>
 #include "example_vulkan_scene.hpp"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -10,6 +11,44 @@
 #pragma GCC diagnostic pop
 #include <QtCore/QFile>
 
+#include <glm/glm.hpp>
+#include <array>
+
+namespace {
+struct Vertex {
+    glm::vec2 pos;
+    glm::vec3 color;
+    static vk::VertexInputBindingDescription get_binding_description();
+    static std::array<vk::VertexInputAttributeDescription, 2> get_attribute_descriptions();
+};
+vk::VertexInputBindingDescription Vertex::get_binding_description() {
+    vk::VertexInputBindingDescription binding_description{
+        /*.binding = */ 0,
+        /*.stride = */ sizeof(Vertex),
+        /*.inputRate = */ vk::VertexInputRate::eVertex
+    };
+    return binding_description;
+}
+std::array<vk::VertexInputAttributeDescription, 2> Vertex::get_attribute_descriptions() {
+
+    std::array<vk::VertexInputAttributeDescription, 2> ret;
+    auto &[pos, col] = ret;
+    pos.binding = 0;
+    pos.location = 0;
+    pos.format = vk::Format::eR32G32B32A32Sfloat;
+    col.binding = 0;
+    col.location = 1;
+    col.format = vk::Format::eR32G32B32Sfloat;
+    col.offset = offsetof(Vertex, color);
+    return ret;
+}
+
+const std::vector<Vertex> vertices = {
+    { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+    { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
+    { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } }
+};
+}// namespace
 void balsa_visualization_tests_shaders_initialize_resources() {
     Q_INIT_RESOURCE(glsl);
 }
@@ -39,8 +78,13 @@ std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
 }
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
-    const static std::string fname = ":/tests/glsl/triangle.frag";
-    return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Fragment);
+    if (static_triangle_mode) {
+        const static std::string fname = ":/tests/glsl/triangle.frag";
+        return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Fragment);
+    } else {
+        const static std::string fname = ":/tests/glsl/input_vertex.frag";
+        return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Fragment);
+    }
 }
 }// namespace balsa::visualization::shaders
 
@@ -53,6 +97,12 @@ HelloTriangleScene::~HelloTriangleScene() {
         }
         if (pipeline_layout) {
             device.destroyPipelineLayout(pipeline_layout);
+        }
+        if (vertex_buffer) {
+            device.destroyBuffer(vertex_buffer);
+        }
+        if (vertex_buffer_memory) {
+            device.freeMemory(vertex_buffer_memory);
         }
     }
 }
@@ -90,6 +140,10 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     cb.bindPipeline(vk::PipelineBindPoint::eGraphics,
                     pipeline);
 
+    if (!static_triangle_mode) {
+        cb.bindVertexBuffers(0, vertex_buffer, size_t(0));
+    }
+
     vk::Viewport viewport{};
     auto extent = film.swapchain_image_size();
 
@@ -109,7 +163,11 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     cb.setScissor(0, { scissor });
 
 
-    cb.draw(3, 1, 0, 0);
+    if (static_triangle_mode) {
+        cb.draw(3, 1, 0, 0);
+    } else {
+        cb.draw(vertices.size(), 1, 0, 0);
+    }
     _imgui.draw(film);
 }
 
@@ -131,6 +189,45 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     balsa::visualization::shaders::TriangleShader<balsa::scene_graph::embedding_traits2D> fs(static_triangle_mode);
 
     balsa::visualization::vulkan::PipelineFactory pf(film);
+
+    if (!static_triangle_mode) {
+        spdlog::info("Creating buffers");
+        auto binding_description = Vertex::get_binding_description();
+        auto attribute_description = Vertex::get_attribute_descriptions();
+        auto &ci = pf.vertex_input;
+
+        ci.setVertexBindingDescriptions(binding_description);
+        ci.setVertexAttributeDescriptions(attribute_description);
+
+
+        vk::BufferCreateInfo buffer_info{};
+        buffer_info.setSize(sizeof(Vertex) * vertices.size());
+        buffer_info.setUsage(vk::BufferUsageFlagBits::eVertexBuffer);
+        buffer_info.setSharingMode(vk::SharingMode::eExclusive);
+        if (vertex_buffer) {
+            device.destroyBuffer(vertex_buffer);
+        }
+        if (vertex_buffer_memory) {
+            device.freeMemory(vertex_buffer_memory);
+        }
+        vertex_buffer = device.createBuffer(buffer_info);
+
+        vk::MemoryRequirements mem_requirements = device.getBufferMemoryRequirements(vertex_buffer);
+
+        uint32_t memory_type_index = balsa::visualization::vulkan::find_memory_type(film, mem_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+        vk::MemoryAllocateInfo alloc_info;
+        alloc_info.setAllocationSize(mem_requirements.size);
+        alloc_info.setMemoryTypeIndex(memory_type_index);
+
+        vertex_buffer_memory = device.allocateMemory(alloc_info);
+        void *data = device.mapMemory(vertex_buffer_memory, 0, buffer_info.size);
+        memcpy(data, vertices.data(), size_t(buffer_info.size));
+        device.unmapMemory(vertex_buffer_memory);
+
+        device.bindBufferMemory(vertex_buffer, vertex_buffer_memory, 0);
+    }
+
     std::tie(pipeline, pipeline_layout) = pf.generate(film, fs);
 }
 

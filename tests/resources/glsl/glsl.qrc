@@ -1,7 +1,8 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/tests/glsl">
     <file>triangle.vert</file>
-    <file>input_vertex.vert</file>
     <file>triangle.frag</file>
+    <file>input_vertex.vert</file>
+    <file>input_vertex.frag</file>
 </qresource>
 </RCC>

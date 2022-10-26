@@ -8,10 +8,9 @@
 
 namespace balsa {
 namespace visualization::vulkan {
-    class DrawableGroup;
 
 
-    class SceneBase: public Drawable {
+    class SceneBase : public Drawable {
       public:
         SceneBase();
         // SceneBase(const  &root = nullptr);
@@ -25,8 +24,6 @@ namespace visualization::vulkan {
         void set_clear_color(uint32_t r, uint32_t g, uint32_t b, uint32_t a = std::numeric_limits<uint32_t>::max());
 
       private:
-        std::vector<std::shared_ptr<DrawableGroup>> _root;
-
         VkClearColorValue _clear_color = { 0.f, 0.f, 0.f, 0.f };
         VkClearDepthStencilValue _clear_depth_stencil = { 1.0f, 0 };
         bool _do_clear_color = true;

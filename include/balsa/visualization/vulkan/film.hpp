@@ -2,7 +2,6 @@
 #define BALSA_VISUALIZATION_VULKAN_FILM_HPP
 
 #include <vector>
-#include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan.hpp>
 #include <glm/vec2.hpp>
 
