@@ -38,32 +38,39 @@ void Buffer::destroy() {
     }
 }
 
-
-void Buffer::create_noT(const Film &film, void *data, size_t data_size) {
+void Buffer::create(const Film &film, size_t data_size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
     assert(m_device == film.device());
-
     destroy();
 
     vk::BufferCreateInfo buffer_info{};
     buffer_info.setSize(data_size);
-    buffer_info.setUsage(vk::BufferUsageFlagBits::eVertexBuffer);
+    buffer_info.setUsage(usage);
     buffer_info.setSharingMode(vk::SharingMode::eExclusive);
     m_buffer = m_device.createBuffer(buffer_info);
 
     vk::MemoryRequirements mem_requirements = m_device.getBufferMemoryRequirements(m_buffer);
 
-    uint32_t memory_type_index = balsa::visualization::vulkan::find_memory_type(film, mem_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    uint32_t memory_type_index = balsa::visualization::vulkan::find_memory_type(film, mem_requirements.memoryTypeBits, properties);
 
     vk::MemoryAllocateInfo alloc_info;
     alloc_info.setAllocationSize(mem_requirements.size);
     alloc_info.setMemoryTypeIndex(memory_type_index);
 
     m_memory = m_device.allocateMemory(alloc_info);
-    void *map_data = m_device.mapMemory(m_memory, 0, buffer_info.size);
-    memcpy(map_data, data, size_t(buffer_info.size));
-    m_device.unmapMemory(m_memory);
 
     m_device.bindBufferMemory(m_buffer, m_memory, 0);
+}
+
+void Buffer::upload_data_noT(const Film &film, void *data, size_t data_size) {
+    assert(m_device == film.device());
+
+    assert(m_buffer);
+    assert(m_memory);
+
+
+    void *map_data = m_device.mapMemory(m_memory, 0, data_size);
+    memcpy(map_data, data, size_t(data_size));
+    m_device.unmapMemory(m_memory);
 }
 
 

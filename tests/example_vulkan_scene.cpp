@@ -195,7 +195,10 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
 
         vertex_buffer.set_device(film);
 
-        vertex_buffer.create(film, vertices);
+
+
+        vertex_buffer.create(film, sizeof(Vertex) * vertices.size(), vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        vertex_buffer.upload_data(film, vertices);
     }
 
     std::tie(pipeline, pipeline_layout) = pf.generate(film, fs);
