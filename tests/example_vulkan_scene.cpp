@@ -98,12 +98,6 @@ HelloTriangleScene::~HelloTriangleScene() {
         if (pipeline_layout) {
             device.destroyPipelineLayout(pipeline_layout);
         }
-        if (vertex_buffer) {
-            device.destroyBuffer(vertex_buffer);
-        }
-        if (vertex_buffer_memory) {
-            device.freeMemory(vertex_buffer_memory);
-        }
     }
 }
 void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film &film) {
@@ -141,7 +135,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
                     pipeline);
 
     if (!static_triangle_mode) {
-        cb.bindVertexBuffers(0, vertex_buffer, size_t(0));
+        vertex_buffer.bind(film);
     }
 
     vk::Viewport viewport{};
@@ -199,33 +193,9 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         ci.setVertexBindingDescriptions(binding_description);
         ci.setVertexAttributeDescriptions(attribute_description);
 
+        vertex_buffer.set_device(film);
 
-        vk::BufferCreateInfo buffer_info{};
-        buffer_info.setSize(sizeof(Vertex) * vertices.size());
-        buffer_info.setUsage(vk::BufferUsageFlagBits::eVertexBuffer);
-        buffer_info.setSharingMode(vk::SharingMode::eExclusive);
-        if (vertex_buffer) {
-            device.destroyBuffer(vertex_buffer);
-        }
-        if (vertex_buffer_memory) {
-            device.freeMemory(vertex_buffer_memory);
-        }
-        vertex_buffer = device.createBuffer(buffer_info);
-
-        vk::MemoryRequirements mem_requirements = device.getBufferMemoryRequirements(vertex_buffer);
-
-        uint32_t memory_type_index = balsa::visualization::vulkan::find_memory_type(film, mem_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-        vk::MemoryAllocateInfo alloc_info;
-        alloc_info.setAllocationSize(mem_requirements.size);
-        alloc_info.setMemoryTypeIndex(memory_type_index);
-
-        vertex_buffer_memory = device.allocateMemory(alloc_info);
-        void *data = device.mapMemory(vertex_buffer_memory, 0, buffer_info.size);
-        memcpy(data, vertices.data(), size_t(buffer_info.size));
-        device.unmapMemory(vertex_buffer_memory);
-
-        device.bindBufferMemory(vertex_buffer, vertex_buffer_memory, 0);
+        vertex_buffer.create(film, vertices);
     }
 
     std::tie(pipeline, pipeline_layout) = pf.generate(film, fs);

@@ -163,6 +163,7 @@ if get_option('visualization')
     'src/visualization/shaders/flat.cpp',
     'src/visualization/vulkan/native_film.cpp',
     'src/visualization/vulkan/window.cpp',
+    'src/visualization/vulkan/buffer.cpp',
     'src/visualization/vulkan/pipeline_factory.cpp',
     'src/visualization/vulkan/utils.cpp',
   ]

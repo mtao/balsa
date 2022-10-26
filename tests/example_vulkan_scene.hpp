@@ -6,6 +6,7 @@
 #include <balsa/visualization/vulkan/scene.hpp>
 #include <balsa/scene_graph/transformations/matrix_transformation.hpp>
 #include <balsa/scene_graph/embedding_traits.hpp>
+#include <balsa/visualization/vulkan/buffer.hpp>
 #include <balsa/visualization/imgui//vulkan//drawable.hpp>
 
 
@@ -40,7 +41,6 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     vk::PipelineLayout pipeline_layout;
     vk::Pipeline pipeline;
 
-    vk::Buffer vertex_buffer;
-    vk::DeviceMemory vertex_buffer_memory;
+    balsa::visualization::vulkan::Buffer vertex_buffer;
 };
 #endif
