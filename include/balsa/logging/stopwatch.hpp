@@ -20,7 +20,7 @@ class HierarchicalStopwatch : std::enable_shared_from_this<HierarchicalStopwatch
     // logger passed in if not nullptr,
     // THEN logger in parent if parent is not nullptr,
     // default logger
-    static Ptr create(std::string name, std::shared_ptr<spdlog::logger> logger = {}, spdlog::level::level_enum level = spdlog::level::info) {
+    static Ptr create(std::string name, std::shared_ptr<spdlog::logger> logger = {}, spdlog::level::level_enum level = spdlog::level::trace) {
         std::scoped_lock lock(s_parent_mutex);
         auto me = std::shared_ptr<HierarchicalStopwatch>(new HierarchicalStopwatch(name, logger, level));
         s_parent_stopwatch = me;
@@ -50,14 +50,14 @@ class HierarchicalStopwatch : std::enable_shared_from_this<HierarchicalStopwatch
 
 
   protected:
-    HierarchicalStopwatch(std::string name, std::shared_ptr<spdlog::logger> logger = s_default_logger, spdlog::level::level_enum level = spdlog::level::info);
+    HierarchicalStopwatch(std::string name, std::shared_ptr<spdlog::logger> logger = s_default_logger, spdlog::level::level_enum level = spdlog::level::trace);
     static std::shared_ptr<spdlog::logger> s_default_logger;
     static WeakPtr s_parent_stopwatch;
     static std::mutex s_parent_mutex;
     static size_t s_current_log_index;
 };
 
-HierarchicalStopwatch::Ptr hierarchical_stopwatch(std::string name, std::shared_ptr<spdlog::logger> logger = {}, spdlog::level::level_enum level = spdlog::level::info);
+HierarchicalStopwatch::Ptr hierarchical_stopwatch(std::string name, std::shared_ptr<spdlog::logger> logger = {}, spdlog::level::level_enum level = spdlog::level::trace);
 
 }// namespace balsa::logging
 #endif

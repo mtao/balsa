@@ -1,6 +1,6 @@
-#include "balsa/visualization/imgui/vulkan/drawable.hpp"
+#include "balsa/visualization/imgui/vulkan/Drawable.hpp"
 #include "balsa/visualization/imgui/vulkan/backend.hpp"
-#include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/Film.hpp"
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 #include <vulkan/vulkan.hpp>

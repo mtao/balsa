@@ -4,7 +4,7 @@
 #include <memory>
 #include <limits>
 #include <vulkan/vulkan_core.h>
-#include "balsa/visualization/vulkan/drawable.hpp"
+#include "balsa/visualization/vulkan/Drawable.hpp"
 
 namespace balsa::visualization::imgui::vulkan {
 

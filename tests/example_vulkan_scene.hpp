@@ -1,13 +1,14 @@
 #if defined(SKIP_ALL)
 #else
-#include <balsa/visualization//vulkan//film.hpp>
+#include <balsa/visualization//vulkan//Film.hpp>
 #include <vulkan/vulkan.hpp>
 #include <optional>
-#include <balsa/visualization/vulkan/scene.hpp>
+#include <balsa/visualization/vulkan/Scene.hpp>
 #include <balsa/scene_graph/transformations/matrix_transformation.hpp>
 #include <balsa/scene_graph/embedding_traits.hpp>
-#include <balsa/visualization/vulkan/buffer.hpp>
-#include <balsa/visualization/imgui//vulkan//drawable.hpp>
+#include <balsa/visualization/vulkan/Buffer.hpp>
+#include <balsa/visualization/vulkan/BufferView.hpp>
+//#include <balsa/visualization/imgui//vulkan//Drawable.hpp>
 
 
 class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::embedding_traits3F>> {
@@ -33,7 +34,7 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
   private:
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);
 
-    balsa::visualization::imgui::vulkan::Drawable _imgui;
+    //balsa::visualization::imgui::vulkan::Drawable _imgui;
     bool static_triangle_mode = true;
     bool changed = false;
 
@@ -41,6 +42,7 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     vk::PipelineLayout pipeline_layout;
     vk::Pipeline pipeline;
 
-    balsa::visualization::vulkan::Buffer vertex_buffer;
+
+    balsa::visualization::vulkan::BufferView vertex_buffer_view;
 };
 #endif

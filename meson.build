@@ -156,16 +156,18 @@ geometry_headers = [
 if get_option('visualization')
 
   visualization_sources = [
-    'src/visualization/vulkan/film.cpp',
+    'src/visualization/vulkan/Film.cpp',
     #'src/visualization/vulkan/camera.cpp',
-    'src/visualization/vulkan/scene_base.cpp',
-    'src/visualization/shaders/abstract_shader.cpp',
-    'src/visualization/shaders/flat.cpp',
-    'src/visualization/vulkan/native_film.cpp',
-    'src/visualization/vulkan/window.cpp',
-    'src/visualization/vulkan/buffer.cpp',
-    'src/visualization/vulkan/pipeline_factory.cpp',
-    'src/visualization/vulkan/utils.cpp',
+    'src/visualization/vulkan/SceneBase.cpp',
+    'src/visualization/shaders/AbstractShader.cpp',
+    'src/visualization/shaders/Flat.cpp',
+    'src/visualization/vulkan/NativeFilm.cpp',
+    'src/visualization/vulkan/Window.cpp',
+    'src/visualization/vulkan/Buffer.cpp',
+    'src/visualization/vulkan/BufferView.cpp',
+    'src/visualization/vulkan/utils/PipelineFactory.cpp',
+    'src/visualization/vulkan/utils/find_memory_type.cpp',
+    'src/visualization/vulkan/utils/BufferCopier.cpp',
   ]
   
   visualization_required_deps = [vulkan_dep, dl_lib]
@@ -185,11 +187,11 @@ if get_option('visualization')
   if get_option('imgui')
     imgui_dep = dependency('imgui')
     visualization_imgui_sources = [
-      'src/visualization/imgui/vulkan/backend.cpp',
-      'src/visualization/imgui/vulkan/drawable.cpp'
+      'src/visualization/imgui/vulkan/Backend.cpp',
+      'src/visualization/imgui/vulkan/Drawable.cpp'
     ]
-    visualization_sources += visualization_imgui_sources
-    visualization_required_deps += imgui_dep
+    #visualization_sources += visualization_imgui_sources
+    #visualization_required_deps += imgui_dep
   endif
 
   glm_dep = dependency('glm')
@@ -206,27 +208,27 @@ if get_option('visualization')
 
   if get_option('qt')
     visualization_qt_sources = [
-      'src/visualization/qt/vulkan/windows/scene.cpp',
-      'src/visualization/qt/vulkan/renderers/scene.cpp',
-      'src/visualization/qt/vulkan/film.cpp',
+      'src/visualization/qt/vulkan/windows/Scene.cpp',
+      'src/visualization/qt/vulkan/renderers/Scene.cpp',
+      'src/visualization/qt/vulkan/Film.cpp',
       #'src/visualization/qt/vulkan/window.cpp',
-      'src/visualization/qt/mesh_viewer/main_window.cpp',
-      'src/visualization/qt/mesh_viewer/widget.cpp',
+      #'src/visualization/qt/mesh_viewer/main_window.cpp',
+      #'src/visualization/qt/mesh_viewer/widget.cpp',
       ]
   
-    visualization_moc_headers = [
-      'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
-      ]
+    #visualization_moc_headers = [
+    #  'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
+    #  ]
   
-    visualization_qt_mocced = qt.compile_moc(
-      headers: visualization_moc_headers,
-      include_directories: include_dir,
-      dependencies: qt_dep
-      )
+    #visualization_qt_mocced = qt.compile_moc(
+    #  headers: visualization_moc_headers,
+    #  include_directories: include_dir,
+    #  dependencies: qt_dep
+    #  )
   
   
     visualization_sources += visualization_qt_sources
-    visualization_sources += visualization_qt_mocced
+    # visualization_sources += visualization_qt_mocced
     visualization_sources += glsl_resource_sources
     visualization_required_deps += qt_dep
   endif
@@ -239,9 +241,9 @@ if get_option('visualization')
     glfw_dep = dependency('glfw3')
     visualization_required_deps += glfw_dep
     visualization_sources += [
-      'src/visualization/glfw/window.cpp',
-      'src/visualization/glfw/vulkan/film.cpp',
-      'src/visualization/glfw/vulkan/window.cpp',
+      'src/visualization/glfw/Window.cpp',
+      'src/visualization/glfw/vulkan/Film.cpp',
+      'src/visualization/glfw/vulkan/Window.cpp',
     ]
   endif
 

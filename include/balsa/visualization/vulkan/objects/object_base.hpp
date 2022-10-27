@@ -6,7 +6,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/vec2.hpp>
 #include "balsa/visualization/shaders/abstract_shader.hpp"
-#include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/Film.hpp"
 
 
 namespace balsa::visualization::vulkan::objects {

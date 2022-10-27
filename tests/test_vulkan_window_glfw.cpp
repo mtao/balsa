@@ -3,9 +3,10 @@
 #include <iostream>
 #include <GLFW/glfw3.h>
 #include "example_vulkan_scene.hpp"
-#include <balsa/visualization/glfw//vulkan//film.hpp>
-#include <balsa/visualization/glfw//vulkan//window.hpp>
+#include <balsa/visualization/glfw//vulkan//Film.hpp>
+#include <balsa/visualization/glfw//vulkan//Window.hpp>
 
+#include <spdlog/cfg/env.h>
 
 using namespace balsa::visualization;
 
@@ -32,6 +33,7 @@ class TestWindow : public balsa::visualization::glfw::vulkan::Window {
 };
 
 int main(int argc, char *argv[]) {
+    spdlog::cfg::load_env_levels();
     glfwInit();
 
     std::vector<std::string> validation_layers = {

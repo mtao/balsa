@@ -1,4 +1,4 @@
-#include "balsa/visualization/qt/mesh_viewer/main_window.hpp"
+#include "balsa/visualization/qt/mesh_viewer/main_Window.hpp"
 #include "balsa/visualization/qt/mesh_viewer/widget.hpp"
 #include <QtWidgets/QAction>
 #include <QtWidgets/QMenu>

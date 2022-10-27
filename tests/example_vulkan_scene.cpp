@@ -1,15 +1,18 @@
 #if defined(SKIP_ALL)
 #else
 #include <spdlog/spdlog.h>
-#include <balsa/visualization/shaders/flat.hpp>
-#include <balsa/visualization/vulkan/pipeline_factory.hpp>
-#include <balsa/visualization/vulkan/utils.hpp>
+#include <balsa/visualization/shaders/Flat.hpp>
+#include <balsa/visualization/vulkan/utils/PipelineFactory.hpp>
+#include "balsa/visualization/vulkan/utils/BufferCopier.hpp"
+#include <balsa/visualization/vulkan/utils/find_memory_type.hpp>
+#include <balsa/logging/stopwatch.hpp>
 #include "example_vulkan_scene.hpp"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <colormap/colormap.h>
 #pragma GCC diagnostic pop
 #include <QtCore/QFile>
+#include <spdlog/stopwatch.h>
 
 #include <glm/glm.hpp>
 #include <array>
@@ -110,7 +113,7 @@ void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film &film) {
         changed = false;
     }
 
-    _imgui.initialize(film);
+    //_imgui.initialize(film);
 }
 
 void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film &film) {
@@ -122,7 +125,7 @@ void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film &f
     auto col = colormap::transform::LavaWaves().getColor(value);
     set_clear_color(float(col.r), float(col.g), float(col.b));
     SceneBase::begin_render_pass(film);
-    _imgui.begin_render_pass(film);
+    //_imgui.begin_render_pass(film);
 }
 
 void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
@@ -135,7 +138,10 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
                     pipeline);
 
     if (!static_triangle_mode) {
-        vertex_buffer.bind(film);
+        auto [buf, off] = vertex_buffer_view.vertex_buffer_bind_info();
+        if (buf) {
+            cb.bindVertexBuffers(0, buf, off);
+        }
     }
 
     vk::Viewport viewport{};
@@ -162,11 +168,11 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     } else {
         cb.draw(vertices.size(), 1, 0, 0);
     }
-    _imgui.draw(film);
+    //_imgui.draw(film);
 }
 
 void HelloTriangleScene::end_render_pass(balsa::visualization::vulkan::Film &film) {
-    _imgui.end_render_pass(film);
+    //_imgui.end_render_pass(film);
 }
 
 void HelloTriangleScene::toggle_mode(balsa::visualization::vulkan::Film &film) {
@@ -178,27 +184,49 @@ void HelloTriangleScene::toggle_mode(balsa::visualization::vulkan::Film &film) {
 }
 
 void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::Film &film) {
+
+    auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline");
     spdlog::info("HelloTriangleScene: starting to build piepline");
     // balsa::visualization::shaders::FlatShader<balsa::scene_graph::embedding_traits2D> fs;
     balsa::visualization::shaders::TriangleShader<balsa::scene_graph::embedding_traits2D> fs(static_triangle_mode);
 
-    balsa::visualization::vulkan::PipelineFactory pf(film);
+    balsa::visualization::vulkan::utils::PipelineFactory pf(film);
 
     if (!static_triangle_mode) {
-        spdlog::info("Creating buffers");
+        auto sw = balsa::logging::hierarchical_stopwatch("creating_buffers");
         auto binding_description = Vertex::get_binding_description();
         auto attribute_description = Vertex::get_attribute_descriptions();
         auto &ci = pf.vertex_input;
-
         ci.setVertexBindingDescriptions(binding_description);
         ci.setVertexAttributeDescriptions(attribute_description);
+    }
+    if (!vertex_buffer_view.has_buffer()) {
 
-        vertex_buffer.set_device(film);
 
+        std::shared_ptr<balsa::visualization::vulkan::Buffer> vertex_buffer;
+        vertex_buffer = std::make_shared<balsa::visualization::vulkan::Buffer>(film);
 
+        vk::DeviceSize data_size = sizeof(Vertex) * vertices.size();
+        if (true) {
+            vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            vertex_buffer->upload_data(vertices);
+            vertex_buffer_view.set_buffer(vertex_buffer);
+        } else {
 
-        vertex_buffer.create(film, sizeof(Vertex) * vertices.size(), vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-        vertex_buffer.upload_data(film, vertices);
+            balsa::visualization::vulkan::Buffer staging_buffer(film);
+
+            staging_buffer.create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            staging_buffer.upload_data(vertices);
+
+            // vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            // auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
+
+            // bc(staging_buffer, *vertex_buffer, data_size);
+            *vertex_buffer = std::move(staging_buffer);
+
+            // vertex_buffer_view.set_buffer(vertex_buffer);
+        }
     }
 
     std::tie(pipeline, pipeline_layout) = pf.generate(film, fs);
