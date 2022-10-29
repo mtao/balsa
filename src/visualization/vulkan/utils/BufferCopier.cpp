@@ -43,6 +43,8 @@ void BufferCopier::operator()(const Buffer &src, Buffer &dst, vk::DeviceSize siz
     copy_region.setSize(size);
     command_buffer.copyBuffer(src.handle(), dst.handle(), copy_region);
 
+    command_buffer.end();
+
     vk::SubmitInfo submit_info{};
     submit_info.setCommandBuffers(command_buffer);
 

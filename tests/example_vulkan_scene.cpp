@@ -119,9 +119,9 @@ void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film &film) {
 void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film &film) {
     initialize(film);
     static float value = 0.0;
-    value += 0.0001f;
-    if (value > 1.0f)
-        value = 0.0f;
+    // value += 0.0001f;
+    // if (value > 1.0f)
+    //     value = 0.0f;
     auto col = colormap::transform::LavaWaves().getColor(value);
     set_clear_color(float(col.r), float(col.g), float(col.b));
     SceneBase::begin_render_pass(film);
@@ -160,7 +160,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     scissor.offset = vk::Offset2D{ 0, 0 };
     scissor.extent = vk::Extent2D{ extent.x, extent.y };
 
-    cb.setScissor(0, { scissor });
+    //cb.setScissor(0, { scissor });
 
 
     if (static_triangle_mode) {
@@ -172,6 +172,9 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 }
 
 void HelloTriangleScene::end_render_pass(balsa::visualization::vulkan::Film &film) {
+
+    scene_type::end_render_pass(film);
+
     //_imgui.end_render_pass(film);
 }
 
@@ -207,25 +210,26 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         vertex_buffer = std::make_shared<balsa::visualization::vulkan::Buffer>(film);
 
         vk::DeviceSize data_size = sizeof(Vertex) * vertices.size();
-        if (true) {
+        if (false) {
             vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             vertex_buffer->upload_data(vertices);
             vertex_buffer_view.set_buffer(vertex_buffer);
         } else {
+            spdlog::info("Creating buffer data");
+            vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
             balsa::visualization::vulkan::Buffer staging_buffer(film);
 
-            staging_buffer.create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            staging_buffer.create(data_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             staging_buffer.upload_data(vertices);
 
-            // vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-            // auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
+            auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
 
-            // bc(staging_buffer, *vertex_buffer, data_size);
-            *vertex_buffer = std::move(staging_buffer);
+            bc(staging_buffer, *vertex_buffer, data_size);
+            //*vertex_buffer = std::move(staging_buffer);
 
-            // vertex_buffer_view.set_buffer(vertex_buffer);
+            vertex_buffer_view.set_buffer(vertex_buffer);
         }
     }
 

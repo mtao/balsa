@@ -17,7 +17,8 @@ class Window : public glfw::Window
   public:
     using GLFWParentType = glfw::Window;
     using VulkanParentType = visualization::vulkan::Window;
-    Window(const std::string_view &title, int width = 600, int height = 400);
+    Window(const std::string_view &title, int width = 600, int height = 400, bool build_film = false);
+    Film &native_film() { return m_film; }
 
     int exec() override;
 

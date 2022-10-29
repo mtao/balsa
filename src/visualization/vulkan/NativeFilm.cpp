@@ -94,16 +94,16 @@ void NativeFilm::recreate_swapchain() {
     device().waitIdle();
 
 
-    //for (auto &image_res : _image_resources) {
-    //    image_res.framebuffer_raii.clear();
-    //    image_res.image_view_raii.clear();
-    //}
+    // for (auto &image_res : _image_resources) {
+    //     image_res.framebuffer_raii.clear();
+    //     image_res.image_view_raii.clear();
+    // }
 
 
     create_swapchain();
     create_image_resources();
-    //create_image_views();
-    //create_framebuffers();
+    // create_image_views();
+    // create_framebuffers();
 }
 void NativeFilm::create_image_views() {
     spdlog::trace("Creating image views");
@@ -136,7 +136,7 @@ void NativeFilm::create_framebuffers() {
     framebuffer_ci.setHeight(_swapchain_extent.height);
     framebuffer_ci.setLayers(1);
     for (auto &res : _image_resources) {
-        framebuffer_ci.setPAttachments(&*res.image_view_raii);
+        framebuffer_ci.setAttachments(*res.image_view_raii);
         res.framebuffer_raii = _device_raii.createFramebuffer(framebuffer_ci);
     }
 }
@@ -257,8 +257,7 @@ void NativeFilm::create_device() {
     vk::PhysicalDeviceFeatures dev_features = _physical_device_raii.getFeatures();
 
     vk::DeviceCreateInfo create_info;
-    create_info.setPQueueCreateInfos(dqcis.data());
-    create_info.setQueueCreateInfoCount(dqcis.size());
+    create_info.setQueueCreateInfos(dqcis);
 
     std::vector<std::string> extension_names = get_required_device_extensions();
     std::vector<const char *> ext_cnames;
@@ -477,14 +476,25 @@ NativeFilm::QueueTargetIndices::QueueTargetIndices(const vk::PhysicalDevice &dev
             protected_queue.emplace(index);
         }
         if (surface != nullptr) {
-            VkBool32 supported;
-            vkGetPhysicalDeviceSurfaceSupportKHR(
-              device, index, static_cast<VkSurfaceKHR>(*surface), &supported);
+            vk::Bool32 supported = device.getSurfaceSupportKHR(index, *surface);
             if (supported) {
                 present_queue.emplace(index);
             }
         }
     }
+    spdlog::info("QueueTargetIndices: "
+            "graphics=[{}], "
+            "compute=[{}], "
+            "transfer=[{}], "
+            "sparseBinding=[{}], "
+            "protected=[{}], "
+            "supported=[{}]",
+            fmt::join(graphics_queue,","),
+            fmt::join(compute_queue,","),
+            fmt::join(transfer_queue,","),
+            fmt::join(sparse_binding_queue,","),
+            fmt::join(protected_queue,","),
+            fmt::join(present_queue,","));
 }
 
 vk::QueueFlags NativeFilm::QueueTargetIndices::active_flags() const {
@@ -612,7 +622,7 @@ const vk::SurfaceFormatKHR NativeFilm::surface_format() const {
 void NativeFilm::create_image_resources() {
 
     auto images = _swapchain_raii.getImages();
-    
+
     const size_t size = images.size();
 
     _image_resources.resize(size);
@@ -648,6 +658,7 @@ void NativeFilm::create_frame_resources() {
         res.draw_semaphore_raii = _device_raii.createSemaphore({});
         res.present_semaphore_raii = _device_raii.createSemaphore({});
         res.fence_raii = _device_raii.createFence(fci);
+        (*_device_raii).resetFences(*res.fence_raii);
     }
 }
 uint32_t NativeFilm::choose_swapchain_image_count() const {
@@ -679,8 +690,7 @@ void NativeFilm::create_swapchain() {
     spdlog::trace("Creating swapchain");
     vk::SwapchainCreateInfoKHR create_info;
 
-    if(bool(*_swapchain_raii))
-    {
+    if (bool(*_swapchain_raii)) {
         spdlog::trace("Old swapchain existed");
         create_info.setOldSwapchain(*_swapchain_raii);
     } else {
@@ -716,9 +726,8 @@ void NativeFilm::create_swapchain() {
         queue_indices.emplace_back(_present_queue_family_index);
     }
 
-    create_info.setPQueueFamilyIndices(queue_indices.data());
-    create_info.setQueueFamilyIndexCount(queue_indices.size());
-    if (queue_indices[0] != queue_indices[1]) {
+    create_info.setQueueFamilyIndices(queue_indices);
+    if (queue_indices.size() > 1 && queue_indices[0] != queue_indices[1]) {
         create_info.setImageSharingMode(vk::SharingMode::eConcurrent);
     } else {
         create_info.setImageSharingMode(vk::SharingMode::eExclusive);
@@ -751,14 +760,11 @@ void NativeFilm::create_render_pass() {
 
     vk::SubpassDescription subpass;
     subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
-    subpass.setColorAttachmentCount(1);
-    subpass.setPColorAttachments(&color_attachment_ref);
+    subpass.setColorAttachments(color_attachment_ref);
 
     vk::RenderPassCreateInfo create_info;
-    create_info.setAttachmentCount(1);
-    create_info.setPAttachments(&color_attachment);
-    create_info.setSubpassCount(1);
-    create_info.setPSubpasses(&subpass);
+    create_info.setAttachments(color_attachment);
+    create_info.setSubpasses(subpass);
 
     vk::SubpassDependency dep;
     dep.setSrcSubpass(VK_SUBPASS_EXTERNAL);
@@ -897,6 +903,8 @@ void NativeFilm::post_draw_hook() {
 
     spdlog::trace("post_draw: preparing submit trace");
     vk::SubmitInfo si;
+    // setWaitDstStageMask wants these flags to survive to the graphics queue submit
+    vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
     {
         if (frame.image_semaphore_waitable) {
             spdlog::trace("image -> draw semaphores");
@@ -909,7 +917,6 @@ void NativeFilm::post_draw_hook() {
             spdlog::trace("draw semaphore raii {}", bool(*frame.draw_semaphore_raii));
             si.setSignalSemaphores(*frame.draw_semaphore_raii);
         }
-        vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         si.setWaitDstStageMask(flags);
         si.setCommandBuffers(*image.command_buffer_raii);
     }
@@ -917,6 +924,7 @@ void NativeFilm::post_draw_hook() {
     try {
         spdlog::trace("post_draw: adding image fence to graphics queue with command_fence_raii");
         spdlog::trace("command fence raii {}", bool(*image.command_fence_raii));
+        VkSubmitInfo si_orig = VkSubmitInfo(si);
         _graphics_queue_raii.submit(si, *image.command_fence_raii);
         frame.image_semaphore_waitable = false;
         image.command_fence_waitable = true;
@@ -931,7 +939,9 @@ void NativeFilm::post_draw_hook() {
         si.setWaitSemaphores(*frame.draw_semaphore_raii);
         si.setSignalSemaphores(*frame.present_semaphore_raii);
         si.setCommandBuffers(*image.present_command_buffer_raii);
+        spdlog::warn("This one is a present complaint");
         _present_queue_raii.submit(si, *image.command_fence_raii);
+        spdlog::warn("This one is a graphics complaint");
     }
 
     spdlog::trace("post_draw: setting present wait semaphore");

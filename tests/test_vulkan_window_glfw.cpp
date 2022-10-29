@@ -12,7 +12,14 @@ using namespace balsa::visualization;
 
 class TestWindow : public balsa::visualization::glfw::vulkan::Window {
   public:
-    TestWindow() : balsa::visualization::glfw::vulkan::Window("Hello") {
+    TestWindow() : balsa::visualization::glfw::vulkan::Window("Hello", 800, 600, false) {
+
+        std::vector<std::string> validation_layers = {
+            "VK_LAYER_KHRONOS_validation",
+        };
+        native_film().set_validation_layers(validation_layers);
+
+        native_film().initialize();
         m_scene = std::make_shared<HelloTriangleScene>();
     }
     balsa::visualization::vulkan::SceneBase *scene() const override {
@@ -36,11 +43,6 @@ int main(int argc, char *argv[]) {
     spdlog::cfg::load_env_levels();
     glfwInit();
 
-    std::vector<std::string> validation_layers = {
-        "VK_LAYER_KHRONOS_validation",
-        "VK_LAYER_LUNARG_parameter_validation",
-        "VK_LAYER_LUNARG_core_validation",
-    };
     //! [0]
 
     // spdlog::set_level(spdlog::level::trace);

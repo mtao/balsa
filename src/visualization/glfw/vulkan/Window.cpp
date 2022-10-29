@@ -4,9 +4,10 @@
 #include <spdlog/spdlog.h>
 
 namespace balsa::visualization::glfw::vulkan {
-Window::Window(const std::string_view &title, int width, int height) : GLFWParentType(title, width, height),
-                                                                       VulkanParentType(),
-                                                                       m_film(GLFWParentType::window()) {
+Window::Window(const std::string_view &title, int width, int height, bool build_film) : GLFWParentType(title, width, height),
+                                                                                        VulkanParentType(),
+                                                                                        m_film(build_film ? GLFWParentType::window() : nullptr) {
+    m_film.set_window(GLFWParentType::window());
 }
 
 
