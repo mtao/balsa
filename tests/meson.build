@@ -50,4 +50,3 @@ test('geometry test', test_geometry)
 
 
 
-#subdir('qt_example')
