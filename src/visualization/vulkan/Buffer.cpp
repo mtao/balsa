@@ -6,6 +6,7 @@
 #include <vulkan/vulkan_structs.hpp>
 
 namespace balsa::visualization::vulkan {
+
 Buffer::Buffer(Buffer &&o) {
     m_device = o.m_device;
     m_physical_device = o.m_physical_device;
@@ -25,6 +26,9 @@ Buffer &Buffer::operator=(Buffer &&o) {
     return *this;
 }
 
+Buffer::Buffer(vk::Device device,
+               vk::PhysicalDevice physical_device) : m_device(device), m_physical_device(physical_device) {
+}
 Buffer::Buffer(const Film &film) {
     set_device(film);
 }

@@ -10,7 +10,14 @@ BufferView::~BufferView() {}
 void BufferView::set_buffer(std::shared_ptr<Buffer> buf) {
     m_buffer = std::move(buf);
 }
-std::tuple<vk::Buffer, vk::DeviceSize> BufferView::vertex_buffer_bind_info() {
+std::tuple<vk::Buffer, vk::DeviceSize> VertexBufferView::bind_info() const {
+    if (m_buffer) {
+        return std::make_tuple(m_buffer->handle(), m_offset);
+    } else {
+        return {};
+    }
+}
+std::tuple<vk::Buffer, vk::DeviceSize, vk::IndexType> IndexBufferView::bind_info() const {
     if (m_buffer) {
         return std::make_tuple(m_buffer->handle(), m_offset);
     } else {

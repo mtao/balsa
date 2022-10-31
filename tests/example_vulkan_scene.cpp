@@ -46,10 +46,24 @@ std::array<vk::VertexInputAttributeDescription, 2> Vertex::get_attribute_descrip
     return ret;
 }
 
+// const std::vector<Vertex> vertices = {
+//     { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+//     { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
+//     { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } }
+// };
 const std::vector<Vertex> vertices = {
-    { { 0.0f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
-    { { 0.5f, 0.5f }, { 0.0f, 1.0f, 0.0f } },
-    { { -0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } }
+    { { -0.5f, -0.5f }, { 1.0f, 0.0f, 0.0f } },
+    { { 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f } },
+    { { 0.5f, 0.5f }, { 0.0f, 0.0f, 1.0f } },
+    { { -0.5f, 0.5f }, { 1.0f, 1.0f, 1.0f } }
+};
+const std::vector<uint16_t> indices = {
+    0,
+    1,
+    2,
+    2,
+    3,
+    0
 };
 }// namespace
 void balsa_visualization_tests_shaders_initialize_resources() {
@@ -160,13 +174,21 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     scissor.offset = vk::Offset2D{ 0, 0 };
     scissor.extent = vk::Extent2D{ extent.x, extent.y };
 
-    //cb.setScissor(0, { scissor });
+    // cb.setScissor(0, { scissor });
 
 
     if (static_triangle_mode) {
-        cb.draw(3, 1, 0, 0);
-    } else {
         cb.draw(vertices.size(), 1, 0, 0);
+    } else {
+        if (index_buffer_view) {
+            auto [buf, off, type] = index_buffer_view.bind_info();
+            if (buf) {
+                cb.bindIndexBuffer(buf, off, type);
+                cb.drawIndexed(indices.size(), 1, 0, 0, 0);
+            }
+        } else {
+            cb.draw(vertices.size(), 1, 0, 0);
+        }
     }
     //_imgui.draw(film);
 }
@@ -178,7 +200,7 @@ void HelloTriangleScene::end_render_pass(balsa::visualization::vulkan::Film &fil
     //_imgui.end_render_pass(film);
 }
 
-void HelloTriangleScene::toggle_mode(balsa::visualization::vulkan::Film &film) {
+void HelloTriangleScene::toggle_mode(balsa::visualization::vulkan::Film &) {
 
 
     static_triangle_mode ^= true;
@@ -189,50 +211,62 @@ void HelloTriangleScene::toggle_mode(balsa::visualization::vulkan::Film &film) {
 void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::Film &film) {
 
     auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline");
-    spdlog::info("HelloTriangleScene: starting to build piepline");
+    spdlog::info("HelloTriangleScene: starting to build pipeline");
     // balsa::visualization::shaders::FlatShader<balsa::scene_graph::embedding_traits2D> fs;
     balsa::visualization::shaders::TriangleShader<balsa::scene_graph::embedding_traits2D> fs(static_triangle_mode);
 
+    spdlog::info("pipeline");
     balsa::visualization::vulkan::utils::PipelineFactory pf(film);
+    spdlog::info("static triangle");
 
+    auto binding_description = Vertex::get_binding_description();
+    auto attribute_description = Vertex::get_attribute_descriptions();
     if (!static_triangle_mode) {
         auto sw = balsa::logging::hierarchical_stopwatch("creating_buffers");
-        auto binding_description = Vertex::get_binding_description();
-        auto attribute_description = Vertex::get_attribute_descriptions();
         auto &ci = pf.vertex_input;
         ci.setVertexBindingDescriptions(binding_description);
         ci.setVertexAttributeDescriptions(attribute_description);
     }
+    auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
     if (!vertex_buffer_view.has_buffer()) {
-
 
         std::shared_ptr<balsa::visualization::vulkan::Buffer> vertex_buffer;
         vertex_buffer = std::make_shared<balsa::visualization::vulkan::Buffer>(film);
 
-        vk::DeviceSize data_size = sizeof(Vertex) * vertices.size();
-        if (false) {
-            vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-            vertex_buffer->upload_data(vertices);
+        vk::DeviceSize data_size = sizeof(decltype(vertices)::value_type) * vertices.size();
+        if (!use_staging_buffer) {
+            auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline::vertex_copy_buffer");
+            bc.copy_direct(*vertex_buffer, (void *)vertices.data(), data_size, vk::BufferUsageFlagBits::eVertexBuffer);
             vertex_buffer_view.set_buffer(vertex_buffer);
+
+
         } else {
-            spdlog::info("Creating buffer data");
-            vertex_buffer->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-            balsa::visualization::vulkan::Buffer staging_buffer(film);
-
-            staging_buffer.create(data_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-            staging_buffer.upload_data(vertices);
-
-
-            auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
-
-            bc(staging_buffer, *vertex_buffer, data_size);
-            //*vertex_buffer = std::move(staging_buffer);
+            auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline::vertex_staging_buffer");
+            bc.copy_with_staging_buffer(*vertex_buffer, (void *)vertices.data(), data_size, vk::BufferUsageFlagBits::eVertexBuffer);
 
             vertex_buffer_view.set_buffer(vertex_buffer);
         }
     }
+    if (!index_buffer_view.has_buffer()) {
 
+        auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline::index_staging_buffer");
+        std::shared_ptr<balsa::visualization::vulkan::Buffer> index_buffer;
+        index_buffer = std::make_shared<balsa::visualization::vulkan::Buffer>(film);
+
+        vk::DeviceSize data_size = sizeof(decltype(indices)::value_type) * indices.size();
+
+        bc.copy_with_staging_buffer(*index_buffer, (void *)indices.data(), data_size, vk::BufferUsageFlagBits::eVertexBuffer);
+
+        index_buffer_view.set_buffer(index_buffer);
+    }
+
+
+    if (pipeline) {
+        device.destroyPipeline(pipeline);
+    }
+    if (pipeline_layout) {
+        device.destroyPipelineLayout(pipeline_layout);
+    }
     std::tie(pipeline, pipeline_layout) = pf.generate(film, fs);
 }
 

@@ -1,9 +1,12 @@
 #include <span>
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <balsa/logging/json_sink.hpp>
 #include <iostream>
 #include <GLFW/glfw3.h>
 #include "example_vulkan_scene.hpp"
 #include <balsa/visualization/glfw//vulkan//Film.hpp>
+#include <balsa/logging/stopwatch.hpp>
 #include <balsa/visualization/glfw//vulkan//Window.hpp>
 
 #include <spdlog/cfg/env.h>
@@ -31,6 +34,9 @@ class TestWindow : public balsa::visualization::glfw::vulkan::Window {
         if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
             m_scene->toggle_mode(film());
         }
+        if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+            m_scene->toggle_buffer_mode();
+        }
     }
     ~TestWindow() {
         m_scene = {};
@@ -41,6 +47,9 @@ class TestWindow : public balsa::visualization::glfw::vulkan::Window {
 
 int main(int argc, char *argv[]) {
     spdlog::cfg::load_env_levels();
+    auto logger = balsa::logging::make_json_file_logger("timing", "/tmp/test_vulkan_window_glfw_timing.log", true);
+    logger->set_level(spdlog::level::trace);
+    auto sw = balsa::logging::hierarchical_stopwatch("trace", logger, spdlog::level::err);
     glfwInit();
 
     //! [0]
@@ -59,6 +68,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     glfwTerminate();
+
 
     // fs.make_shader();
     //! [1]

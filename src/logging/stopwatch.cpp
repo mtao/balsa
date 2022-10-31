@@ -24,19 +24,19 @@ HierarchicalStopwatch::HierarchicalStopwatch(std::string name, std::shared_ptr<s
     auto parents = parent_ids();
     std::string parent_json_str = "[]";
     if (!parents.empty()) {
-        parent_json_str = fmt::format("[\"{}\"]", fmt::join(parent_ids(), "\",\""));
+        parent_json_str = fmt::format("[{}]", fmt::join(parent_ids(), ","));
     }
-    m_logger->log(m_level, "{{\"type\":\"stopwatch_start\", \"name\":\"{}\", \"id\": {}, \"id_hierarchy\": {}}}", this->name(), m_id, parent_json_str);
-    //m_logger->log(m_level, "Stopwatch[{}] start", hierarchical_name());
+    m_logger->log(m_level, "{{\"type\":\"sw_start\", \"name\":\"{}\", \"id\": {}, \"id_hierarchy\": {}}}", this->name(), m_id, parent_json_str);
+    // m_logger->log(m_level, "Stopwatch[{}] start", hierarchical_name());
 }
 
 HierarchicalStopwatch::~HierarchicalStopwatch() {
     auto end_tp = clock::now();
     std::chrono::duration<double, std::milli> dur(end_tp - m_start_tp);
-    //m_logger->log(m_level, "Stopwatch[{}] end", hierarchical_name());
-    // this duration might be off by a very small amount
-    m_logger->log(m_level, "{{\"type\":\"stopwatch_end\", \"name\":\"{}\", \"id\":{},\"duration\":{:5}}}", this->name(), m_id, dur.count());
-    //m_logger->log(m_level, "Stopwatch[{}] took {}", hierarchical_name(), dur.count());
+    // m_logger->log(m_level, "Stopwatch[{}] end", hierarchical_name());
+    //  this duration might be off by a very small amount
+    m_logger->log(m_level, "{{\"type\":\"sw_end\", \"name\":\"{}\", \"id\":{},\"duration\":{:5}}}", this->name(), m_id, dur.count());
+    // m_logger->log(m_level, "Stopwatch[{}] took {}", hierarchical_name(), dur.count());
 
 
     std::scoped_lock lock(s_parent_mutex);

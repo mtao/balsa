@@ -15,7 +15,11 @@ namespace utils {
         BufferCopier(vk::Device const &device, vk::CommandPool const &command_pool, vk::Queue const &queue, vk::Fence const &fence = {});
         void operator()(const Buffer &src, Buffer &dst, vk::DeviceSize size, vk::DeviceSize src_offset = 0, vk::DeviceSize dst_offset = 0) const;
 
-    //Buffer staged_from_device(Film const&, void *data, vk::DeviceSize size,, vk::DeviceSize dst_offset = 0) const;
+        void copy_direct(Buffer &buffer, void *data, vk::DeviceSize size, vk::BufferUsageFlags = vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlags = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+        void copy_with_staging_buffer(Buffer &buffer, void *data, vk::DeviceSize size, vk::BufferUsageFlags = vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlags = vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+        // Buffer staged_from_device(Film const&, void *data, vk::DeviceSize size,, vk::DeviceSize dst_offset = 0) const;
 
       private:
         vk::Device m_device;

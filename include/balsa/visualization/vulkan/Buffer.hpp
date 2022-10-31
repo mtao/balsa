@@ -9,6 +9,8 @@ class Buffer {
 
   public:
     Buffer(const Film &film);
+    Buffer(vk::Device device,
+           vk::PhysicalDevice physical_device);
     Buffer(Buffer &&o);
     Buffer &operator=(Buffer &&o);
     void set_device(const Film &film);
@@ -23,13 +25,14 @@ class Buffer {
 
     template<typename T>
     void upload_data(const T &values);
+    void upload_data_noT(void *data, size_t data_size);
 
     void destroy();
 
     vk::Device device() const { return m_device; }
+    vk::PhysicalDevice physical_device() const { return m_physical_device; }
 
   private:
-    void upload_data_noT(void *data, size_t data_size);
     vk::Device m_device;
     vk::PhysicalDevice m_physical_device;
 

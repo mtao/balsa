@@ -30,19 +30,22 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     void end_render_pass(balsa::visualization::vulkan::Film &film) override;
 
     void toggle_mode(balsa::visualization::vulkan::Film &film);
+    void toggle_buffer_mode() { use_staging_buffer ^= true; }
 
   private:
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);
 
-    //balsa::visualization::imgui::vulkan::Drawable _imgui;
+    // balsa::visualization::imgui::vulkan::Drawable _imgui;
     bool static_triangle_mode = true;
     bool changed = false;
+    bool use_staging_buffer = false;
 
     vk::Device device;
     vk::PipelineLayout pipeline_layout;
     vk::Pipeline pipeline;
 
 
-    balsa::visualization::vulkan::BufferView vertex_buffer_view;
+    balsa::visualization::vulkan::VertexBufferView vertex_buffer_view;
+    balsa::visualization::vulkan::IndexBufferView index_buffer_view;
 };
 #endif

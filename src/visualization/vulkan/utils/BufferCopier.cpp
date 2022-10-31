@@ -60,15 +60,26 @@ void BufferCopier::operator()(const Buffer &src, Buffer &dst, vk::DeviceSize siz
 
     m_device.freeCommandBuffers(m_command_pool, command_buffer);
 }
-// void BufferCopier::staged_from_device(void *data, vk::DeviceSize size, Buffer &dst, vk::DeviceSize dst_offset ) const
-//{
-//        balsa::visualization::vulkan::Buffer staging_buffer(film);
 
-//        staging_buffer.create(size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-//        staging_buffer.upload_data_noT(data, size);
 
-//        ->create(data_size, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+void BufferCopier::copy_direct(Buffer &buffer, void *data, vk::DeviceSize data_size, vk::BufferUsageFlags buffer_usage_flags, vk::MemoryPropertyFlags memory_property_flags) {
 
-//}
+    buffer.create(data_size, buffer_usage_flags, memory_property_flags);
+    buffer.upload_data_noT(data, data_size);
+}
+void BufferCopier::copy_with_staging_buffer(Buffer &buffer, void *data, vk::DeviceSize data_size, vk::BufferUsageFlags buffer_usage_flags, vk::MemoryPropertyFlags memory_property_flags) {
+
+    buffer.create(data_size, buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst, memory_property_flags);
+
+    balsa::visualization::vulkan::Buffer staging_buffer(
+      buffer.device(),
+      buffer.physical_device());
+
+    staging_buffer.create(data_size, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    staging_buffer.upload_data_noT(data, data_size);
+
+
+    operator()(staging_buffer, buffer, data_size);
+}
 
 }// namespace balsa::visualization::vulkan::utils
