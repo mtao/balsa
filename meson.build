@@ -166,6 +166,7 @@ if get_option('visualization')
     'src/visualization/vulkan/Buffer.cpp',
     'src/visualization/vulkan/BufferView.cpp',
     'src/visualization/vulkan/utils/PipelineFactory.cpp',
+    'src/visualization/vulkan/utils/VertexBufferViewCollection.cpp',
     'src/visualization/vulkan/utils/find_memory_type.cpp',
     'src/visualization/vulkan/utils/BufferCopier.cpp',
   ]

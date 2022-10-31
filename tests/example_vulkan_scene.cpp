@@ -5,6 +5,7 @@
 #include <balsa/visualization/vulkan/utils/PipelineFactory.hpp>
 #include "balsa/visualization/vulkan/utils/BufferCopier.hpp"
 #include <balsa/visualization/vulkan/utils/find_memory_type.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <balsa/logging/stopwatch.hpp>
 #include "example_vulkan_scene.hpp"
 #pragma GCC diagnostic push
@@ -22,7 +23,7 @@ struct Vertex {
     glm::vec2 pos;
     glm::vec3 color;
     static vk::VertexInputBindingDescription get_binding_description();
-    static std::array<vk::VertexInputAttributeDescription, 2> get_attribute_descriptions();
+    static std::vector<vk::VertexInputAttributeDescription> get_attribute_descriptions();
 };
 vk::VertexInputBindingDescription Vertex::get_binding_description() {
     vk::VertexInputBindingDescription binding_description{
@@ -32,10 +33,11 @@ vk::VertexInputBindingDescription Vertex::get_binding_description() {
     };
     return binding_description;
 }
-std::array<vk::VertexInputAttributeDescription, 2> Vertex::get_attribute_descriptions() {
+std::vector<vk::VertexInputAttributeDescription> Vertex::get_attribute_descriptions() {
 
-    std::array<vk::VertexInputAttributeDescription, 2> ret;
-    auto &[pos, col] = ret;
+    std::vector<vk::VertexInputAttributeDescription> ret(2);
+    auto &pos = ret[0];
+    auto &col = ret[1];
     pos.binding = 0;
     pos.location = 0;
     pos.format = vk::Format::eR32G32B32A32Sfloat;
@@ -152,10 +154,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
                     pipeline);
 
     if (!static_triangle_mode) {
-        auto [buf, off] = vertex_buffer_view.vertex_buffer_bind_info();
-        if (buf) {
-            cb.bindVertexBuffers(0, buf, off);
-        }
+        vertex_buffer_views.bind(cb);
     }
 
     vk::Viewport viewport{};
@@ -180,7 +179,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     if (static_triangle_mode) {
         cb.draw(vertices.size(), 1, 0, 0);
     } else {
-        if (index_buffer_view) {
+        if (index_buffer_view.has_buffer()) {
             auto [buf, off, type] = index_buffer_view.bind_info();
             if (buf) {
                 cb.bindIndexBuffer(buf, off, type);
@@ -219,13 +218,20 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     balsa::visualization::vulkan::utils::PipelineFactory pf(film);
     spdlog::info("static triangle");
 
-    auto binding_description = Vertex::get_binding_description();
-    auto attribute_description = Vertex::get_attribute_descriptions();
+    vertex_buffer_views.clear();
+
+    balsa::visualization::vulkan::VertexBufferView &vertex_buffer_view = vertex_buffer_views.emplace();
+    {
+        vertex_buffer_view.set_binding_description(Vertex::get_binding_description());
+        auto ad = Vertex::get_attribute_descriptions();
+        vertex_buffer_view.set_attribute_descriptions(std::span(ad.begin(), ad.end()));
+    }
+
+
+    vertex_buffer_views.build_descriptions();
+
     if (!static_triangle_mode) {
-        auto sw = balsa::logging::hierarchical_stopwatch("creating_buffers");
-        auto &ci = pf.vertex_input;
-        ci.setVertexBindingDescriptions(binding_description);
-        ci.setVertexAttributeDescriptions(attribute_description);
+        vertex_buffer_views.set_vertex_inputs(pf);
     }
     auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
     if (!vertex_buffer_view.has_buffer()) {
@@ -255,8 +261,10 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
 
         vk::DeviceSize data_size = sizeof(decltype(indices)::value_type) * indices.size();
 
-        bc.copy_with_staging_buffer(*index_buffer, (void *)indices.data(), data_size, vk::BufferUsageFlagBits::eVertexBuffer);
+        spdlog::info("Copying ndex buffer");
+        bc.copy_with_staging_buffer(*index_buffer, (void *)indices.data(), data_size, vk::BufferUsageFlagBits::eIndexBuffer);
 
+        spdlog::info("setting");
         index_buffer_view.set_buffer(index_buffer);
     }
 

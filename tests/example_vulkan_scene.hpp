@@ -6,8 +6,8 @@
 #include <balsa/visualization/vulkan/Scene.hpp>
 #include <balsa/scene_graph/transformations/matrix_transformation.hpp>
 #include <balsa/scene_graph/embedding_traits.hpp>
-#include <balsa/visualization/vulkan/Buffer.hpp>
 #include <balsa/visualization/vulkan/BufferView.hpp>
+#include <balsa/visualization/vulkan/utils/VertexBufferViewCollection.hpp>
 //#include <balsa/visualization/imgui//vulkan//Drawable.hpp>
 
 
@@ -36,7 +36,7 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);
 
     // balsa::visualization::imgui::vulkan::Drawable _imgui;
-    bool static_triangle_mode = true;
+    bool static_triangle_mode = false;
     bool changed = false;
     bool use_staging_buffer = false;
 
@@ -45,7 +45,7 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     vk::Pipeline pipeline;
 
 
-    balsa::visualization::vulkan::VertexBufferView vertex_buffer_view;
+    balsa::visualization::vulkan::utils::VertexBufferViewCollection vertex_buffer_views;
     balsa::visualization::vulkan::IndexBufferView index_buffer_view;
 };
 #endif
