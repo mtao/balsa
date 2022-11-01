@@ -7,7 +7,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic pop
 #include <balsa/visualization/qt/vulkan/Film.hpp>
-#include <balsa/scene_graph/camera.hpp>
+#include <balsa/scene_graph/Camera.hpp>
 
 namespace balsa::visualization::qt::vulkan::renderers {
 

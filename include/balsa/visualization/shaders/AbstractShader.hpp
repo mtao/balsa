@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <limits>
-#include "balsa/scene_graph/camera.hpp"
+#include "balsa/scene_graph/Camera.hpp"
 
 namespace shaderc {
 class CompileOptions;

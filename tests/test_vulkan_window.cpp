@@ -3,7 +3,7 @@
 #include <QLoggingCategory>
 #include <spdlog/spdlog.h>
 //#include <iostream>
-//#include "balsa/scene_graph/embedding_traits.hpp"
+//#include "balsa/scene_graph/EmbeddingTraits.hpp"
 //#include <balsa/visualization/qt/vulkan/windows/scene.hpp>
 //#include <colormap/colormap.h>
 //#include <balsa/visualization/shaders/flat.hpp>
@@ -49,9 +49,9 @@ int main(int argc, char *argv[]) {
     //w.resize(1024, 768);
     //w.show();
 
-    // using embedding_traits = balsa::scene_graph::embedding_traits3F;
+    // using EmbeddingTraits = balsa::scene_graph::EmbeddingTraits3F;
 
-    // balsa::visualization::shaders::FlatShader<embedding_traits> fs;
+    // balsa::visualization::shaders::FlatShader<EmbeddingTraits> fs;
     // spdlog::info("Vertex shader");
     // auto vdata = fs.vert_spirv();
     // spdlog::info("Fragment shader");

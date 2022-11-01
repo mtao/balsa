@@ -2,26 +2,26 @@
 #define BALSA_VISUALIZATION_SCENE_GRAPH_FEATURE_GROUP_HPP
 
 #include <vector>
-#include "abstract_feature.hpp"
-#include "embedding_traits.hpp"
+#include "AbstractFeature.hpp"
+#include "EmbeddingTraits.hpp"
 
 namespace balsa::visualization::scene_graph{
 
 
-    template <concepts::embedding_traits embedding_traits>
+    template <concepts::EmbeddingTraits EmbeddingTraits>
     class AbstractFeatureGroup {
         public:
         using scalar_type = Scalar;
         constexpr static int dimension = D;
-        using abstract_feature_type = AbstractFeature<D,Scalar>;
+        using AbstractFeature_type = AbstractFeature<D,Scalar>;
 
         private:
         template<int, typename,typename> friend class FeatureGroup;
-        void add(abstract_feature_type& feature);
-        void remove(abstract_feature_type& feature);
+        void add(AbstractFeature_type& feature);
+        void remove(AbstractFeature_type& feature);
 
 
-        std::vector<std::reference_wrapper<abstract_feature_type>> _features;
+        std::vector<std::reference_wrapper<AbstractFeature_type>> _features;
 
     };
 

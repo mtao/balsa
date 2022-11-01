@@ -73,7 +73,7 @@ void balsa_visualization_tests_shaders_initialize_resources() {
 }
 namespace balsa::visualization::shaders {
 
-template<scene_graph::concepts::embedding_traits ET>
+template<scene_graph::concepts::EmbeddingTraits ET>
 class TriangleShader : public Shader<ET> {
   public:
     bool static_triangle_mode = true;
@@ -85,7 +85,7 @@ class TriangleShader : public Shader<ET> {
     std::vector<uint32_t> frag_spirv() const override final;
 };
 
-template<scene_graph::concepts::embedding_traits ET>
+template<scene_graph::concepts::EmbeddingTraits ET>
 std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
     if (static_triangle_mode) {
         const static std::string fname = ":/tests/glsl/triangle.vert";
@@ -95,7 +95,7 @@ std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
         return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Vertex);
     }
 }
-template<scene_graph::concepts::embedding_traits ET>
+template<scene_graph::concepts::EmbeddingTraits ET>
 std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
     if (static_triangle_mode) {
         const static std::string fname = ":/tests/glsl/triangle.frag";
@@ -211,8 +211,8 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
 
     auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline");
     spdlog::info("HelloTriangleScene: starting to build pipeline");
-    // balsa::visualization::shaders::FlatShader<balsa::scene_graph::embedding_traits2D> fs;
-    balsa::visualization::shaders::TriangleShader<balsa::scene_graph::embedding_traits2D> fs(static_triangle_mode);
+    // balsa::visualization::shaders::FlatShader<balsa::scene_graph::EmbeddingTraits2D> fs;
+    balsa::visualization::shaders::TriangleShader<balsa::scene_graph::EmbeddingTraits2D> fs(static_triangle_mode);
 
     spdlog::info("pipeline");
     balsa::visualization::vulkan::utils::PipelineFactory pf(film);

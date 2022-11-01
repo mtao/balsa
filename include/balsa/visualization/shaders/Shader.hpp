@@ -3,19 +3,19 @@
 
 #include <memory>
 #include <limits>
-#include "balsa/scene_graph/embedding_traits.hpp"
+#include "balsa/scene_graph/EmbeddingTraits.hpp"
 #include "balsa/visualization/shaders/AbstractShader.hpp"
 #include <shaderc/shaderc.hpp>
 
 namespace balsa::visualization::shaders {
 
-template<scene_graph::concepts::embedding_traits ET>
+template<scene_graph::concepts::EmbeddingTraits ET>
 class Shader : public AbstractShader {
   public:
     virtual void add_compile_options(shaderc::CompileOptions &opts) const override;
 };
 
-template<scene_graph::concepts::embedding_traits ET>
+template<scene_graph::concepts::EmbeddingTraits ET>
 void Shader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
     AbstractShader::add_compile_options(opts);
     if constexpr (ET::embedding_dimension == 2) {

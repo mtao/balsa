@@ -5,15 +5,15 @@
 #include <optional>
 #include <balsa/visualization/vulkan/Scene.hpp>
 #include <balsa/scene_graph/transformations/matrix_transformation.hpp>
-#include <balsa/scene_graph/embedding_traits.hpp>
+#include <balsa/scene_graph/EmbeddingTraits.hpp>
 #include <balsa/visualization/vulkan/BufferView.hpp>
 #include <balsa/visualization/vulkan/utils/VertexBufferViewCollection.hpp>
 //#include <balsa/visualization/imgui//vulkan//Drawable.hpp>
 
 
-class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::embedding_traits3F>> {
-    using embedding_traits = balsa::scene_graph::embedding_traits3F;
-    using transformation_type = balsa::scene_graph::transformations::MatrixTransformation<embedding_traits>;
+class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::EmbeddingTraits3F>> {
+    using EmbeddingTraits = balsa::scene_graph::EmbeddingTraits3F;
+    using transformation_type = balsa::scene_graph::transformations::MatrixTransformation<EmbeddingTraits>;
     using scene_type = balsa::visualization::vulkan::Scene<transformation_type>;
 
   public:

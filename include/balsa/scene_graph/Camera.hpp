@@ -2,7 +2,7 @@
 #define BALSA_VISUALIZATION_SCENE_GRAPH_CAMERA_HPP
 
 #include <memory>
-#include "object.hpp"
+#include "Object.hpp"
 
 namespace balsa::scene_graph {
 namespace objects {
@@ -10,7 +10,7 @@ namespace objects {
 }
 
 
-template<concepts::abstract_transformation TransformationType>
+template<concepts::AbstractTransformation TransformationType>
 class Camera : public Object<TransformationType> {
   public:
   private:

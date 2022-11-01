@@ -1,20 +1,20 @@
 #if !defined(BALSA_VISUALIZATION_VULKAN_DRAWABLE_HPP)
 #define BALSA_VISUALIZATION_VULKAN_DRAWABLE_HPP
 
-#include "balsa/scene_graph/abstract_feature.hpp"
-#include "balsa/scene_graph/abstract_transformation.hpp"
-#include "balsa/scene_graph//camera.hpp"
+#include "balsa/scene_graph/AbstractFeature.hpp"
+#include "balsa/scene_graph/AbstractTransformation.hpp"
+#include "balsa/scene_graph//Camera.hpp"
 
 namespace balsa::visualization::vulkan {
 class Film;
-// template<scene_graph::concepts::abstract_transformation TransformationType>
-// class Drawable : public scene_graph::AbstractFeature<typename TransformationType::embedding_traits> {
+// template<scene_graph::concepts::AbstractTransformation TransformationType>
+// class Drawable : public scene_graph::AbstractFeature<typename TransformationType::EmbeddingTraits> {
 //
 //   public:
-//     using embedding_traits = typename TransformationType::embedding_traits;
+//     using EmbeddingTraits = typename TransformationType::EmbeddingTraits;
 //     using camera_type = scene_graph::Camera<TransformationType>;
-//     using abstract_feature_type = scene_graph::AbstractFeature<embedding_traits>;
-//     using abstract_object_type = scene_graph::AbstractObject<embedding_traits>;
+//     using AbstractFeature_type = scene_graph::AbstractFeature<EmbeddingTraits>;
+//     using AbstractObject_type = scene_graph::AbstractObject<EmbeddingTraits>;
 //
 //   private:
 //     virtual ~Drawable() {}

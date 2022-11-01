@@ -8,7 +8,7 @@ namespace balsa::scene_graph {
 
 
 template<unsigned int D, typename T>
-struct embedding_traits {
+struct EmbeddingTraits {
     using scalar_type = T;
     constexpr static unsigned int embedding_dimension = D;
 
@@ -19,16 +19,16 @@ struct embedding_traits {
     using transformation_matrix_type = glm::mat<D + 1, D + 1, T>;
 };
 
-using embedding_traits2F = embedding_traits<2, float>;
-using embedding_traits2D = embedding_traits<2, double>;
-using embedding_traits3F = embedding_traits<3, float>;
-using embedding_traits3D = embedding_traits<3, double>;
+using EmbeddingTraits2F = EmbeddingTraits<2, float>;
+using EmbeddingTraits2D = EmbeddingTraits<2, double>;
+using EmbeddingTraits3F = EmbeddingTraits<3, float>;
+using EmbeddingTraits3D = EmbeddingTraits<3, double>;
 
 namespace concepts {
     template<typename T>
-    concept embedding_traits = std::is_scalar_v<typename T::scalar_type> && std::is_arithmetic_v<decltype(T::embedding_dimension)>;
+    concept EmbeddingTraits = std::is_scalar_v<typename T::scalar_type> && std::is_arithmetic_v<decltype(T::embedding_dimension)>;
     // Can't use specialization without P1985/P2098
-    //= types::is_specialization_of_v<scene_graph::embedding_traits, T>;
+    //= types::is_specialization_of_v<scene_graph::EmbeddingTraits, T>;
 }// namespace concepts
 
 }// namespace balsa::scene_graph
