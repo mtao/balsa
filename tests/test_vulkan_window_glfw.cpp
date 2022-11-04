@@ -8,19 +8,17 @@
 #include <balsa/visualization/glfw//vulkan//Film.hpp>
 #include <balsa/logging/stopwatch.hpp>
 #include <balsa/visualization/glfw//vulkan//Window.hpp>
+#include <balsa/visualization/glfw//vulkan//BasicWindow.hpp>
 
 #include <spdlog/cfg/env.h>
 
 using namespace balsa::visualization;
+/*
 
 class TestWindow : public balsa::visualization::glfw::vulkan::Window {
   public:
     TestWindow() : balsa::visualization::glfw::vulkan::Window("Hello", 800, 600, false) {
 
-        std::vector<std::string> validation_layers = {
-            "VK_LAYER_KHRONOS_validation",
-        };
-        native_film().set_validation_layers(validation_layers);
 
         native_film().initialize();
         m_scene = std::make_shared<HelloTriangleScene>();
@@ -44,6 +42,7 @@ class TestWindow : public balsa::visualization::glfw::vulkan::Window {
     }
     std::shared_ptr<HelloTriangleScene> m_scene;
 };
+*/
 
 int main(int argc, char *argv[]) {
     spdlog::cfg::load_env_levels();
@@ -57,8 +56,25 @@ int main(int argc, char *argv[]) {
     // spdlog::set_level(spdlog::level::trace);
     int retvalue = 0;
     try {
-        TestWindow window;
+        balsa::visualization::glfw::vulkan::BasicWindow window("hello");
 
+        std::vector<std::string> validation_layers = {
+            "VK_LAYER_KHRONOS_validation",
+        };
+        window.native_film().set_validation_layers(validation_layers);
+        window.native_film().initialize();
+
+        auto scene = std::make_shared<HelloTriangleScene>();
+
+        window.set_drawable(scene);
+        window.set_key_callback([&](int key, int scancode, int action, int mods) {
+            if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+                scene->toggle_mode(window.film());
+            }
+            if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+                scene->toggle_buffer_mode();
+            }
+        });
 
         retvalue = window.exec();
 

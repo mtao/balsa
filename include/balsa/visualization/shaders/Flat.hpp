@@ -13,6 +13,7 @@ template<scene_graph::concepts::EmbeddingTraits ET>
 class FlatShader : public Shader<ET> {
   public:
     FlatShader() {}
+    std::vector<DescriptorBinding> get_descriptor_bindings() const override;
     std::vector<uint32_t> vert_spirv() const override final;
     std::vector<uint32_t> frag_spirv() const override final;
 };
@@ -20,12 +21,16 @@ class FlatShader : public Shader<ET> {
 template<scene_graph::concepts::EmbeddingTraits ET>
 std::vector<uint32_t> FlatShader<ET>::vert_spirv() const {
     const static std::string fname = ":/glsl/flat.vert";
-    return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Vertex);
+    return AbstractShader::compile_glsl_from_path(fname, ShaderStage::Vertex);
 }
 template<scene_graph::concepts::EmbeddingTraits ET>
 std::vector<uint32_t> FlatShader<ET>::frag_spirv() const {
     const static std::string fname = ":/glsl/flat.frag";
-    return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Fragment);
+    return AbstractShader::compile_glsl_from_path(fname, ShaderStage::Fragment);
+}
+template<scene_graph::concepts::EmbeddingTraits ET>
+std::vector<DescriptorBinding> FlatShader<ET>::get_descriptor_bindings() const {
+    return {};
 }
 }// namespace balsa::visualization::shaders
 #endif

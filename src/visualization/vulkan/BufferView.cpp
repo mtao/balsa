@@ -42,5 +42,18 @@ std::span<const vk::VertexInputAttributeDescription> VertexBufferView::attribute
 size_t VertexBufferView::attribute_descriptions_size() const {
     return m_attribute_descriptions.size();
 }
+void IndexBufferView::set_index_type(vk::IndexType type) {
+    m_index_type = type;
+}
+void IndexBufferView::bind(vk::CommandBuffer &command_buffer) const {
+
+    auto [buf, off, type] = bind_info();
+    command_buffer.bindIndexBuffer(buf, off, type);
+}
+void IndexBufferView::draw(vk::CommandBuffer &command_buffer) const {
+    bind(command_buffer);
+    command_buffer.drawIndexed(
+      m_index_count, m_instance_count, m_first_index, m_vertex_offset, m_first_instance);
+}
 
 }// namespace balsa::visualization::vulkan

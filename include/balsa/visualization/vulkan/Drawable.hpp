@@ -4,6 +4,7 @@
 #include "balsa/scene_graph/AbstractFeature.hpp"
 #include "balsa/scene_graph/AbstractTransformation.hpp"
 #include "balsa/scene_graph//Camera.hpp"
+#include "balsa/scene_graph//FeatureGroup.hpp"
 
 namespace balsa::visualization::vulkan {
 class Film;
@@ -26,9 +27,9 @@ class Film;
 class Drawable {
   public:
     virtual ~Drawable() {}
-    virtual void initialize(Film &) {}
-    virtual void begin_render_pass(Film &) {}
-    virtual void end_render_pass(Film &) {}
+    virtual void initialize(Film &);
+    virtual void begin_render_pass(Film &);
+    virtual void end_render_pass(Film &);
     virtual void draw(Film &film) = 0;
 
     // TODO: surface_image_format requests

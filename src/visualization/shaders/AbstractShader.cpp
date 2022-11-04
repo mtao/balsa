@@ -1,4 +1,6 @@
 #include "balsa/visualization/shaders/AbstractShader.hpp"
+#include <range/v3/view/transform.hpp>
+#include <range/v3/range/conversion.hpp>
 #include "shaderc/status.h"
 #include <QtCore/QTextStream>
 #include <spdlog/spdlog.h>
@@ -13,15 +15,27 @@ void balsa_visualization_shaders_initialize_resources() {
 namespace balsa::visualization::shaders {
 
 namespace {
-    const std::string &get_shader_stage_name(AbstractShader::ShaderStage stage) {
+    const std::string &get_shader_stage_name(ShaderStage stage) {
         const static std::string v0 = "Vertex";
         const static std::string v1 = "Fragment";
+        const static std::string v2 = "TessellationControl";
+        const static std::string v3 = "TessellationEvaluation";
+        const static std::string v4 = "Geometry";
+        const static std::string v5 = "Compute";
         const static std::string v_ = "Unknown";
         switch (stage) {
-        case AbstractShader::ShaderStage::Vertex:
+        case ShaderStage::Vertex:
             return v0;
-        case AbstractShader::ShaderStage::Fragment:
+        case ShaderStage::Fragment:
             return v1;
+        case ShaderStage::TessellationControl:
+            return v2;
+        case ShaderStage::TessellationEvaluation:
+            return v3;
+        case ShaderStage::Geometry:
+            return v4;
+        case ShaderStage::Compute:
+            return v5;
         default:
             return v_;
         }
@@ -66,16 +80,29 @@ namespace {
 AbstractShader::AbstractShader() {
     balsa_visualization_shaders_initialize_resources();
 }
+
 std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, ShaderStage stage) const {
 
     const std::string &stage_name = get_shader_stage_name(stage);
     shaderc_shader_kind kind;
     switch (stage) {
     case ShaderStage::Vertex:
-        kind = shaderc_glsl_default_vertex_shader;
+        kind = shaderc_vertex_shader;
         break;
     case ShaderStage::Fragment:
-        kind = shaderc_glsl_default_fragment_shader;
+        kind = shaderc_fragment_shader;
+        break;
+    case ShaderStage::TessellationControl:
+        kind = shaderc_tess_control_shader;
+        break;
+    case ShaderStage::TessellationEvaluation:
+        kind = shaderc_tess_evaluation_shader;
+        break;
+    case ShaderStage::Geometry:
+        kind = shaderc_geometry_shader;
+        break;
+    case ShaderStage::Compute:
+        kind = shaderc_compute_shader;
         break;
     }
     shaderc::Compiler compiler;
@@ -136,18 +163,19 @@ std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &
 //     auto vs_module = make_shader_module(device, vs_spirv);
 //     auto fs_module = make_shader_module(device, fs_spirv);
 // }
-std::vector<AbstractShader::SpirvShader> AbstractShader::compile_spirv() {
-    std::vector<SpirvShader> ret(2);
-
-    auto &vert = ret[0];
-    auto &frag = ret[1];
-
-    vert.stage = ShaderStage::Vertex;
-    frag.stage = ShaderStage::Fragment;
-
-    vert.spirv_data = vert_spirv();
-    frag.spirv_data = frag_spirv();
-    return ret;
+std::string AbstractShader::get_stage_name(ShaderStage) const {
+    return "main";
+}
+std::vector<SpirvShader> AbstractShader::compile_spirv() const {
+    auto stages = available_stages();
+    return stages | ranges::views::transform([&](ShaderStage stage) -> SpirvShader {
+               SpirvShader shader;
+               shader.name = get_stage_name(stage);
+               shader.stage = stage;
+               shader.data = get_stage_spirv(stage);
+               return shader;
+           })
+           | ranges::to<std::vector>;
 }
 
 }// namespace balsa::visualization::shaders

@@ -81,28 +81,50 @@ class TriangleShader : public Shader<ET> {
 
         balsa_visualization_tests_shaders_initialize_resources();
     }
-    std::vector<uint32_t> vert_spirv() const override final;
-    std::vector<uint32_t> frag_spirv() const override final;
+    std::vector<uint32_t> vert_spirv() const;
+    std::vector<uint32_t> frag_spirv() const;
+    std::vector<ShaderStage> available_stages() const override {
+        return { ShaderStage::Vertex,
+                 ShaderStage::Fragment };
+    }
+    std::vector<uint32_t> get_stage_spirv(ShaderStage stage) const override {
+        switch (stage) {
+        case ShaderStage::Vertex:
+            return vert_spirv();
+        case ShaderStage::Fragment:
+            return frag_spirv();
+        default:
+            return {};
+        }
+    }
+    std::vector<DescriptorBinding> get_descriptor_bindings() const override {
+        std::vector<DescriptorBinding> ret;
+        if (static_triangle_mode) {
+        } else {
+            ret.emplace_back(DescriptorBinding{ .binding = 0, .type = DescriptorBinding::Type::UniformBuffer, .count = 1, .stages = {} });
+        }
+        return ret;
+    }
 };
 
 template<scene_graph::concepts::EmbeddingTraits ET>
 std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
     if (static_triangle_mode) {
         const static std::string fname = ":/tests/glsl/triangle.vert";
-        return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Vertex);
+        return AbstractShader::compile_glsl_from_path(fname, ShaderStage::Vertex);
     } else {
         const static std::string fname = ":/tests/glsl/input_vertex.vert";
-        return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Vertex);
+        return AbstractShader::compile_glsl_from_path(fname, ShaderStage::Vertex);
     }
 }
 template<scene_graph::concepts::EmbeddingTraits ET>
 std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
     if (static_triangle_mode) {
         const static std::string fname = ":/tests/glsl/triangle.frag";
-        return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Fragment);
+        return AbstractShader::compile_glsl_from_path(fname, ShaderStage::Fragment);
     } else {
         const static std::string fname = ":/tests/glsl/input_vertex.frag";
-        return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderStage::Fragment);
+        return AbstractShader::compile_glsl_from_path(fname, ShaderStage::Fragment);
     }
 }
 }// namespace balsa::visualization::shaders
@@ -153,9 +175,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
     cb.bindPipeline(vk::PipelineBindPoint::eGraphics,
                     pipeline);
 
-    if (!static_triangle_mode) {
-        vertex_buffer_views.bind(cb);
-    }
+    vertex_buffer_views.bind(cb);
 
     vk::Viewport viewport{};
     auto extent = film.swapchain_image_size();
@@ -177,16 +197,12 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
 
     if (static_triangle_mode) {
-        cb.draw(vertices.size(), 1, 0, 0);
+        vertex_buffer_views.draw(cb);
     } else {
         if (index_buffer_view.has_buffer()) {
-            auto [buf, off, type] = index_buffer_view.bind_info();
-            if (buf) {
-                cb.bindIndexBuffer(buf, off, type);
-                cb.drawIndexed(indices.size(), 1, 0, 0, 0);
-            }
+            index_buffer_view.draw(cb);
         } else {
-            cb.draw(vertices.size(), 1, 0, 0);
+            vertex_buffer_views.draw(cb);
         }
     }
     //_imgui.draw(film);
@@ -226,22 +242,27 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         auto ad = Vertex::get_attribute_descriptions();
         vertex_buffer_view.set_attribute_descriptions(std::span(ad.begin(), ad.end()));
     }
+    vertex_buffer_views.set_vertex_count(vertices.size());
 
 
-    vertex_buffer_views.build_descriptions();
-
-    if (!static_triangle_mode) {
-        vertex_buffer_views.set_vertex_inputs(pf);
+    if (static_triangle_mode) {
+        pf.clear_vertex_inputs();
+        // Static triangle mode doesn't have any inputs
+        // pf.set_vertex_input(vertex_buffer_view);
+    } else {
+        pf.set_vertex_inputs(vertex_buffer_views);
     }
     auto bc = balsa::visualization::vulkan::utils::BufferCopier::from_film(film);
     if (!vertex_buffer_view.has_buffer()) {
 
         std::shared_ptr<balsa::visualization::vulkan::Buffer> vertex_buffer;
         vertex_buffer = std::make_shared<balsa::visualization::vulkan::Buffer>(film);
+        assert(vertex_buffer->memory());
 
         vk::DeviceSize data_size = sizeof(decltype(vertices)::value_type) * vertices.size();
         if (!use_staging_buffer) {
             auto sw = balsa::logging::hierarchical_stopwatch("HelloTriangleScene::create_graphics_pipeline::vertex_copy_buffer");
+            assert(vertex_buffer->memory());
             bc.copy_direct(*vertex_buffer, (void *)vertices.data(), data_size, vk::BufferUsageFlagBits::eVertexBuffer);
             vertex_buffer_view.set_buffer(vertex_buffer);
 
@@ -266,7 +287,12 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
 
         spdlog::info("setting");
         index_buffer_view.set_buffer(index_buffer);
+        index_buffer_view.set_index_type<decltype(indices)::value_type>();
+        index_buffer_view.set_index_count(indices.size());
     }
+
+    pf.add_descriptor_set_layout(fs);
+    pf.build_shaders(fs);
 
 
     if (pipeline) {
@@ -275,7 +301,8 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     if (pipeline_layout) {
         device.destroyPipelineLayout(pipeline_layout);
     }
-    std::tie(pipeline, pipeline_layout) = pf.generate(film, fs);
+
+    std::tie(pipeline, pipeline_layout) = pf.generate();
 }
 
 #endif

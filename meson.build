@@ -163,8 +163,10 @@ if get_option('visualization')
     'src/visualization/shaders/Flat.cpp',
     'src/visualization/vulkan/NativeFilm.cpp',
     'src/visualization/vulkan/Window.cpp',
+    'src/visualization/vulkan/DeviceMemory.cpp',
     'src/visualization/vulkan/Buffer.cpp',
     'src/visualization/vulkan/BufferView.cpp',
+    'src/visualization/vulkan/Drawable.cpp',
     'src/visualization/vulkan/utils/PipelineFactory.cpp',
     'src/visualization/vulkan/utils/VertexBufferViewCollection.cpp',
     'src/visualization/vulkan/utils/find_memory_type.cpp',
@@ -245,6 +247,7 @@ if get_option('visualization')
       'src/visualization/glfw/Window.cpp',
       'src/visualization/glfw/vulkan/Film.cpp',
       'src/visualization/glfw/vulkan/Window.cpp',
+      'src/visualization/glfw/vulkan/BasicWindow.cpp',
     ]
   endif
 

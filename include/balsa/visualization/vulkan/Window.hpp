@@ -6,7 +6,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/vec2.hpp>
 #include <memory>
-#include "balsa/visualization/vulkan/SceneBase.hpp"
+#include "balsa/visualization/vulkan/Drawable.hpp"
 
 namespace balsa::visualization::vulkan {
 class Film;
@@ -21,7 +21,7 @@ class Window {
     // run the main loop
     virtual int exec() = 0;
     void draw_frame();
-    virtual SceneBase *scene() const { return nullptr; }
+    virtual Drawable *drawable() const = 0;
 
 
     virtual void pre_draw_hook();

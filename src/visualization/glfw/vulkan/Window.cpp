@@ -24,9 +24,9 @@ void Window::post_draw_hook() {
     GLFWParentType::post_draw_hook();
 }
 int Window::exec() {
-    const auto &scene = this->scene();
-    if (scene) {
-        scene->initialize(film());
+    const auto &drawable = this->drawable();
+    if (drawable) {
+        drawable->initialize(film());
     }
     GLFWParentType::main_loop();
     return 0;

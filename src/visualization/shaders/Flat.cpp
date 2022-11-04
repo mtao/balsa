@@ -4,4 +4,5 @@
 #include <iostream>
 
 namespace balsa::visualization::shaders {
+
 }// namespace balsa::visualization::shaders

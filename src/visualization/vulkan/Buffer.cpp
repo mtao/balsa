@@ -1,6 +1,6 @@
 
-#include "balsa/visualization/vulkan/utils/find_memory_type.hpp"
 #include "balsa/visualization/vulkan/Buffer.hpp"
+#include "balsa/visualization/vulkan/DeviceMemory.hpp"
 #include "balsa/visualization/vulkan/Film.hpp"
 #include "balsa/logging/stopwatch.hpp"
 #include <vulkan/vulkan_structs.hpp>
@@ -9,34 +9,25 @@ namespace balsa::visualization::vulkan {
 
 Buffer::Buffer(Buffer &&o) {
     m_device = o.m_device;
-    m_physical_device = o.m_physical_device;
-    m_buffer = o.m_buffer;
+    m_handle = o.m_handle;
     m_memory = o.m_memory;
 
-    o.m_buffer = vk::Buffer{};
-    o.m_memory = vk::DeviceMemory{};
+    o.m_handle = vk::Buffer{};
+    o.free_memory();
 }
 Buffer &Buffer::operator=(Buffer &&o) {
     m_device = o.m_device;
-    m_physical_device = o.m_physical_device;
-    m_buffer = o.m_buffer;
+    m_handle = o.m_handle;
     m_memory = o.m_memory;
-    o.m_buffer = vk::Buffer{};
-    o.m_memory = vk::DeviceMemory{};
+    o.m_handle = vk::Buffer{};
+    o.free_memory();
     return *this;
 }
 
-Buffer::Buffer(vk::Device device,
-               vk::PhysicalDevice physical_device) : m_device(device), m_physical_device(physical_device) {
-}
-Buffer::Buffer(const Film &film) {
-    set_device(film);
+Buffer::Buffer(vk::Device device, vk::PhysicalDevice physical_device) : m_device(device), m_memory(new DeviceMemory(device, physical_device)) {
 }
 
-
-void Buffer::set_device(const Film &film) {
-    m_device = film.device();
-    m_physical_device = film.physical_device();
+Buffer::Buffer(const Film &film) : Buffer(film.device(), film.physical_device()) {
 }
 
 
@@ -45,16 +36,14 @@ Buffer::~Buffer() {
 }
 void Buffer::destroy() {
     auto sw = balsa::logging::hierarchical_stopwatch("Buffer::destroy");
-    if (m_buffer) {
-        m_device.destroyBuffer(m_buffer);
+    if (m_handle) {
+        m_device.destroyBuffer(m_handle);
     }
-    if (m_memory) {
-        m_device.freeMemory(m_memory);
-    }
+    free_memory();
 }
 
-void Buffer::create(size_t data_size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
-    auto sw = balsa::logging::hierarchical_stopwatch("Buffer::create");
+void Buffer::create(size_t data_size, vk::BufferUsageFlags usage) {
+    assert(m_memory);
     assert(m_device);
     destroy();
 
@@ -62,32 +51,44 @@ void Buffer::create(size_t data_size, vk::BufferUsageFlags usage, vk::MemoryProp
     buffer_info.setSize(data_size);
     buffer_info.setUsage(usage);
     buffer_info.setSharingMode(vk::SharingMode::eExclusive);
-    m_buffer = m_device.createBuffer(buffer_info);
-
-    vk::MemoryRequirements mem_requirements = m_device.getBufferMemoryRequirements(m_buffer);
-
-    uint32_t memory_type_index = balsa::visualization::vulkan::utils::find_memory_type(m_physical_device, mem_requirements.memoryTypeBits, properties);
-
-    vk::MemoryAllocateInfo alloc_info;
-    alloc_info.setAllocationSize(mem_requirements.size);
-    alloc_info.setMemoryTypeIndex(memory_type_index);
-
-    m_memory = m_device.allocateMemory(alloc_info);
-
-    m_device.bindBufferMemory(m_buffer, m_memory, 0);
+    m_handle = m_device.createBuffer(buffer_info);
+}
+void Buffer::create(size_t data_size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
+    assert(m_memory);
+    create(data_size, usage);
+    m_memory->create(memory_requirements(), data_size, properties);
+    bind_memory(*m_memory);
 }
 
+vk::MemoryRequirements Buffer::memory_requirements() const {
+    return m_device.getBufferMemoryRequirements(m_handle);
+}
 
-void Buffer::upload_data_noT(void *data, size_t data_size) {
+Buffer Buffer::create(const Film &film, size_t data_size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
 
-    auto sw = balsa::logging::hierarchical_stopwatch("Buffer::upload_data");
-    assert(m_buffer);
-    assert(m_memory);
+    spdlog::info("Creating buffer");
+    Buffer buf(film);
+    buf.create(data_size, usage, properties);
 
+    return buf;
+}
 
-    void *map_data = m_device.mapMemory(m_memory, 0, data_size);
-    memcpy(map_data, data, size_t(data_size));
-    m_device.unmapMemory(m_memory);
+void Buffer::emplace_memory(const Film &film) {
+    emplace_memory(film.physical_device());
+}
+void Buffer::emplace_memory(const vk::PhysicalDevice &physical_device) {
+
+    m_memory = std::make_shared<DeviceMemory>(device(), physical_device);
+}
+
+void Buffer::bind_memory(DeviceMemory &memory) {
+    m_device.bindBufferMemory(handle(), memory.handle(), m_offset);
+}
+
+void Buffer::free_memory() {
+    vk::PhysicalDevice pd = m_memory->physical_device();
+    m_memory.reset();
+    m_memory = std::make_shared<DeviceMemory>(device(), pd);
 }
 
 

@@ -13,43 +13,20 @@ void VertexBufferViewCollection::clear() {
     m_views.clear();
 }
 void VertexBufferViewCollection::resize(size_t size) {
-    set_dirty_descriptions();
     m_views.resize(size);
 }
 void VertexBufferViewCollection::add_view(const VertexBufferView &view) {
     m_views.emplace_back(view);
 }
-void VertexBufferViewCollection::set_dirty_descriptions() {
-    m_binding_descriptions.clear();
-    m_attribute_descriptions.clear();
-}
-bool VertexBufferViewCollection::dirty_descriptions() const {
-    return m_binding_descriptions.empty() || m_attribute_descriptions.empty();
-}
 
-void VertexBufferViewCollection::set_vertex_inputs(PipelineFactory &factory) const {
-    set_vertex_inputs(factory.vertex_input);
-}
 
-void VertexBufferViewCollection::set_vertex_inputs(vk::PipelineVertexInputStateCreateInfo &create_info) const {
-    create_info.setVertexBindingDescriptions(m_binding_descriptions);
-    create_info.setVertexAttributeDescriptions(m_attribute_descriptions);
-}
-vk::PipelineVertexInputStateCreateInfo VertexBufferViewCollection::pipeline_vertex_input_state_create_info() const {
-    vk::PipelineVertexInputStateCreateInfo ret;
-    set_vertex_inputs(ret);
-    return ret;
-}
-
-void VertexBufferViewCollection::build_descriptions() {
-
+std::vector<vk::VertexInputBindingDescription> VertexBufferViewCollection::binding_descriptions() const {
     auto indexed_views_nooff = m_views | ranges::views::enumerate;
     auto indexed_views = indexed_views_nooff | ranges::views::transform([&](auto pr) {
                              auto [binding_index, view] = pr;
                              binding_index += m_first_binding;
                              return pr;
                          });
-
     auto get_binding = [](auto &&pr) {
         const auto &[binding_index, view] = pr;
 
@@ -58,8 +35,15 @@ void VertexBufferViewCollection::build_descriptions() {
         return bd;
     };
 
-    m_binding_descriptions = indexed_views | ranges::views::transform(get_binding) | ranges::to<std::vector>();
-
+    return indexed_views | ranges::views::transform(get_binding) | ranges::to<std::vector>();
+}
+std::vector<vk::VertexInputAttributeDescription> VertexBufferViewCollection::attribute_descriptions() const {
+    auto indexed_views_nooff = m_views | ranges::views::enumerate;
+    auto indexed_views = indexed_views_nooff | ranges::views::transform([&](auto pr) {
+                             auto [binding_index, view] = pr;
+                             binding_index += m_first_binding;
+                             return pr;
+                         });
 
     auto get_attributes = [](auto &&pr) {
         const auto &[binding_index, view] = pr;
@@ -73,7 +57,7 @@ void VertexBufferViewCollection::build_descriptions() {
     };
 
 
-    m_attribute_descriptions = indexed_views | ranges::views::transform(get_attributes) | ranges::views::join | ranges::to<std::vector>();
+    return indexed_views | ranges::views::transform(get_attributes) | ranges::views::join | ranges::to<std::vector>();
 }
 void VertexBufferViewCollection::bind(vk::CommandBuffer &command_buffer) const {
     auto indexed_views_nooff = m_views | ranges::views::enumerate;
@@ -90,5 +74,9 @@ void VertexBufferViewCollection::bind(vk::CommandBuffer &command_buffer) const {
             command_buffer.bindVertexBuffers(m_first_binding, buf, off);
         }
     }
+}
+void VertexBufferViewCollection::draw(vk::CommandBuffer &command_buffer) const {
+    bind(command_buffer);
+    command_buffer.draw(m_vertex_count, m_instance_count, m_first_vertex, m_first_instance);
 }
 }// namespace balsa::visualization::vulkan::utils

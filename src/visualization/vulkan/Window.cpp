@@ -8,19 +8,19 @@ Window::Window() {
 Window::~Window() {
 }
 void Window::pre_draw_hook() {
-    if (auto s = scene(); s != nullptr) {
+    if (auto s = drawable(); s != nullptr) {
         s->begin_render_pass(film());
     }
 }
 void Window::post_draw_hook() {
-    if (auto s = scene(); s != nullptr) {
+    if (auto s = drawable(); s != nullptr) {
         s->end_render_pass(film());
     }
 }
 
 void Window::draw_frame() {
     pre_draw_hook();
-    if (auto s = scene(); s != nullptr) {
+    if (auto s = drawable(); s != nullptr) {
         s->draw(film());
     }
     post_draw_hook();
