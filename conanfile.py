@@ -6,9 +6,11 @@ __BASE_DEPS__ = [
         "eigen/3.4.0",
         "range-v3/0.12.0",  
         "fmt/9.1.0", 
-        "onetbb/2020.3",  # openvdb 8.1.0 requires this 
+        "onetbb/2020.3",  # openvdb 8.1.0 requires this (cannot update)
         "catch2/3.1.0",
         "cxxopts/3.0.0",
+        'zlib/1.2.13', # override cuz openvdb/hdf5 conflict on dep
+        'boost/1.80.0', # override cuz openvdb/hdf5 conflict on dep
         ]
 
 __OPTIONAL_FLAGS_WITH_DEPS__ = [
@@ -32,6 +34,9 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
                 ),
             ("pngpp", [True,False], False,
                 ["pngpp/0.2.10"]
+                ),
+            ("hdf5", [True,False], True,
+                ['highfive/2.6.2']
                 ),
             # These are libs that i want options for but meson has to handle
             ("partio", [True,False], True,[]),

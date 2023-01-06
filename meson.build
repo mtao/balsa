@@ -32,6 +32,10 @@ if get_option('protobuf')
   protobuf_dep = dependency('protobuf')
 endif
 
+if get_option('hdf5')
+  #hdf5_dep = dependency('hdf5')
+  highfive_dep = dependency('highfive')
+endif
 
 
 

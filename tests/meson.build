@@ -45,5 +45,11 @@ test_geometry = executable('test_geometry',  geometry_test_sources, dependencies
 test('geometry test', test_geometry)
 
 
+hdf5_test_sources = [
+  'test_hdf5.cpp',
+]
 
-subdir('qt_example')
+test_hdf5 = executable('test_hdf5',  hdf5_test_sources, dependencies: [highfive_dep,catch2_with_main_dep])
+test('hdf5_test', test_hdf5)
+
+# subdir('qt_example')
