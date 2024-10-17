@@ -46,6 +46,7 @@ endif
 
 
 if get_option('qt')
+  #qt= import('qt') // TODO: figure out if this is useful
   qt= import('qt5')
   qt_required_modules = ['Core']
   if get_option('visualization')

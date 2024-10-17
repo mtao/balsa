@@ -16,7 +16,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
                 "shaderc/2021.1", "glfw/3.3.8", "glm/0.9.9.8", "imgui/1.88"
                 ]),
             ("openvdb", [True,False], True,
-                ["openvdb/8.0.1"]
+                ["openvdb/8.0.1", "c-blosc/1.21.3", "zlib/1.2.13"]
                 ),
             ("protobuf", [True,False], True,
                 ["protobuf/3.11.4"]
@@ -32,6 +32,9 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
                 ),
             ("pngpp", [True,False], False,
                 ["pngpp/0.2.10"]
+                ),
+            ("qt", [True,False], False,
+                ["qt/5.15.8"]
                 ),
             # These are libs that i want options for but meson has to handle
             ("partio", [True,False], True,[]),
