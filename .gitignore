@@ -40,4 +40,5 @@ subprojects/patches/*.zip
 compile_commands.json
 
 
+build*
 
