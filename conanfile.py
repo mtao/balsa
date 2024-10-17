@@ -51,16 +51,15 @@ __OPTIONS__ = {name:values for name,values,default,deps in __OPTIONAL_FLAGS_WITH
 __DEFAULT_OPTIONS__ = default_options = {name:default for name,values,default,deps in __OPTIONAL_FLAGS_WITH_DEPS__}
 
 
-def dependencies():
+def dependencies(config):
     ret = set()
     for name, _, _, deps in __OPTIONAL_FLAGS_WITH_DEPS__:
-        if getattr(__OPTIONS__,name):
+        if getattr(config.options,name):
             ret.update(deps)
     return ret
 
 
 class Balsa(ConanFile):
-    generators = "pkg_config"
     requires = __BASE_DEPS__ 
     settings = "os", "compiler", "build_type"  
     options = __OPTIONS__
@@ -69,22 +68,18 @@ class Balsa(ConanFile):
 
                                                
     def configure(self):
-        for dep in dependencies():
+        for dep in dependencies(self):
             self.requires(dep)
 
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
 
-    def build(self):                           
+    def generate(self):                           
         meson = MesonToolchain(self)                   
         args = []
         for name, _, _, _ in __OPTIONAL_FLAGS_WITH_DEPS__:
             value = getattr(self.options,name)
-            args.append("-D{}={}".format(name,  value))
-
-                
-
-        meson.configure(args=args)  
-        meson.build()                          
+            meson.preprocessor_definitions[name] =  value
+        meson.generate()                          
                                                
                                                
