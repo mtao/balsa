@@ -51,7 +51,12 @@ __OPTIONS__ = {name:values for name,values,default,deps in __OPTIONAL_FLAGS_WITH
 __DEFAULT_OPTIONS__ = default_options = {name:default for name,values,default,deps in __OPTIONAL_FLAGS_WITH_DEPS__}
 
 
-print(__OPTIONS__)
+def dependencies():
+    ret = set()
+    for name, _, _, deps in __OPTIONAL_FLAGS_WITH_DEPS__:
+        if getattr(__OPTIONS__,name):
+            ret.update(deps)
+    return ret
 
 
 class Balsa(ConanFile):
@@ -61,16 +66,10 @@ class Balsa(ConanFile):
     options = __OPTIONS__
     default_options = __DEFAULT_OPTIONS__
 
-    def dependencies(self):
-        ret = set()
-        for name, _, _, deps in __OPTIONAL_FLAGS_WITH_DEPS__:
-            if getattr(self.options,name):
-                ret.update(deps)
-        return ret
 
                                                
     def configure(self):
-        for dep in self.dependencies():
+        for dep in dependencies():
             self.requires(dep)
 
         if self.options.visualization:
