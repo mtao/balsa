@@ -1,25 +1,28 @@
-from conans import ConanFile, tools, Meson
+from conan import ConanFile
+from conan.tools.meson import MesonToolchain
 import os
 
 __BASE_DEPS__ = [
-        "spdlog/1.10.0", 
+        "spdlog/1.14.1", 
         "eigen/3.4.0",
-        "range-v3/0.12.0",  
-        "fmt/9.1.0", 
-        "onetbb/2020.3",  # openvdb 8.1.0 requires this 
-        "catch2/3.1.0",
-        "cxxopts/3.0.0",
+        "range-v3/cci.20240905",  
+        "fmt/10.2.1", 
+        "onetbb/2021.10.0",  # openvdb 8.1.0 requires this 
+        "catch2/3.7.1",
+        "cxxopts/3.2.0",
         ]
 
+
+# option_name, option_values, default_value, dependencies
 __OPTIONAL_FLAGS_WITH_DEPS__ = [
             ("visualization", [True,False], True, [
                 "shaderc/2021.1", "glfw/3.3.8", "glm/0.9.9.8", "imgui/1.88"
                 ]),
             ("openvdb", [True,False], True,
-                ["openvdb/8.0.1", "c-blosc/1.21.3", "zlib/1.2.13"]
+                ["openvdb/11.0.0"]
                 ),
             ("protobuf", [True,False], True,
-                ["protobuf/3.11.4"]
+                ["protobuf/5.27.0"]
                 ),
             ("json", [True,False], True,
                 ["nlohmann_json/3.11.2"]
@@ -48,6 +51,7 @@ __OPTIONS__ = {name:values for name,values,default,deps in __OPTIONAL_FLAGS_WITH
 __DEFAULT_OPTIONS__ = default_options = {name:default for name,values,default,deps in __OPTIONAL_FLAGS_WITH_DEPS__}
 
 
+print(__OPTIONS__)
 
 
 class Balsa(ConanFile):
@@ -56,18 +60,24 @@ class Balsa(ConanFile):
     settings = "os", "compiler", "build_type"  
     options = __OPTIONS__
     default_options = __DEFAULT_OPTIONS__
-                                               
-    def configure(self):
+
+    def dependencies(self):
+        ret = set()
         for name, _, _, deps in __OPTIONAL_FLAGS_WITH_DEPS__:
             if getattr(self.options,name):
-                for dep in deps:
-                    self.requires(dep)
+                ret.update(deps)
+        return ret
+
+                                               
+    def configure(self):
+        for dep in self.dependencies():
+            self.requires(dep)
 
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
 
     def build(self):                           
-        meson = Meson(self)                   
+        meson = MesonToolchain(self)                   
         args = []
         for name, _, _, _ in __OPTIONAL_FLAGS_WITH_DEPS__:
             value = getattr(self.options,name)
