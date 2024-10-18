@@ -64,6 +64,12 @@ concept IsEigenMatrix = MatrixBaseDerived<T> || SparseMatrixBaseDerived<T>;
 template<typename T>
 concept IntegralMatrix = MatrixBaseDerived<T> &&std::is_integral_v<typename T::Scalar>;
 
+
+template<typename T>
+concept RowMajorSparseMatrix = SparseMatrixBaseDerived<T> && T::IsRowMajor;
+
+template<typename T>
+concept ColMajorSparseMatrix = SparseMatrixBaseDerived<T> && !T::IsRowMajor;
 }// namespace balsa::eigen::concepts
 
 #endif
