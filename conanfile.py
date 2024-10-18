@@ -1,5 +1,6 @@
 from conan import ConanFile
 from conan.tools.meson import MesonToolchain
+from conan.tools.gnu import PkgConfigDeps
 import os
 
 __BASE_DEPS__ = [
@@ -75,11 +76,15 @@ class Balsa(ConanFile):
             self.options["glfw"].vulkan_static = True
 
     def generate(self):                           
-        meson = MesonToolchain(self)                   
-        args = []
-        for name, _, _, _ in __OPTIONAL_FLAGS_WITH_DEPS__:
-            value = getattr(self.options,name)
-            meson.preprocessor_definitions[name] =  value
-        meson.generate()                          
+        pc = PkgConfigDeps(self)
+        pc.generate()                          
+
+        # turns out setting up meson generator requires first calling pkgconfig - gotta figure out the right way to set the toolchain up to fetch deps
+        if False:
+            meson = MesonToolchain(self)                   
+            args = []
+            for name, _, _, _ in __OPTIONAL_FLAGS_WITH_DEPS__:
+                value = getattr(self.options,name)
+                meson.preprocessor_definitions[name] =  value
                                                
                                                

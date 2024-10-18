@@ -11,8 +11,8 @@ This package is build using `meson` and dependencies can be installed using
 
 ```bash
 mkdir build # make build directory
+conan install .. --output-folder=build/_conan_pkgs --build-missing # pull dependencies, build as needed
 pushd build # enter build directory
-conan install .. --build-missing # pull dependencies, build as needed
-conan build .. --build-folder=. # set up meson and build
+PKG_CONFIG_PATH=_conan_pkgs meson setup --native-file ../conan_meson_native.ini # use conan packages and build
 ```
 Subsequent build can be done with Ninja.

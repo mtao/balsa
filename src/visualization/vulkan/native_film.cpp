@@ -47,6 +47,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
     case vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation:
         type = "Validation";
         break;
+    case vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding:
+        type = "DeviceAddressBinding";
+        break;
     }
     logger->log(slevel, "Vk{}: {}", type, pCallbackData->pMessage);
     return VK_FALSE;
@@ -299,13 +302,13 @@ void NativeFilm::create_instance() {
 
         for (const auto &extension : extensions) {
             spdlog::trace("Instance has extension [{}] available",
-                          extension.extensionName);
+                          std::string_view(extension.extensionName));
         }
         auto layer_properties = _context_raii.enumerateInstanceLayerProperties();
 
         for (const auto &layer : layer_properties) {
             spdlog::trace("Instance has layer [{}] available",
-                          layer.layerName);
+                          std::string_view(layer.layerName));
         }
         throw e;
     }
