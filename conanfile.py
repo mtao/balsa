@@ -28,7 +28,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
                 ["nlohmann_json/3.11.2"]
                 ),
             ("embree", [True,False], True,
-                ["embree3/3.13.3"]
+                ["embree3/3.13.5"]
                 ),
             ("imgui", [True,False], True,
                 ["imgui/1.88"]
