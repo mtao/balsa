@@ -42,6 +42,10 @@ jobs:
         with:
           version: 2.8.1
 
+      - name: Conan profile creation
+        run: conan profile detect
+        run: conan profile update compiler.cppstd=gnu20
+
       - name: Conan dependencies
         run: conan install . --output-folder=build --build=missing # prepare conan
 
