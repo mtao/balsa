@@ -74,8 +74,8 @@ class Balsa(ConanFile):
             self.requires(dep)
         if self.options.visualization:
             # glfw and qt overlap sadly
-            self.requires("vulkan-headers/1.3.296.0",override=True)
-            self.requires("vulkan-loader/1.3.296.0",override=True)
+            self.requires("vulkan-headers/1.3.268.0",override=True)
+            self.requires("vulkan-loader/1.3.268.0",override=True)
                                                
     def configure(self):
         if self.options.visualization:
