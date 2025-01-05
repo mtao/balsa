@@ -35,7 +35,7 @@ jobs:
 
       - name: Linux dependencies
         run: |
-          if [ "$RUNNER_OS" == "LinuX" ]; then
+          if [ "$RUNNER_OS" == "Linux" ]; then
           apt install libgl-dev libgl1-mesa-dev
           fi
 
