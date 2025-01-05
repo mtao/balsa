@@ -38,7 +38,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
           sudo apt update
-          sudo apt-get install libgl-dev libgl1-mesa-dev
+          sudo apt-get install libgl-dev libgl1-mesa-dev libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev libxau-dev libxaw7-dev
           fi
 
 
