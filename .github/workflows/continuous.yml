@@ -45,7 +45,6 @@ jobs:
       - name: Conan profile creation
         run: | 
           conan profile detect
-          conan profile update compiler.cppstd=gnu20
 
       - name: Conan dependencies
         run: conan install . --output-folder=build --build=missing # prepare conan
