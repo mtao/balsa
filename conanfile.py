@@ -82,7 +82,7 @@ class Balsa(ConanFile):
             self.options["glfw"].vulkan_static = True
             self.options["qt"].with_vulkan = True
              
-    def generate(self):                           
+    def generate(self):
         meson = MesonToolchain(self)                   
         args = []
         for name, _, _, _ in __OPTIONAL_FLAGS_WITH_DEPS__:
