@@ -4,11 +4,11 @@ from conan.tools.gnu import PkgConfigDeps
 import os
 
 __BASE_DEPS__ = [
-        "spdlog/1.14.1", 
+        "spdlog/1.15.0", 
         "eigen/3.4.0",
         "range-v3/cci.20240905",  
-        "fmt/10.2.1", 
-        "onetbb/2021.10.0",  # openvdb 8.1.0 requires this 
+        "fmt/11.0.2", 
+        "onetbb/2021.10.0",  # constrained by openvdb
         "catch2/3.7.1",
         "cxxopts/3.2.0",
         ]
@@ -38,7 +38,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
                 ["pngpp/0.2.10"]
                 ),
             ("qt", [True,False], True,
-                ["qt/5.15.8"]
+                ["qt/6.7.3"]
                 ),
             # These are libs that i want options for but meson has to handle
             ("partio", [True,False], True,[]),
@@ -72,10 +72,15 @@ class Balsa(ConanFile):
     def requirements(self):
         for dep in dependencies(self):
             self.requires(dep)
+        if self.options.visualization:
+            # glfw and qt overlap sadly
+            self.requires("vulkan-headers/1.3.296.0",override=True)
+            self.requires("vulkan-loader/1.3.296.0",override=True)
                                                
     def configure(self):
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
+            self.options["qt"].with_vulkan = True
              
     def generate(self):                           
         meson = MesonToolchain(self)                   

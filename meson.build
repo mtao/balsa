@@ -47,12 +47,12 @@ endif
 
 if get_option('qt')
   #qt= import('qt') // TODO: figure out if this is useful
-  qt= import('qt5')
+  qt= import('qt6')
   qt_required_modules = ['Core']
   if get_option('visualization')
     qt_required_modules += ['Gui','Widgets']
   endif
-  qt_dep = dependency('qt5', modules: qt_required_modules)
+  qt_dep = dependency('qt6', modules: qt_required_modules)
 endif
 
 # 'src/algebra/pascal_triangle.cpp',
