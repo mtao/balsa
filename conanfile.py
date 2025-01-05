@@ -66,10 +66,11 @@ class Balsa(ConanFile):
     default_options = __DEFAULT_OPTIONS__
 
 
-                                               
-    def configure(self):
+    def requirements(self):
         for dep in dependencies(self):
             self.requires(dep)
+                                               
+    def configure(self):
 
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
