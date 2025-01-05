@@ -42,8 +42,11 @@ jobs:
         with:
           version: 2.8.1
 
+      - name: Conan dependencies
+      run: conan install . --output-folder=build --build=missing # prepare conan
+
       - name: Configure Project
-        run: meson setup builddir/
+        run: meson setup --native-file build/conan_meson_native.ini . build
         env:
           CC: gcc
 
