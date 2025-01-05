@@ -1,5 +1,6 @@
 from conan import ConanFile
 from conan.tools.meson import MesonToolchain
+from conan.tools.gnu import PkgConfigDeps
 import os
 
 __BASE_DEPS__ = [
@@ -36,7 +37,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
             ("pngpp", [True,False], False,
                 ["pngpp/0.2.10"]
                 ),
-            ("qt", [True,False], False,
+            ("qt", [True,False], True,
                 ["qt/5.15.8"]
                 ),
             # These are libs that i want options for but meson has to handle
@@ -65,22 +66,23 @@ class Balsa(ConanFile):
     options = __OPTIONS__
     default_options = __DEFAULT_OPTIONS__
 
+    generators = "PkgConfigDeps"
+
 
     def requirements(self):
         for dep in dependencies(self):
             self.requires(dep)
                                                
     def configure(self):
-
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
-
+             
     def generate(self):                           
         meson = MesonToolchain(self)                   
         args = []
         for name, _, _, _ in __OPTIONAL_FLAGS_WITH_DEPS__:
             value = getattr(self.options,name)
-            meson.preprocessor_definitions[name] =  value
-        meson.generate()                          
-                                               
+            meson.project_options[name] =  value
+        meson.generate()
+
                                                

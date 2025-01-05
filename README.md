@@ -10,9 +10,8 @@ This package is build using `meson` and dependencies can be installed using
     pip install conan meson
 
 ```bash
-mkdir build # make build directory
+conan install . --output-folder=build --build=missing # prepare conan
 pushd build # enter build directory
-conan install .. --build-missing # pull dependencies, build as needed
-conan build .. --build-folder=. # set up meson and build
+meson setup --native-file conan_meson_native.ini .. . # configure meson to use the output of conan
+ninja # build
 ```
-Subsequent build can be done with Ninja.
