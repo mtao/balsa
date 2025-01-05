@@ -2,7 +2,7 @@
 #define BALSA_VISUALIZATION_QT_MESH_VIEWER_WIDGET_HPP
 
 
-#include <QtWidgets/QOpenGLWidget>
+#include <QOpenGLWidget>
 
 namespace balsa::visualization::qt::mesh_viewer {
 class Widget : public QOpenGLWidget {

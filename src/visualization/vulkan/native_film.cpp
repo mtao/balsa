@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/native_film.hpp"
 #include <spdlog/spdlog.h>
+#include <fmt/ranges.h>
 
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
