@@ -15,8 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        # config: [Debug, Release]
-        config: [default]
+        config: [Debug, Release]
         # os: [ubuntu-latest, macos-latest, windows-latest]
         meson_version: ["1.5.2"] #["1.2.0", "1.3.0", "1.4.0"]
     steps:
@@ -53,7 +52,11 @@ jobs:
 
       - name: Conan profile creation
         run: | 
-          conan profile detect
+          conan profile detect || true
+          pushd ~/.conan2/profiles
+          cp default ${{ matrix.config }}
+          sed -i 's|Release|${{ matrix.connfig }}|' ${{ matrix.config }}
+
 
 
       - name: Conan dependencies
