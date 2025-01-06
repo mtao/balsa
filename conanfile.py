@@ -79,7 +79,7 @@ class Balsa(ConanFile):
             # glfw and qt overlap sadly
             self.requires("vulkan-headers/1.3.268.0",override=True)
             self.requires("vulkan-loader/1.3.268.0",override=True)
-            self.requires("glslang/1.3.268.0",override=True)
+            self.requires("glslang/11.7.0",override=True)
             self.requires("spirv-tools/1.3.268.0",override=True)
             self.requires("spirv-headers/1.3.268.0",override=True)
                                                
