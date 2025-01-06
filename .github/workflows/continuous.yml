@@ -1,6 +1,6 @@
 name: Balsa Continuous Integration
 
-on:
+#on:
   #push:
   #  paths:
   #    - "**.c"
