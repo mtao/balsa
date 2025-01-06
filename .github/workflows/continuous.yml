@@ -1,20 +1,20 @@
 name: Balsa Continuous Integration
 
 on:
-  push:
-    paths:
-      - "**.c"
-      - "**.h"
-      - "**.cpp"
-      - "**.hpp"
-      - "**.hxx"
-  pull_request:
-    paths:
-      - "**.c"
-      - "**.h"
-      - "**.cpp"
-      - "**.hpp"
-      - "**.hxx"
+  #push:
+  #  paths:
+  #    - "**.c"
+  #    - "**.h"
+  #    - "**.cpp"
+  #    - "**.hpp"
+  #    - "**.hxx"
+  #pull_request:
+  #  paths:
+  #    - "**.c"
+  #    - "**.h"
+  #    - "**.cpp"
+  #    - "**.hpp"
+  #    - "**.hxx"
 
 jobs:
   build:

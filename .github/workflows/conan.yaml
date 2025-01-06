@@ -1,0 +1,62 @@
+name: Balsa Meson Integration
+
+on:
+  push:
+    paths:
+      - "conanfile.py"
+  pull_request:
+    paths:
+      - "conanfile.py"
+
+jobs:
+
+  linux-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Linux dependencies
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt update
+          sudo apt-get install libgl-dev libgl1-mesa-dev libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev libxau-dev libxaw7-dev libxcomposite-dev libxcursor-dev libxdamage-dev libxfixes-dev libxi-dev libxinerama-dev libxkbfile-dev libxmuu-dev libxrandr-dev libxrender-dev libxres-dev libxss-dev libxtst-dev libxv-dev libxxf86vm-dev libxcb-glx0-dev libxcb-render0-dev libxcb-render-util0-dev libxcb-xkb-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-xinerama0-dev libxcb-dri3-dev uuid-dev libxcb-cursor-dev libxcb-dri2-0-dev libxcb-dri3-dev libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-res0-dev libxcb-util-dev 
+          fi
+
+  deps:
+    needs: linux-deps
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        # config: [Debug, Release]
+        config: [default]
+        # os: [ubuntu-latest, macos-latest, windows-latest]
+        meson_version: ["1.5.2"] #["1.2.0", "1.3.0", "1.4.0"]
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: python -m pip install meson==${{ matrix.meson_version }} ninja
+
+      - name: Install Conan
+        id: conan
+        uses: turtlebrowser/get-conan@main
+        with:
+          version: 2.8.1
+
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-${{ matrix.config }}-cache-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-${{ matrix.config }}-cache
+
+      - name: Conan profile creation
+        run: | 
+          conan profile detect
+
+
+      - name: Conan dependencies
+        run: conan install . --output-folder=build --build=missing --profile:all ${{ matrix.config }} # prepare conan
