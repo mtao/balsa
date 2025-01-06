@@ -48,6 +48,7 @@ jobs:
       - name: Cache conan 
         uses: actions/cache@v4
         with:
+          key: ${{ runner.os }}-${{ matrix.config }}-cache-${{ github.sha }}
           path: |
             ~/.conan2
 
