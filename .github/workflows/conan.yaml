@@ -55,7 +55,7 @@ jobs:
           conan profile detect || true
           pushd ~/.conan2/profiles
           cp default ${{ matrix.config }}
-          sed -i 's|Release|${{ matrix.connfig }}|' ${{ matrix.config }}
+          sed -i 's|Release|${{ matrix.config }}|' ${{ matrix.config }}
 
 
 
