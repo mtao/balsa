@@ -127,6 +127,11 @@ geometry_sources = [
 geometry_required_deps = core_required_deps 
 geometry_required_deps += TBB_dep
 
+if get_option('alembic')
+  alembic_dep = dependency('alembic')
+  core_required_deps += alembic_dep
+endif
+
 if get_option('partio') 
   partio_dep = dependency('partio', required: false)
   if not partio_dep.found()

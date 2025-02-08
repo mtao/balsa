@@ -44,6 +44,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
             ("partio", [True,False], True,[]),
             ("igl", [True,False], True,[]),
             ("eltopo", [True,False], True,[]),
+            ("alembic", [True,False], True,['alembic/1.8.6']),
             ]
 
 

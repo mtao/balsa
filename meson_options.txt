@@ -7,6 +7,7 @@ option('protobuf', type : 'boolean', value : true, description : 'Use protobuf')
 option('partio', type : 'boolean', value : true, description : 'Use partio')
 option('imgui', type : 'boolean', value : true, description : 'Use imgui')
 option('igl', type : 'boolean', value : true, description : 'Use libigl')
+option('alembic', type : 'boolean', value : true, description : 'Use alembic')
 
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
 option('glfw', type : 'boolean', value : true, description : 'Use glfw')
