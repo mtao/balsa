@@ -135,7 +135,12 @@ endif
 if get_option('partio') 
   #partio_dep = dependency('partio', required: false)
   #if not partio_dep.found()
-  partio_subproj = cmake.subproject('partio')
+  partio_opts = cmake.subproject_options()
+  partio_opts.add_cmake_defines({'PARTIO_TOOLS_ENABLED': false,
+'PARTIO_PYTHON_ENABLED': false,
+'PARTIO_DOC_ENABLED': false})
+
+  partio_subproj = cmake.subproject('partio', options: partio_opts)
   partio_dep = partio_subproj.dependency('partio')
   #endif
 
