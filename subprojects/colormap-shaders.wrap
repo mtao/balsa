@@ -1,10 +1,6 @@
 [wrap-git]
-url = https://github.com/kbinani/colormap-shaders.git
-revision = 7ddaa34978c4729cfe6eddaf7bf68bb4831760bb
-#patch_url = file:///home/mtao/balsa/subprojects/patches/
-patch_url = http://www.dgp.toronto.edu/~mtao/files/colormap-shaders.zip
-patch_filename = colormap-shaders.zip
-patch_hash = a6250c8af854475901d7c31d924f54e1f3ffbd1c49068835b0d78296fc0f592f 
+url = https://github.com/mtao/colormap-shaders.git
+revision = bda0a816efba02b90dc9655cdaec9ef72f610f26 
 
 [provide]
 dependency_names = colormap_shaders
