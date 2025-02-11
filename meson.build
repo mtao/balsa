@@ -174,9 +174,9 @@ if get_option('visualization')
   endif
 
   glm_dep = dependency('glm')
-  colormap_proj = subproject('colormap-shaders')
-  colormap_shaders_sources = colormap_proj.get_variable('colormap_sources')
-  colormap_shaders_include_path  = colormap_proj.get_variable('colormap_shaders_include_path')
+
+  colormap_proj = subproject('colormap_shaders')
+  colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep') #, include_type:'system')
   
   visualization_sources = [
     'src/visualization/vulkan/film.cpp',
@@ -208,12 +208,11 @@ if get_option('visualization')
     )
 
 
-  visualization_sources += colormap_shaders_sources
   visualization_sources += visualization_qt_sources
   visualization_sources += visualization_qt_mocced
   visualization_sources += glsl_resource_sources
   
-  visualization_required_deps = [qt_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib]
+  visualization_required_deps = [qt_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
 
 
   
@@ -247,8 +246,8 @@ if get_option('visualization')
   visualization_required_deps += core_dep
   visualization_required_deps += geometry_dep
 
-  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_required_deps, include_directories: [include_dir, colormap_shaders_include_path])
-  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_required_deps, include_directories: [colormap_shaders_include_path])
+  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_required_deps, include_directories: [include_dir])
+  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_required_deps, include_directories: [include_dir])
   
 endif
 
