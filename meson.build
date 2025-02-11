@@ -133,11 +133,11 @@ if get_option('alembic')
 endif
 
 if get_option('partio') 
-  partio_dep = dependency('partio', required: false)
-  if not partio_dep.found()
-    partio_subproj = cmake.subproject('partio')
-    partio_dep = partio_subproj.dependency('partio')
-  endif
+  #partio_dep = dependency('partio', required: false)
+  #if not partio_dep.found()
+  partio_subproj = cmake.subproject('partio')
+  partio_dep = partio_subproj.dependency('partio')
+  #endif
 
   geometry_required_deps += partio_dep
   geometry_sources += 'src/geometry/point_cloud/partio_loader.cpp'

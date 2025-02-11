@@ -7,6 +7,7 @@ __BASE_DEPS__ = [
         "spdlog/1.14.1", 
         "eigen/3.4.0",
         "range-v3/cci.20240905",  
+        # "abseil/20240722.0",
         # "fmt/11.0.2", 
         "onetbb/2021.10.0",  # constrained by openvdb
         "catch2/3.7.1",
@@ -76,6 +77,7 @@ class Balsa(ConanFile):
 
         #  make sure fmt is the version we want
         self.requires("fmt/11.0.2", override=True)
+        self.requires("abseil/20240722.0", override=True)
         if self.options.visualization:
             # glfw and qt overlap sadly
             self.requires("vulkan-headers/1.3.268.0",override=True)
