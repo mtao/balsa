@@ -3,10 +3,10 @@
 #include <fstream>
 #include <optional>
 #include <nlohmann/json.hpp>
-#include <balsa/geometry/polygon_mesh/read_obj.hpp>
-//#include <balsa/geometry/triangle_mesh/read_obj.hpp>
-//#include <balsa/geometry/mesh/boundary_facets.h>
-//#include <balsa/geometry/bounding_box.hpp>
+#include <balsa/geometry/triangle_mesh/read_obj.hpp>
+#include <balsa/geometry/simplicial_complex/boundaries.hpp>
+#include <balsa/geometry/simplicial_complex/volumes.hpp>
+#include <balsa/geometry/bounding_box.hpp>
 
 int main(int argc, char *argv[]) {
     cxxopts::Options opts("mesh_view", "a simple mesh statistics tool");
@@ -19,6 +19,7 @@ int main(int argc, char *argv[]) {
         ("o,output", "output filepath", cxxopts::value<std::string>())
         ("c,counts", "show element counts", cxxopts::value<bool>()->default_value("false"))
         ("b,bounding_box", "show bounding box", cxxopts::value<bool>()->default_value("false"))
+        ("v,volumes", "show simplex volumes", cxxopts::value<bool>()->default_value("false"))
         ("h,help", "Print usage");
 
     opts.parse_positional({"filenames"});
@@ -56,19 +57,44 @@ int main(int argc, char *argv[]) {
             js["filename"] = filename;
         }
 
-        balsa::geometry::polygon_mesh::read_objD(filename);
-        //auto [V, F] = balsa::geometry::triangle_mesh::read_objD(filename).positions;
-        /*
-        if (do_all || res["counts"].as<bool>()) {
-            auto E = mtao::geometry::mesh::boundary_facets(F);
+        auto mesh = balsa::geometry::triangle_mesh::read_objD(filename).position;
+
+        auto [V, F, E] = mesh;
+        if (do_all || res["simplex_counts"].as<bool>()) {
+            if (E.cols() == 0) {
+                E = balsa::geometry::simplicial_complex::boundaries(F);
+            }
             if (use_json) {
+
+                js["counts"] = { V.cols(), E.cols(), F.cols() };
 
             } else {
                 os << "#V,#E,#F: " << V.cols() << "," << E.cols() << "," << F.cols() << std::endl;
             }
         }
+        if (do_all || res["volumes"].as<bool>()) {
+            auto EVol = balsa::geometry::simplicial_complex::volumes(V, E);
+            auto FVol = balsa::geometry::simplicial_complex::volumes(V, F);
+            auto get_stats = [](const auto &vec) {
+                nlohmann::json js;
+                double min = vec.minCoeff();
+                double max = vec.maxCoeff();
+
+                js["min"] = min;
+                js["max"] = max;
+                js["mean"] = vec.sum() / vec.size();
+                js["range"] = max - min;
+                return js;
+            };
+            if (use_json) {
+                js["volumes"]["edges"] = get_stats(EVol);
+                js["volumes"]["triangles"] = get_stats(FVol);
+            }
+        }
+
+
         if (do_all || res["bounding_box"].as<bool>()) {
-            auto bb = mtao::geometry::bounding_box(V);
+            auto bb = balsa::geometry::bounding_box(V);
             if (use_json) {
 
                 const auto &m = bb.min();
@@ -76,18 +102,14 @@ int main(int argc, char *argv[]) {
                 // clang-format off
             js["bounding_box"] = {
                 {"min",
-                    {
-                        { "x", m.x() },
-                        { "y", m.y() },
-                        { "z", m.z() }
-                    }
+                        {  m.x() ,
+                          m.y() ,
+                          m.z() }
                 },
                 {"max",
-                    {
-                        { "x", M.x() },
-                        { "y", M.y() },
-                        { "z", M.z() }
-                    }
+                        {  M.x() ,
+                          M.y() ,
+                          M.z() }
                 }
             };
                 // clang-format on
@@ -98,6 +120,5 @@ int main(int argc, char *argv[]) {
         if (use_json) {
             os << js.dump(2) << std::endl;
         }
-        */
     }
 }

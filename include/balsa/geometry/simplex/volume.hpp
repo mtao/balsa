@@ -71,9 +71,9 @@ auto volume_unsigned(const MatType &V) -> typename MatType::Scalar {
 
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto volume(const MatType &V) -> typename MatType::Scalar {
+    constexpr static int rows = eigen::concepts::detail::compile_col_size<MatType>;
+    constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
     if constexpr (eigen::concepts::RowColStaticCompatible<MatType>) {
-        constexpr static int rows = eigen::concepts::detail::compile_col_size<MatType>;
-        constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
         if constexpr (rows + 1 == cols) {
             return detail::volume_signed(V);
         } else {

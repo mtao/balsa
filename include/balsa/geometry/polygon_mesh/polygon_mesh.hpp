@@ -9,19 +9,13 @@
 
 namespace balsa::geometry::polygon_mesh {
 template<typename Scalar = double, int D = 3>
-struct PolygonMesh : public std::tuple<eigen::ColVectors<Scalar, D>,// vertices
-                                       PolygonBuffer<int>,// index buffer
-                                       PLCurveBuffer<int>>
+struct PolygonMesh
 
 {
-    using Base = std::tuple<eigen::ColVectors<Scalar, D>,// vertices
-                            PolygonBuffer<int>,// index buffer
-                            PLCurveBuffer<int>>;
-
-    using Base::Base;
-    eigen::ColVectors<Scalar, D> &vertices = std::get<0>(*this);
-    PolygonBuffer<int> &polygons = std::get<1>(*this);
-    PLCurveBuffer<int> &curves= std::get<2>(*this);
+  public:
+    eigen::ColVectors<Scalar, D> vertices;
+    PolygonBuffer<int> polygons;
+    PLCurveBuffer<int> curves;
 };
 }// namespace balsa::geometry::polygon_mesh
 
