@@ -1,6 +1,6 @@
 [wrap-git]
 url = https://github.com/mtao/colormap-shaders.git
-revision = bda0a816efba02b90dc9655cdaec9ef72f610f26 
+revision = d8d4b889c357a6431c756af23b1d0ae55733ab3d
 
 [provide]
 dependency_names = colormap_shaders
