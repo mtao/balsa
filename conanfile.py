@@ -12,6 +12,7 @@ __BASE_DEPS__ = [
         "onetbb/2021.10.0",  # constrained by openvdb
         "catch2/3.7.1",
         "cxxopts/3.2.0",
+        "mdspan/0.6.0",
         ]
 
 

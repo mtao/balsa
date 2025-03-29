@@ -26,6 +26,9 @@ spdlog_dep = dependency('spdlog', version: spdlog_version)
 
 eigen_dep = dependency('eigen3', version: eigen_version)
 
+zipper_proj = subproject('zipper')
+zipper_dep = zipper_proj.get_variable('zipper_dep')
+
 range_v3_dep = dependency('range-v3')
 
 if get_option('protobuf')
@@ -82,7 +85,7 @@ core_headers = [
 
 include_dir = [include_directories('include')]
 
-core_required_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep]
+core_required_deps = [spdlog_dep, eigen_dep,range_v3_dep, fmt_dep, zipper_dep]
 
 if get_option('qt')
   core_sources += 'src/qt/spdlog_logger.cpp'
