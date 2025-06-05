@@ -2,14 +2,17 @@
 #include <iostream>
 
 #include <balsa/geometry/simplex/volume.hpp>
+#include <balsa/zipper/types.hpp>
+#include <zipper/views/nullary/ConstantView.hpp>
 using namespace Catch;
 
 TEST_CASE("volume", "[simplex]") {
     {
         // template arguments in templates still have some minor limitations but integral_constant helps handle them!
         auto identity_test = []<int N>(std::integral_constant<int, N>) {
-            balsa::eigen::ColVectors<float, N> V(N, N + 1);
-            V.col(0).setZero();
+            balsa::zipper::ColVectors<float, N> V(N, N + 1);
+            V.col(0) = zipper::views::nullary::ConstantView<float>(0,V.extents());
+            V.slice(zipper::slice(1), zipper::full_extent) = zipper::views::nullary::ConstantView<float>(0,V.extents());
             V.template rightCols<N>().setIdentity();
             double vol = balsa::geometry::simplex::volume(V);
             double svol = balsa::geometry::simplex::volume_signed(V);
