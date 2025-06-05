@@ -26,9 +26,9 @@ spdlog_dep = dependency('spdlog', version: spdlog_version)
 
 eigen_dep = dependency('eigen3', version: eigen_version)
 
+mdspan_dep = dependency('mdspan')
 zipper_proj = subproject('zipper')
 zipper_dep = zipper_proj.get_variable('zipper_dep')
-mdspan_dep = dependency('mdspan')
 
 range_v3_dep = dependency('range-v3')
 
