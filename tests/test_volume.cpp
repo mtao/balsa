@@ -13,6 +13,9 @@ TEST_CASE("volume", "[simplex]") {
             balsa::zipper::ColVectors<float, N> V(N, N + 1);
             V.col(0) = zipper::views::nullary::ConstantView<float>(0);
             V.template slice<zipper::static_index_t<1>, zipper::full_extent_t>() = zipper::views::nullary::ConstantView<float>(0);
+            for(int j = 0; j < N; ++j) {
+                V(j,j+1) = 1;
+            }
             //V.template rightCols<N>().setIdentity();
             double vol = balsa::geometry::simplex::volume(V);
             double svol = balsa::geometry::simplex::volume_signed(V);

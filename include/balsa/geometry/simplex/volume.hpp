@@ -23,6 +23,17 @@ auto volume_unsigned(const MatType &V) -> typename MatType::Scalar;
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto volume(const MatType &V) -> typename MatType::Scalar;
 
+// signed volume of a simplex, only works for N,N+1 shaped matrices
+template<zipper::concepts::MatrixBaseDerived MatType>
+    requires(MatType::extents_traits::is_dynamic || MatType::extents_type::static_extent(0) + 1 == MatType::extents_type::static_extent(1))
+auto volume_signed(const MatType &V) -> typename MatType::value_type;
+
+template<zipper::concepts::MatrixBaseDerived MatType>
+auto volume_unsigned(const MatType &V) -> typename MatType::value_type;
+
+template<zipper::concepts::MatrixBaseDerived MatType>
+auto volume(const MatType &V) -> typename MatType::value_type;
+
 
 namespace detail {
     template<eigen::concepts::MatrixBaseDerived MatType>
@@ -91,38 +102,13 @@ auto volume(const MatType &V) -> typename MatType::Scalar {
 }
 
 
-
-
-
-
-
-
-
-
-
-
 // signed volume of a simplex, only works for N,N+1 shaped matrices
 template<zipper::concepts::MatrixBaseDerived MatType>
     requires(MatType::extents_traits::is_dynamic || MatType::extents_type::static_extent(0) + 1 == MatType::extents_type::static_extent(1))
-auto volume_signed(const MatType &V) -> typename MatType::value_type;
-// unsigned volume of a simplex, only works for N,
-template<zipper::concepts::MatrixBaseDerived MatType>
-auto volume_unsigned(const MatType &V) -> typename MatType::value_type;
-
-template<zipper::concepts::MatrixBaseDerived MatType>
-auto volume(const MatType &V) -> typename MatType::value_type;
-
-
-
-
-
-
-
-
-template<zipper::concepts::MatrixBaseDerived MatType>
 auto volume_signed(const MatType &V) -> typename MatType::value_type {
-    return volume(eigen::as_eigen(V));
+    return volume_signed(eigen::as_eigen(V));
 }
+
 template<zipper::concepts::MatrixBaseDerived MatType>
 auto volume_unsigned(const MatType &V) -> typename MatType::value_type {
     return volume_unsigned(eigen::as_eigen(V));
@@ -133,17 +119,6 @@ template<zipper::concepts::MatrixBaseDerived MatType>
 auto volume(const MatType &V) -> typename MatType::value_type {
     return volume(eigen::as_eigen(V));
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 }// namespace balsa::geometry::simplex

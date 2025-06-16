@@ -198,7 +198,7 @@ auto as_eigen(const ZipType &zip) {
     using MatType = Eigen::Matrix<typename ZipType::value_type,
                                   detail::zipper_to_eigen_dim(extents_type::static_extent(0)),
                                   1>;
-    return MatType::NullaryExpr(zip.extent(0), zip.extent(1), [&zip](Eigen::Index a) {
+    return MatType::NullaryExpr(zip.extent(0), [&zip](Eigen::Index a) {
         return zip(a);
     });
 }
