@@ -34,6 +34,7 @@ geometry_test_sources = [
   'test_earclipping.cpp',
   'test_circumcenter.cpp',
   'test_volume.cpp',
+  'test_bounding_box.cpp',
   'test_smallest_enclosing_sphere.cpp',
 ]
 

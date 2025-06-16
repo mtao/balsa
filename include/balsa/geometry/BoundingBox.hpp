@@ -10,6 +10,9 @@
 namespace balsa::geometry {
 template<typename T, zipper::rank_type Dim = std::dynamic_extent>
 class BoundingBox {
+  private:
+    using limits = std::numeric_limits<T>;
+
   public:
     template<
       zipper::concepts::VectorBaseDerived MinVec,
@@ -20,6 +23,11 @@ class BoundingBox {
       zipper::concepts::VectorBaseDerived Vec>
     BoundingBox(const Vec &m);
     BoundingBox();
+
+    BoundingBox(zipper::index_type dim) :
+
+                                          m_min(zipper::views::nullary::ConstantView<T>(zipper::create_dextents(dim), limits::max())),
+                                          m_max(zipper::views::nullary::ConstantView<T>(zipper::create_dextents(dim), limits::min())) {}
 
     template<zipper::concepts::VectorBaseDerived Vec>
     void expand(const Vec &a);
@@ -32,8 +40,8 @@ class BoundingBox {
     auto min() const { return m_min; }
     auto max() const { return m_max; }
 
+
   private:
-    using limits = std::numeric_limits<T>;
     zipper::Vector<T, Dim> m_min = zipper::views::nullary::ConstantView<T>(limits::max());
     zipper::Vector<T, Dim> m_max = zipper::views::nullary::ConstantView<T>(limits::min());
 };
@@ -57,15 +65,15 @@ template<typename T, zipper::rank_type Dim>
 template<zipper::concepts::VectorBaseDerived Vec>
 void BoundingBox<T, Dim>::expand(const Vec &a) {
 
-    m_min = (a.as_array().min(m_min.as_array())).as_vector();
-    m_max = (a.as_array().max(m_max.as_array())).as_vector();
+    m_min = zipper::min(a.as_array(), m_min.as_array());
+    m_max = zipper::max(a.as_array(), m_max.as_array());
 }
 
 template<typename T, zipper::rank_type Dim>
 void BoundingBox<T, Dim>::expand(const BoundingBox &a) {
 
-    m_min = (a.m_min.as_array().min(m_min.as_array())).as_vector();
-    m_max = (a.m_max.as_array().max(m_max.as_array())).as_vector();
+    m_min = zipper::min(a.m_min.as_array(), m_min.as_array());
+    m_max = zipper::max(a.m_max.as_array(), m_max.as_array());
 }
 template<typename T, zipper::rank_type Dim>
 template<zipper::concepts::VectorBaseDerived Vec>
