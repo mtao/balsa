@@ -206,5 +206,4 @@ auto as_eigen(const ZipType &zip) {
 
 }// namespace balsa::eigen
 
->>>>>>> main
 #endif
