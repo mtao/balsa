@@ -26,6 +26,7 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         CHECK(bb.min() == zipper::Vector<float, 3>({ 0, 0, 0 }));
         CHECK(bb.min() == zipper::Vector<float, 3>({ 0, 0, 0 }));
         CHECK(bb.max() == bb.min());
+        CHECK(bb.range() == zipper::Vector<float, 3>({ 0, 0, 0 }));
 
 
         V.col(1) = { 1, 3, 4 };
@@ -34,6 +35,7 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
 
         CHECK(bb.min() == zipper::Vector<float, 3>({ -2, -5, 0 }));
         CHECK(bb.max() == zipper::Vector<float, 3>({ 1, 3, 20 }));
+        CHECK(bb.range() == zipper::Vector<float, 3>({ 3, 8, 20 }));
     }
     {
 
@@ -45,5 +47,6 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
 
         CHECK(bb3.min() == bb.min());
         CHECK(bb3.max() == bb2.max());
+        CHECK(bb3.range().eval() == zipper::Vector<float, 2>({ 4, 3 }));
     }
 }
