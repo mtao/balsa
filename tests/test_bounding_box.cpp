@@ -36,6 +36,15 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         CHECK(bb.min() == zipper::Vector<float, 3>({ -2, -5, 0 }));
         CHECK(bb.max() == zipper::Vector<float, 3>({ 1, 3, 20 }));
         CHECK(bb.range() == zipper::Vector<float, 3>({ 3, 8, 20 }));
+
+        CHECK(bb.corner(0) == zipper::Vector<float, 3>({ -2, -5, 0 }));
+        CHECK(bb.corner(1) == zipper::Vector<float, 3>({ 1, -5, 0 }));
+        CHECK(bb.corner(2) == zipper::Vector<float, 3>({ -2, 3, 0 }));
+        CHECK(bb.corner(3) == zipper::Vector<float, 3>({ 1, 3, 0 }));
+        CHECK(bb.corner(4) == zipper::Vector<float, 3>({ -2, -5, 20 }));
+        CHECK(bb.corner(5) == zipper::Vector<float, 3>({ 1, -5, 20 }));
+        CHECK(bb.corner(6) == zipper::Vector<float, 3>({ -2, 3, 20 }));
+        CHECK(bb.corner(7) == zipper::Vector<float, 3>({ 1, 3, 20 }));
     }
     {
 

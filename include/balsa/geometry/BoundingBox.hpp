@@ -2,6 +2,7 @@
 #define BALSA_GEOMETRY_BOUNDINGBOX
 #include <zipper/types.hpp>
 #include <zipper/Vector.hpp>
+#include <bitset>
 #include <zipper/as.hpp>
 #include <zipper/views/nullary/ConstantView.hpp>
 #include <zipper/concepts/VectorBaseDerived.hpp>
@@ -46,6 +47,8 @@ class BoundingBox {
     auto range() const {
         return m_max - m_min;
     }
+
+    zipper::Vector<T, Dim> corner(const std::bitset<Dim> &c) const;
 
     const auto &min() const { return m_min; }
     const auto &max() const { return m_max; }
@@ -96,6 +99,15 @@ template<
 BoundingBox<T, Dim>::BoundingBox(const Vec &m) : m_min(m), m_max(m) {
 }
 
+template<typename T, zipper::rank_type Dim>
+
+auto BoundingBox<T, Dim>::corner(const std::bitset<Dim> &c) const -> zipper::Vector<T, Dim> {
+    zipper::Vector<T, Dim> D;
+    for (zipper::rank_type j = 0; j < Dim; ++j) {
+        D(j) = c[j] ? max()(j) : min()(j);
+    }
+    return D;
+}
 
 template<typename T, zipper::rank_type Dim>
 template<zipper::concepts::VectorBaseDerived Vec>
