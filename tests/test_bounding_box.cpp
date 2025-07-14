@@ -21,8 +21,8 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         auto bb = balsa::geometry::bounding_box(V);
 
 
-        spdlog::info("{} {}", fmt::join(bb.min(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
-        spdlog::info("{} {}", fmt::join(bb.max(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
+        //spdlog::info("{} {}", fmt::join(bb.min(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
+        //spdlog::info("{} {}", fmt::join(bb.max(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
         CHECK(bb.min() == zipper::Vector<float, 3>({ 0, 0, 0 }));
         CHECK(bb.min() == zipper::Vector<float, 3>({ 0, 0, 0 }));
         CHECK(bb.max() == bb.min());

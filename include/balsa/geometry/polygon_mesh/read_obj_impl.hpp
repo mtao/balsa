@@ -71,7 +71,7 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
             for (auto &&[vecptr, str] : zip) {
                 auto s = str | ranges::to<std::string>;
                 if (!s.empty()) {
-                    int value;
+                    int value = 0;
                     std::from_chars(s.data(), s.data() + s.size(), value);
                     vecptr->emplace_back(value - 1);
                 }
