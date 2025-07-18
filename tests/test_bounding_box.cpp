@@ -1,4 +1,5 @@
 #include <catch2/catch_all.hpp>
+#include <spdlog/spdlog.h>
 #include <iostream>
 
 #include <balsa/geometry/bounding_box.hpp>
