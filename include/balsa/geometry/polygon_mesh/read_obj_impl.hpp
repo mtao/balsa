@@ -2,7 +2,6 @@
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H
 #include "read_obj.hpp"
-#include "balsa/eigen/stl2eigen.hpp"
 #include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <fstream>
 #include <range/v3/view/take_exactly.hpp>
@@ -164,17 +163,17 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
 
     return OBJMesh<Scalar, D>{
         .position = PolygonMesh<Scalar, D>{
-          eigen::ColVectors<Scalar, D>(balsa::eigen::stl2eigen(v)),//
+          zipper::ColVectors<Scalar, D>((v)),//
           PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(vi) },//
           PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(vl) },//
         },//
         .texture = PolygonMesh<Scalar, 2>{
-          eigen::ColVectors<Scalar, 2>(balsa::eigen::stl2eigen(t)),//
+          zipper::ColVectors<Scalar, 2>(balsa::zipper::stl2zipper(t)),//
           PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(ti) },//
           PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(tl) },//
         },
         .normal = PolygonMesh<Scalar, D>{
-          eigen::ColVectors<Scalar, D>(balsa::eigen::stl2eigen(n)),//
+          zipper::ColVectors<Scalar, D>(balsa::zipper::stl2zipper(n)),//
           PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(ni) },//
           PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(nl) },//
         },

@@ -4,7 +4,7 @@
 
 namespace balsa::geometry::triangle_mesh {
 namespace {
-    eigen::ColVecs2i edges_from_curves(const polygon_mesh::PLCurveBuffer<int> &curves) {
+    zipper::ColVecs2i edges_from_curves(const polygon_mesh::PLCurveBuffer<int> &curves) {
 
         int curve_count = curves.curve_count();
         if (curve_count == 0) {
@@ -14,7 +14,7 @@ namespace {
         int edge_count = vertex_count - curve_count;
 
 
-        eigen::ColVecs2i E(2, edge_count);
+        zipper::ColVecs2i E(2, edge_count);
         int index = 0;
         for (int j = 0; j < curve_count; ++j) {
             auto c = curves.get_curve(j);

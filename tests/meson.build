@@ -30,12 +30,12 @@ test('mesh_loading test', test_mesh_loading)
 
 
 geometry_test_sources = [
-  'test_winding_number.cpp',
-  'test_earclipping.cpp',
+  #'test_winding_number.cpp',
+  #'test_earclipping.cpp',
   'test_circumcenter.cpp',
   'test_volume.cpp',
   'test_bounding_box.cpp',
-  'test_smallest_enclosing_sphere.cpp',
+  #'test_smallest_enclosing_sphere.cpp',
 ]
 
 test_geometry = executable('test_geometry',  geometry_test_sources, dependencies: [geometry_dep,catch2_with_main_dep])

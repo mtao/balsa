@@ -4,7 +4,7 @@
 
 #include <balsa/geometry/triangle_mesh/earclipping.hpp>
 TEST_CASE("earclipping_orientation", "[earclipping]") {
-    balsa::eigen::ColVectors<float, 2> V(2, 5);
+    balsa::zipper::ColVectors<float, 2> V(2, 5);
     std::vector loop{ 0, 1, 2, 3, 4 };
 
 
@@ -16,15 +16,16 @@ TEST_CASE("earclipping_orientation", "[earclipping]") {
     //  /        |
     // 0---------1
     //
-    V.col(0) = balsa::eigen::Vec2f(0., 0.);
-    V.col(1) = balsa::eigen::Vec2f(1., 0.);
-    V.col(2) = balsa::eigen::Vec2f(1., 1.);
-    V.col(3) = balsa::eigen::Vec2f(0., 1.);
-    V.col(4) = balsa::eigen::Vec2f(.5f, .5f);
+    V.col(0) = balsa::zipper::Vec2f({0., 0.});
+    V.col(1) = balsa::zipper::Vec2f({1., 0.});
+    V.col(2) = balsa::zipper::Vec2f({1., 1.});
+    V.col(3) = balsa::zipper::Vec2f({0., 1.});
+    V.col(4) = balsa::zipper::Vec2f({.5f, .5f});
 
 
     auto T = balsa::geometry::triangle_mesh::earclipping(V, loop);
     std::cout << T << std::endl;
+    spdlog::info("{}", T);
 
     // 0 1 2
     // 0 2 3

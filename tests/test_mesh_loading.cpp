@@ -78,7 +78,7 @@ TEST_CASE("load polynomial obj", "[load_poly_plane_obj]") {
 
 
     REQUIRE(m.position.polygons == m2.position.polygons);
-    REQUIRE(m.position.vertices.topRows<2>() == m2.position.vertices);
+    REQUIRE(m.position.vertices.slice<zipper::static_slice<0,2,1>,zipper::full_extent_t>>() == m2.position.vertices);
     REQUIRE((m.position.vertices.row(2).array() == 0).all());
 }
 

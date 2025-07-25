@@ -1,22 +1,22 @@
 #if !defined(BALSA_GEOMETRY_TRIANGLE_MESH_VOLUMES_HPP)
 #define BALSA_GEOMETRY_TRIANGLE_MESH_VOLUMES_HPP
 
-#include "balsa/eigen/concepts/shape_types.hpp"
 #include "balsa/geometry/simplex/volume.hpp"
-#include "balsa/eigen/concepts/index_types.hpp"
 #include "balsa/utils/factorial.hpp"
 namespace balsa::geometry::triangle_mesh {
-template<eigen::concepts::RowStaticCompatible VertexDerived, eigen::concepts::RowStaticCompatible SimplexDerived>
-requires(eigen::concepts::IntegralMatrix<SimplexDerived>) auto volumes(const VertexDerived &V,
-                                                                       const SimplexDerived &S) {
-    // constexpr static int E = eigen::concepts::detail::compile_row_size<VertexDerived>;// embed dim
-    //  constexpr static int N = SimplexDerived::ColsAtCompileTime;//number of
-    //  elements
-    // constexpr static int D = eigen::concepts::detail::compile_row_size<VertexDerived>;// simplex dim
+template<
+  ::zipper::concepts::MatrixBaseDerived VertexDerived,
+  ::zipper::concepts::MatrixBaseDerived SimplexDerived,
+  >
+    requires(std::is_integral_v<VertexDerived::value_type>)
+auto volumes(const VertexDerived &V,
+             const SimplexDerived &S) {
     constexpr static int N = eigen::concepts::detail::compile_col_size<SimplexDerived>;// simplex dim
-    using Scalar = typename VertexDerived::Scalar;
+    using Scalar = typename VertexDerived::value_type;
 
-    balsa::eigen::Vector<Scalar, N> C(S.cols());
+    auto cols = ::zipper::detail::extents::get_extent<1>(S.extents());
+    constexpr static zipper::index_type compile_cols = SimplexDerived::extents_type::static_extent(1);
+    balsa::zipper::Vector<value_type, compile_cols> C(S.cols());
 
     // tbb::parallel_for(int(0), int(S.cols()), [&](int j) {
     //     auto s = S.col(j);

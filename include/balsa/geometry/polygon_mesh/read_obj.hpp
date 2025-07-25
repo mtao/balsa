@@ -1,7 +1,7 @@
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_H
 
-#include "polygon_mesh.hpp"
+#include "PolygonMesh.hpp"
 #include <filesystem>
 
 namespace balsa::geometry::polygon_mesh {

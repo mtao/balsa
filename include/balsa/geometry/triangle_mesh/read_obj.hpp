@@ -1,7 +1,7 @@
 #if !defined(BALSA_GEOMETRY_TRIANGLE_MESH_READ_OBJ_H)
 #define BALSA_GEOMETRY_TRIANGLE_MESH_READ_OBJ_H
 
-#include "triangle_mesh.hpp"
+#include "TriangleMesh.hpp"
 #include <filesystem>
 
 namespace balsa::geometry::triangle_mesh {
