@@ -7,17 +7,11 @@
 namespace balsa::geometry::simplex {
 
 
-template<eigen::concepts::ColStaticCompatible SimplexVertices, eigen::concepts::VecCompatible PointType>
+template<::zipper::concepts::MatrixBaseDerived SimplexVertices, ::zipper::concepts::VectorBaseDerived PointType>
 bool point_in_circumcircle(const SimplexVertices &S, const PointType &P) {
 
     auto [C, r2] = circumcenter_with_squared_radius(S);
-    return (C - P).squaredNorm() < r2;
-}
-template<zipper::concepts::MatrixBaseDerived SimplexVertices,zipper::concepts::VectorBaseDerived PointType>
-bool point_in_circumcircle(const SimplexVertices &S, const PointType &P) {
-
-    auto [C, r2] = circumcenter_with_squared_radius(S);
-    return (C - P).squaredNorm() < r2;
+    return (C - P).template norm_powered<2>() < r2;
 }
 
 }// namespace balsa::geometry::simplex

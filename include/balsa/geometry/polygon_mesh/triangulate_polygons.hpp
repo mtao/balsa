@@ -1,11 +1,11 @@
-#include "balsa/geometry/polygon_mesh/polygon_mesh.hpp"
+#include "balsa/geometry/polygon_mesh/PolygonMesh.hpp"
 #include "balsa/geometry/triangle_mesh/earclipping.hpp"
 
 namespace balsa::geometry::polygon_mesh {
 
 // triangulates the polygons in a polygon mesh
 template<typename Scalar, int D>
-balsa::eigen::ColVecs3i triangulate_polygons(const polygon_mesh::PolygonMesh<Scalar, D> &pmesh) {
+balsa::zipper::ColVecs3i triangulate_polygons(const polygon_mesh::PolygonMesh<Scalar, D> &pmesh) {
     const auto &pindices = pmesh.polygons;
     size_t poly_added = 0;
     size_t skipped = 0;
@@ -23,7 +23,7 @@ balsa::eigen::ColVecs3i triangulate_polygons(const polygon_mesh::PolygonMesh<Sca
         return pindices._buffer.reshaped(3, pindices.polygon_count());
     } else {
         int total_poly = pindices.polygon_count() + poly_added - skipped;
-        eigen::ColVecs3i F(3, total_poly);
+        zipper::ColVecs3i F(3, total_poly);
         int out_index = 0;
         for (size_t j = 0; j < pindices.polygon_count(); ++j) {
 
@@ -38,14 +38,14 @@ balsa::eigen::ColVecs3i triangulate_polygons(const polygon_mesh::PolygonMesh<Sca
             } else {
 
 
-                eigen::ColVectors<int, 3> F;
+                zipper::ColVectors<int, 3> F;
                 if constexpr (D == 3) {
                     auto a = pmesh.vertices.col(p(0));
                     auto b = pmesh.vertices.col(p(1));
                     Eigen::Matrix<Scalar, 2, 3> UV;
                     auto u = UV.row(0) = (b - a).transpose();
                     u.normalize();
-                    eigen::Vector<Scalar, 3> N;
+                    zipper::Vector<Scalar, 3> N;
                     for (int j = 1; j < p.size(); ++j) {
                         auto c = pmesh.vertices.col(p(j));
                         auto v = UV.row(1) = (c - a).normalized().transpose();

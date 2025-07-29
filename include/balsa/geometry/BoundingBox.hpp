@@ -10,19 +10,19 @@
 
 
 namespace balsa::geometry {
-template<typename T, zipper::rank_type Dim = std::dynamic_extent>
+template<typename T, ::zipper::rank_type Dim = std::dynamic_extent>
 class BoundingBox {
   private:
     using limits = std::numeric_limits<T>;
 
   public:
     template<
-      zipper::concepts::VectorBaseDerived MinVec,
-      zipper::concepts::VectorBaseDerived MaxVec>
+      ::zipper::concepts::VectorBaseDerived MinVec,
+      ::zipper::concepts::VectorBaseDerived MaxVec>
     BoundingBox(const MinVec &m, const MaxVec &M);
 
     template<
-      zipper::concepts::VectorBaseDerived Vec>
+      ::zipper::concepts::VectorBaseDerived Vec>
     BoundingBox(const Vec &m);
     BoundingBox() = default;
 
@@ -33,14 +33,14 @@ class BoundingBox {
 
     BoundingBox(zipper::index_type dim) :
 
-                                          m_min(zipper::views::nullary::ConstantView<T>(zipper::create_dextents(dim), limits::max())),
-                                          m_max(zipper::views::nullary::ConstantView<T>(zipper::create_dextents(dim), limits::lowest())) {}
+                                          m_min(::zipper::views::nullary::ConstantView<T>(::zipper::create_dextents(dim), limits::max())),
+                                          m_max(::zipper::views::nullary::ConstantView<T>(::zipper::create_dextents(dim), limits::lowest())) {}
 
-    template<zipper::concepts::VectorBaseDerived Vec>
+    template<::zipper::concepts::VectorBaseDerived Vec>
     void expand(const Vec &a);
     void expand(const BoundingBox &a);
 
-    template<zipper::concepts::VectorBaseDerived Vec>
+    template<::zipper::concepts::VectorBaseDerived Vec>
     bool contains(const Vec &a) const;
     bool contains(const BoundingBox &a) const;
 
@@ -54,15 +54,15 @@ class BoundingBox {
     const auto &max() const { return m_max; }
 
   private:
-    zipper::Vector<T, Dim> m_min = zipper::views::nullary::ConstantView<T>(limits::max());
-    zipper::Vector<T, Dim> m_max = zipper::views::nullary::ConstantView<T>(limits::lowest());
+    ::zipper::Vector<T, Dim> m_min = ::zipper::views::nullary::ConstantView<T>(limits::max());
+    ::zipper::Vector<T, Dim> m_max = ::zipper::views::nullary::ConstantView<T>(limits::lowest());
 };
 
 
 // make sure the types are teh same and the extents are valid
 template<
-  zipper::concepts::VectorBaseDerived MinVec,
-  zipper::concepts::VectorBaseDerived MaxVec>
+  ::zipper::concepts::VectorBaseDerived MinVec,
+  ::zipper::concepts::VectorBaseDerived MaxVec>
     requires(std::is_same_v<typename MinVec::value_type, typename MaxVec::value_type>
              && (MinVec::extents_type::static_extent(0) == std::dynamic_extent
                  || MinVec::extents_type::static_extent(0) == std::dynamic_extent || MaxVec::extents_type::static_extent(0) == MinVec::extents_type::static_extent(0)))
@@ -71,15 +71,15 @@ BoundingBox(const MinVec &m, const MaxVec &M) -> BoundingBox<typename MinVec::va
 
 
 template<
-  zipper::concepts::VectorBaseDerived Vec>
+  ::zipper::concepts::VectorBaseDerived Vec>
 BoundingBox(const Vec &) -> BoundingBox<typename Vec::value_type,
                                         Vec::extents_type::static_extent(0)>;
 
 
 template<typename T, zipper::rank_type Dim>
 template<
-  zipper::concepts::VectorBaseDerived MinVec,
-  zipper::concepts::VectorBaseDerived MaxVec>
+  ::zipper::concepts::VectorBaseDerived MinVec,
+  ::zipper::concepts::VectorBaseDerived MaxVec>
 BoundingBox<T, Dim>::BoundingBox(const MinVec &m, const MaxVec &M) : m_min(m), m_max(M) {
 
     constexpr bool min_ext = MinVec::extents_type::static_extent(0) == std::dynamic_extent;
@@ -95,7 +95,7 @@ BoundingBox<T, Dim>::BoundingBox(const MinVec &m, const MaxVec &M) : m_min(m), m
 
 template<typename T, zipper::rank_type Dim>
 template<
-  zipper::concepts::VectorBaseDerived Vec>
+  ::zipper::concepts::VectorBaseDerived Vec>
 BoundingBox<T, Dim>::BoundingBox(const Vec &m) : m_min(m), m_max(m) {
 }
 
@@ -110,21 +110,21 @@ auto BoundingBox<T, Dim>::corner(const std::bitset<Dim> &c) const -> zipper::Vec
 }
 
 template<typename T, zipper::rank_type Dim>
-template<zipper::concepts::VectorBaseDerived Vec>
+template<::zipper::concepts::VectorBaseDerived Vec>
 void BoundingBox<T, Dim>::expand(const Vec &a) {
 
-    m_min = zipper::as_vector(zipper::min(a.as_array(), m_min.as_array()));
-    m_max = zipper::as_vector(zipper::max(a.as_array(), m_max.as_array()));
+    m_min = ::zipper::as_vector(::zipper::min(a.as_array(), m_min.as_array()));
+    m_max = ::zipper::as_vector(::zipper::max(a.as_array(), m_max.as_array()));
 }
 
 template<typename T, zipper::rank_type Dim>
 void BoundingBox<T, Dim>::expand(const BoundingBox &a) {
 
-    m_min = zipper::as_vector(zipper::min(a.m_min.as_array(), m_min.as_array()));
-    m_max = zipper::as_vector(zipper::max(a.m_max.as_array(), m_max.as_array()));
+    m_min = ::zipper::as_vector(::zipper::min(a.m_min.as_array(), m_min.as_array()));
+    m_max = ::zipper::as_vector(::zipper::max(a.m_max.as_array(), m_max.as_array()));
 }
 template<typename T, zipper::rank_type Dim>
-template<zipper::concepts::VectorBaseDerived Vec>
+template<::zipper::concepts::VectorBaseDerived Vec>
 bool BoundingBox<T, Dim>::contains(const Vec &x) const {
 
     auto xa = x.array();

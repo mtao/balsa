@@ -52,14 +52,14 @@ namespace balsa::eigen {
 
 
 template<concepts::EigenBaseDerived EigenType, bool IsConst>
-class EigenMatrixView : public zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime> {
+class EigenMatrixView : public ::zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime> {
 
   public:
-    using Base = zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
-    using traits_type = zipper::views::detail::ViewTraits<EigenMatrixView<EigenType, IsConst>>;
+    using Base = ::zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
+    using traits_type = ::zipper::views::detail::ViewTraits<EigenMatrixView<EigenType, IsConst>>;
     using value_type = EigenType::Scalar;
-    using extents_type = zipper::extents<EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>;
-    using extents_traits = zipper::detail::ExtentsTraits<extents_type>;
+    using extents_type = ::zipper::extents<EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>;
+    using extents_traits = ::zipper::detail::ExtentsTraits<extents_type>;
 
     EigenMatrixView(const EigenType &a)
         requires(extents_traits::is_dynamic)
@@ -88,15 +88,15 @@ class EigenMatrixView : public zipper::views::nullary::NullaryViewBase<EigenMatr
 
 template<concepts::EigenBaseDerived EigenType, bool IsConst>
     requires(EigenType::RowsAtCompileTime == 1 || EigenType::ColsAtCompileTime == 1)
-class EigenVectorView : public zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)> {
+class EigenVectorView : public ::zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)> {
 
   public:
-    using Base = zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
+    using Base = ::zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
     static_assert(Base::extents_type::rank() == 1);
-    using traits_type = zipper::views::detail::ViewTraits<EigenVectorView<EigenType, IsConst>>;
+    using traits_type = ::zipper::views::detail::ViewTraits<EigenVectorView<EigenType, IsConst>>;
     using value_type = EigenType::Scalar;
-    using extents_type = zipper::extents<zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
-    using extents_traits = zipper::detail::ExtentsTraits<extents_type>;
+    using extents_type = ::zipper::extents<zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
+    using extents_traits = ::zipper::detail::ExtentsTraits<extents_type>;
 
     EigenVectorView(const EigenType &a)
         requires(extents_traits::is_dynamic)
@@ -105,18 +105,18 @@ class EigenVectorView : public zipper::views::nullary::NullaryViewBase<EigenVect
         requires(extents_traits::is_static)
       : m_data(a) {}
 
-    value_type coeff(zipper::index_type a, zipper::index_type b) const {
-        return m_data.coeff(a, b);
+    value_type coeff(zipper::index_type a) const {
+        return m_data.coeff(a);
     }
-    value_type &coeff_ref(zipper::index_type a, zipper::index_type b)
+    value_type &coeff_ref(zipper::index_type a)
         requires(traits_type::is_value_based && traits_type::is_const)
     {
-        return const_cast<EigenType &>(m_data).coeffRef(a, b);
+        return const_cast<EigenType &>(m_data).coeffRef(a);
     }
-    const value_type &const_coeff_ref(zipper::index_type a, zipper::index_type b) const
+    const value_type &const_coeff_ref(zipper::index_type a) const
         requires traits_type::is_value_based
     {
-        return m_data.coeffRef(a, b);
+        return m_data.coeffRef(a);
     }
 
     auto begin() { return m_data.begin(); }
@@ -131,18 +131,18 @@ class EigenVectorView : public zipper::views::nullary::NullaryViewBase<EigenVect
 template<bool IsConst, concepts::EigenBaseDerived EigenType>
 auto as_zipper_2d(EigenType const &t) {
     if constexpr (concepts::MatrixBaseDerived<EigenType>) {
-        return zipper::MatrixBase<EigenMatrixView<EigenType, IsConst>>(EigenMatrixView<EigenType, IsConst>(t));
+        return ::zipper::MatrixBase<EigenMatrixView<EigenType, IsConst>>(EigenMatrixView<EigenType, IsConst>(t));
     } else if constexpr (concepts::ArrayBaseDerived<EigenType>) {
-        return zipper::ArrayBase<EigenMatrixView<EigenType, IsConst>>(EigenMatrixView<EigenType, IsConst>(t));
+        return ::zipper::ArrayBase<EigenMatrixView<EigenType, IsConst>>(EigenMatrixView<EigenType, IsConst>(t));
     }
 }
 template<bool IsConst, concepts::EigenBaseDerived EigenType>
     requires(EigenType::RowsAtCompileTime == 1 || EigenType::ColsAtCompileTime == 1)
 auto as_zipper_1d(EigenType const &t) {
     if constexpr (concepts::MatrixBaseDerived<EigenType>) {
-        return zipper::VectorBase<EigenVectorView<EigenType, IsConst>>(EigenVectorView<EigenType, IsConst>(t));
+        return ::zipper::VectorBase<EigenVectorView<EigenType, IsConst>>(EigenVectorView<EigenType, IsConst>(t));
     } else if constexpr (concepts::ArrayBaseDerived<EigenType>) {
-        return zipper::ArrayBase<EigenVectorView<EigenType, IsConst>>(EigenVectorView<EigenType, IsConst>(t));
+        return ::zipper::ArrayBase<EigenVectorView<EigenType, IsConst>>(EigenVectorView<EigenType, IsConst>(t));
     }
 }
 template<concepts::EigenBaseDerived EigenType>
@@ -181,7 +181,7 @@ namespace detail {
     }
 }// namespace detail
 
-template<zipper::concepts::MatrixBaseDerived ZipType>
+template<::zipper::concepts::MatrixBaseDerived ZipType>
 auto as_eigen(const ZipType &zip) {
     using extents_type = ZipType::extents_type;
     using MatType = Eigen::Matrix<typename ZipType::value_type,
@@ -191,7 +191,7 @@ auto as_eigen(const ZipType &zip) {
         return zip(a, b);
     });
 }
-template<zipper::concepts::VectorBaseDerived ZipType>
+template<::zipper::concepts::VectorBaseDerived ZipType>
 auto as_eigen(const ZipType &zip) {
 
     using extents_type = ZipType::extents_type;

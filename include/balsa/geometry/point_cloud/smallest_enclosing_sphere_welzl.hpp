@@ -2,9 +2,8 @@
 #define BALSA_GEOMETRY_POINT_CLOUD_SMALLEST_ENCLOSING_SPHERE_WELZL_H
 #include <spdlog/spdlog.h>
 
-#include "balsa/eigen/concepts/shape_types.hpp"
 #include "balsa/geometry/simplex/point_in_circumcircle.hpp"
-#include "balsa/eigen/types.hpp"
+#include "balsa/zipper/types.hpp"
 #include <array>
 #include <set>
 #include <random>
@@ -23,8 +22,8 @@ namespace balsa::geometry::point_cloud {
 // Declarations
 
 // returns a D+1 dimensional vector where the first D entries are the center point, the last entry is the radius
-template<eigen::concepts::RowStaticCompatible ColVecs>
-auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> eigen::Vector<typename ColVecs::Scalar, ColVecs::RowsAtCompileTime + 1>;
+template<::zipper::concepts::MatrixBaseDerived ColVecs>
+auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::static_extent(0), 1)>;
 
 
 // implementations
@@ -32,7 +31,7 @@ auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> eigen::Vector<typename
 namespace detail {
 
     struct WelzlNode {
-        int index;
+        ::zipper::index_type index;
         WelzlNode *parent = nullptr;
         size_t size() const {
             if (parent == nullptr) {
@@ -41,11 +40,11 @@ namespace detail {
                 return parent->size() + 1;
             }
         }
-        std::vector<int> as_vector() const {
+        std::vector<::zipper::index_type> as_vector() const {
             return as_vector_with_size(size());
         }
-        std::vector<int> as_vector_with_size(size_t size) const {
-            std::vector<int> ret;
+        std::vector<::zipper::index_type> as_vector_with_size(size_t size) const {
+            std::vector<::zipper::index_type> ret;
             ret.reserve(size);
             for (const WelzlNode *node = this; node != nullptr; node = node->parent) {
                 ret.emplace_back(node->index);
@@ -54,8 +53,8 @@ namespace detail {
         }
         // assumes that we have already sized things
         template<size_t Size>
-        std::array<int, Size> as_array() const {
-            std::array<int, Size> ret;
+        std::array<::zipper::index_type, Size> as_array() const {
+            std::array<::zipper::index_type, Size> ret;
             size_t index = 0;
             for (const WelzlNode *node = this; node != nullptr; node = node->parent) {
                 ret[index++] = node->index;
@@ -63,20 +62,22 @@ namespace detail {
             return ret;
         }
     };
-    template<eigen::concepts::RowStaticCompatible ColVecs>
-    auto welzl_square_radius(const ColVecs &V, int start_index, WelzlNode *R) -> eigen::Vector<typename ColVecs::Scalar, ColVecs::RowsAtCompileTime + 1> {
+    template<::zipper::concepts::MatrixBaseDerived ColVecs>
+        requires(ColVecs::static_extent(0) != std::dynamic_extent)
+    auto welzl_square_radius(const ColVecs &V, ::zipper::index_type start_index, WelzlNode *R) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::static_extent(0), 1)> {
 
-        constexpr static int Dim = ColVecs::RowsAtCompileTime;
-        using Scalar = typename ColVecs::Scalar;
-        using RetType = eigen::Vector<Scalar, Dim + 1>;
+        constexpr static ::zipper::index_type Dim = ColVecs::extents_type::static_extent(0);
+        using value_type = typename ColVecs::value_type;
+        using RetType = ::zipper::Vector<value_type, ::zipper::utils::extents::plus(Dim, 1)>;
         if (start_index == V.cols() || (R != nullptr && R->size() == Dim + 1)) {
             if (R == nullptr) {
-                return RetType::Zero();
+
+                return RetType(::zipper::views::nullary::ConstantView<value_type>(value_type(0)));
             } else {
                 // TODO: has to handle more degenerate cases
                 size_t size = R->size();
 
-                std::tuple<eigen::Vector<Scalar, Dim>, double> tupret;
+                std::tuple<::zipper::Vector<value_type, Dim>, double> tupret;
                 if (size == Dim + 1) {
                     auto indices = R->as_array<Dim + 1>();
                     tupret = simplex::circumcenter_with_squared_radius(V(Eigen::all, indices));
@@ -85,7 +86,8 @@ namespace detail {
                     tupret = simplex::circumcenter_with_squared_radius(V(Eigen::all, indices));
                 }
                 const auto &[C, r] = tupret;
-                RetType ret(V.rows() + 1);
+                RetType ret;
+                // RetType ret(V.rows() + 1);
                 ret.template head<Dim>() = C;
                 ret(Dim) = r;
                 return ret;
@@ -106,17 +108,17 @@ namespace detail {
         }
     }
     // template<eigen::concepts::RowStaticCompatible ColVecs>
-    // auto welzl_square_radius(const ColVecs &P) -> eigen::ColVectors<typename ColVecs::Scalar, ColVecs::RowsAtCompileTime + 1> {
+    // auto welzl_square_radius(const ColVecs &P) -> eigen::ColVectors<typename ColVecs::value_type, ColVecs::RowsAtCompileTime + 1> {
 
     //    using namespace simplex;
-    //    using Scalar = typename ColVecs::Scalar;
+    //    using value_type = typename ColVecs::value_type;
     //    constexpr static int Dim = ColVecs::RowsAtCompileTime;
-    //    using RetType = typename eigen::Vector<Scalar, Dim + 1>;
+    //    using RetType = typename eigen::Vector<value_type, Dim + 1>;
 
     //    RetType ret;
     //    auto center = ret.template head<Dim>();
     //    // need to sqrt this before returning
-    //    Scalar &square_radius = ret(Dim);
+    //    value_type &square_radius = ret(Dim);
 
     //    std::array<int, Dim + 1> indices;
     //    std::iota(indices.begin(), indices.end(), 0);
@@ -146,7 +148,7 @@ namespace detail {
     //            for (size_t index_index = 0; index_index < indices.size(); ++index_index) {
     //                int index = indices[index_index];
     //                const int old_index = index;
-    //                Scalar cur_radius = square_radius;
+    //                value_type cur_radius = square_radius;
 
     //                index = pt_index;
     //                update_center();
@@ -167,18 +169,18 @@ namespace detail {
     //    return ret;
     //}
 }// namespace detail
-template<eigen::concepts::RowStaticCompatible ColVecs>
-auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> eigen::Vector<typename ColVecs::Scalar, ColVecs::RowsAtCompileTime + 1> {
+template<::zipper::concepts::MatrixBaseDerived ColVecs>
+auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::extent(0), 1)> {
 
-    std::vector<int> reorder(P.cols());
-    std::iota(reorder.begin(), reorder.end(), 0);
+    std::vector<::zipper::index_type> reorder(P.cols());
+    std::ranges::iota(reorder.begin(), reorder.end(), 0);
 
     std::random_device rd;
     std::mt19937 gen{ rd() };
     std::ranges::shuffle(reorder, gen);
 
     std::set<int> r;
-    auto ret = detail::welzl_square_radius(P(Eigen::all, reorder), 0, nullptr);
+    auto ret = detail::welzl_square_radius(P(::zipper::full_extent_t{}, reorder), 0, nullptr);
     // auto& rad = ret(Eigen::last-1);
     auto &rad = ret(ret.size() - 1);
     rad = std::sqrt(rad);

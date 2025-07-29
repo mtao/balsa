@@ -113,25 +113,25 @@ endif
 #===========================================
 
 geometry_sources = [
-  'src/geometry/mesh/shapes/cube.cpp', 
-  'src/geometry/mesh/shapes/tube.cpp', 
-  'src/geometry/mesh/halfedge.cpp', 
-  'src/geometry/mesh/halfedge_fv_map.cpp', 
-  'src/geometry/mesh/read_obj.cpp', 
-  'src/geometry/point_cloud/read_xyz.cpp', 
-  'src/geometry/mesh/write_obj.cpp', 
-  'src/geometry/mesh/boundary_elements.cpp', 
-  'src/geometry/mesh/write_ply.cpp', 
-  'src/geometry/mesh/triangle/triangle_wrapper.cpp', 
-  'src/geometry/mesh/triangle/mesh.cpp', 
-  'src/geometry/mesh/ply.cpp', 
-  'src/geometry/mesh/polygon_boundary_triangulation.cpp'
+#  'src/geometry/mesh/shapes/cube.cpp', 
+#  'src/geometry/mesh/shapes/tube.cpp', 
+#  'src/geometry/mesh/halfedge.cpp', 
+#  'src/geometry/mesh/halfedge_fv_map.cpp', 
+#  'src/geometry/mesh/read_obj.cpp', 
+#  'src/geometry/point_cloud/read_xyz.cpp', 
+#  'src/geometry/mesh/write_obj.cpp', 
+#  'src/geometry/mesh/boundary_elements.cpp', 
+#  'src/geometry/mesh/write_ply.cpp', 
+#  'src/geometry/mesh/triangle/triangle_wrapper.cpp', 
+#  'src/geometry/mesh/triangle/mesh.cpp', 
+#  'src/geometry/mesh/ply.cpp', 
+#  'src/geometry/mesh/polygon_boundary_triangulation.cpp'
 ]
 
-geometry_sources = [
-  'src/geometry/point_cloud/read_xyz.cpp', 
-  'src/geometry/polygon_mesh/read_obj.cpp', 
-  'src/geometry/triangle_mesh/read_obj.cpp', 
+geometry_sources += [
+#  'src/geometry/point_cloud/read_xyz.cpp', 
+#  'src/geometry/polygon_mesh/read_obj.cpp', 
+#  'src/geometry/triangle_mesh/read_obj.cpp', 
 ]
 
 geometry_required_deps = core_required_deps 
@@ -155,7 +155,7 @@ if get_option('partio')
   #endif
 
   geometry_required_deps += partio_dep
-  geometry_sources += 'src/geometry/point_cloud/partio_loader.cpp'
+#  geometry_sources += 'src/geometry/point_cloud/partio_loader.cpp'
 endif
 
 

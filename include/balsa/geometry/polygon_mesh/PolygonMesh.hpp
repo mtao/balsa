@@ -1,9 +1,9 @@
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_POLYGON_MESH_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_POLYGON_MESH_H
 
-#include "balsa/eigen/types.hpp"
-#include "polygon_buffer.hpp"
-#include "plcurve_buffer.hpp"
+#include "balsa/zipper/types.hpp"
+#include "PolygonBuffer.hpp"
+#include "PLCurveBuffer.hpp"
 #include <tuple>
 
 
@@ -13,7 +13,7 @@ struct PolygonMesh
 
 {
   public:
-    eigen::ColVectors<Scalar, D> vertices;
+    zipper::ColVectors<Scalar, D> vertices;
     PolygonBuffer<int> polygons;
     PLCurveBuffer<int> curves;
 };

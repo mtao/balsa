@@ -8,7 +8,7 @@
 
 
 namespace {
-template<typename Circ, balsa::eigen::concepts::RowStaticCompatible ColVecs>
+template<typename Circ, zipper::concepts::MatrixBaseDerived ColVecs> requires(!ColVecs::extents_traits::is_dynamic_extent(0))
 bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
 
     // constexpr static int Dim = ColVecs::RowsAtCompileTime;
@@ -17,21 +17,21 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
     // auto r = circle(Dim);
 
     auto rads = (P.colwise() - C).colwise().squaredNorm();
-    return (rads.array() <= r2).all();
+    return (rads.as_array() <= r2).all();
 
 }
-template<balsa::eigen::concepts::RowStaticCompatible ColVecs>
-auto brute_force_smallest_circle(const ColVecs &P) -> balsa::eigen::Vector<typename ColVecs::Scalar, ColVecs::RowsAtCompileTime + 1> {
+template<zipper::concepts::MatrixBaseDerived ColVecs> requires(!ColVecs::extents_traits::is_dynamic_extent(0))
+auto brute_force_smallest_circle(const ColVecs &P) -> zipper::Vector<typename ColVecs::value_type, ColVecs::extents_type::static_extent(0)+1> {
 
     using namespace balsa::geometry::simplex;
-    using Scalar = typename ColVecs::Scalar;
+    using value_type = typename ColVecs::value_type;
     constexpr static int Dim = ColVecs::RowsAtCompileTime;
-    using RetType = typename balsa::eigen::Vector<Scalar, Dim + 1>;
+    using RetType = typename zipper::Vector<value_type, Dim + 1>;
 
     RetType ret;
     // need to sqrt this before returning
     auto center = ret.template head<Dim>();
-    Scalar &square_radius = ret(Dim);
+    value_type &square_radius = ret(Dim);
     square_radius = std::numeric_limits<double>::max();
 
 
@@ -80,8 +80,8 @@ auto brute_force_smallest_circle(const ColVecs &P) -> balsa::eigen::Vector<typen
 }
 
 template <int D>
-std::array<balsa::eigen::ColVectors<double,D>,2>
-make_inside_outside_points(size_t count , const balsa::eigen::Vector<double,D>& C, double inside, double outside=0)
+std::array<balsa::zipper::ColVectors<double,D>,2>
+make_inside_outside_points(size_t count , const balsa::zipper::Vector<double,D>& C, double inside, double outside=0)
 {
     // make sure inside is 
     inside = std::abs(inside);
@@ -94,44 +94,45 @@ make_inside_outside_points(size_t count , const balsa::eigen::Vector<double,D>& 
         throw std::invalid_argument(fmt::format("Invalid valid torus: {} to {}", inside, outside));
     }
 
-    balsa::eigen::VecXd phi(count);
-    phi.setRandom();
+    balsa::zipper::VecXd phi(count);
+    phi= zipper::views::nullary::uniform_random_view<double>();
     // convert from [-1,1] to [-pi,pi]
-    phi = phi.array() * M_PI;
+    phi = m_PI * phi ;
 
 
-    balsa::eigen::VecXd inner_radii(count);
-    inner_radii.setRandom();
+    balsa::zipper::VecXd inner_radii(count);
+    inner_radii = zipper::views::nullary::uniform_random_view<double>();
     // convert from [-1,1] to [0,pi]
-    inner_radii = (inner_radii.array() * inside).abs();
+    inner_radii = (inner_radii.as_array() * inside).abs();
 
-    balsa::eigen::VecXd outer_radii(count);
-    outer_radii.setRandom();
+    balsa::zipper::VecXd outer_radii(count);
+    outer_radii = zipper::views::nullary::uniform_random_view<double>();
     // convert from [-1,1] to [0,pi]
-    outer_radii = (outer_radii.array() * (outside- inside)).abs() + inside;
+    outer_radii = (outer_radii.as_array() * (outside- inside)).abs() + inside;
 
-    balsa::eigen::VecXd cp = phi.array().cos();
-    balsa::eigen::VecXd sp = phi.array().sin();
+    balsa::zipper::VecXd cp = std::cos(phi.as_array());
+    balsa::zipper::VecXd sp = std::cos(phi.as_array());
     {
-    balsa::eigen::ColVectors<double,D> inside(D,count);
-    balsa::eigen::ColVectors<double,D> outside(D,count);
+    balsa::zipper::ColVectors<double,D> inside(count);
+    balsa::zipper::ColVectors<double,D> outside(count);
 
     if constexpr(D == 2)
     {
-        inside.row(0) = cp.array().transpose() ;
-        inside.row(1) = sp.array().transpose() ;
+        inside.row(0) = cp ;
+        inside.row(1) = sp ;
     } else {
-        balsa::eigen::VecXd theta(count);
-        theta.setRandom();
+        static_assert(D == 3) ;
+        balsa::zipper::VecXd theta(count);
+        theta = zipper::views::nullary::uniform_random_view<double>();
         // convert from [-1,1] to [0,pi]
-        theta = (theta.array() * M_PI).abs();
+        theta = (M_PI * theta.as_array()).abs();
 
-        balsa::eigen::VecXd ct = theta.array().cos();
-        balsa::eigen::VecXd st = theta.array().sin();
+        balsa::zipper::VecXd ct = std::cos(theta.as_array());
+        balsa::zipper::VecXd st = std::abs(theta.as_array());
 
-        inside.row(0) = (sp.array() * ct.array()).transpose();
-        inside.row(1) = (sp.array() * st.array()).transpose();
-        inside.row(2) = cp.array().transpose();
+        inside.row(0) = (sp.as_array() * ct.as_array());
+        inside.row(1) = (sp.as_array() * st.as_array());
+        inside.row(2) = cp.as_array();
     }
 
     outside = inside;
@@ -157,23 +158,23 @@ TEST_CASE("sphere_sampling_test", "[testing_internal]") {
     auto check = [](const auto& pts, const auto& C, double min, double max)
     {
         auto V = (pts.colwise() - C).colwise().norm().eval();
-        CHECK((V.array() >= min).all());
+        CHECK((V.as_array() >= min).all());
         CHECK_FALSE(valid_circle_rad2(std::make_tuple(C,min*min), pts));
         if(max != 0)
         {
-            CHECK((V.array() <= max).all());
+            CHECK((V.as_array() <= max).all());
             CHECK(valid_circle_rad2(std::make_tuple(C,max*max), pts));
         }
 
 
     };
 
-    auto make_check = [&](const balsa::eigen::Vec3d & center, double inner, double outer) {
+    auto make_check = [&](const balsa::zipper::Vec3d & center, double inner, double outer) {
     auto [inside,outside] = make_inside_outside_points(100,center,inner,outer);
     check(inside,center,0,inner);
     check(outside,center,inner,outer);
     };
-    balsa::eigen::Vec3d center;
+    balsa::zipper::Vec3d center;
     center.setZero();
 
     make_check(center,1,2);
@@ -196,7 +197,7 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
 
     auto run = []<int N>(std::integral_constant<int,N>)
     {
-    balsa::eigen::Vector<double,N> center;
+    balsa::zipper::Vector<double,N> center;
     center.setRandom();
 
     double init_bound = 3;
@@ -205,18 +206,18 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
 
     REQUIRE(C.rows() == N+1);
 
-    balsa::eigen::Vector<double,N> c = C.template head<N>();
+    balsa::zipper::Vector<double,N> c = C.template head<N>();
     double r = C(N);
 
     REQUIRE(r <= init_bound);
 
     {
     auto V = (inside.colwise() - c).colwise().norm().eval();
-    CHECK((V.array() <= r).all());
+    CHECK((V.as_array() <= r).all());
     }
     {
     auto V = (outside.colwise() - c).colwise().norm().eval();
-    CHECK((V.array() >= r).all());
+    CHECK((V.as_array() >= r).all());
     }
     };
 
@@ -234,8 +235,8 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
 //
 //    return;
 //    auto test = []<int N>(std::integral_constant<int, N>) {
-//        balsa::eigen::ColVectors<float, N> V(N, N + 5);
-//        // balsa::eigen::ColVectors<float, N> V(N, 10 * N);
+//        balsa::zipper::ColVectors<float, N> V(N, N + 5);
+//        // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
 //        V.setRandom();
 //
 //        std::cout << "Input points:\n";
@@ -272,12 +273,12 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
     auto test = []<int N>(std::integral_constant<int, N>, std::optional<int> sample_count = {}) {
 
         int count = sample_count.has_value() ? sample_count.value() : N + 10;
-        balsa::eigen::ColVectors<float, N> V(N, count);
-        // balsa::eigen::ColVectors<float, N> V(N, 10 * N);
+        balsa::zipper::ColVectors<float, N> V(N, count);
+        // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
         V.setRandom();
 
 
-        balsa::eigen::Vector<float,N+1> circle;
+        balsa::zipper::Vector<float,N+1> circle;
         {
             spdlog::stopwatch sw;
             circle = balsa::geometry::point_cloud::smallest_enclosing_sphere_welzl(V);
@@ -292,11 +293,11 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
         auto r = circle(N);
 
 
-        auto Ds = ((V.colwise() - C).colwise().norm().array() - r).eval();
+        auto Ds = ((V.colwise() - C).colwise().norm().as_array() - r).eval();
 
         if(!sample_count.has_value())
         {
-            balsa::eigen::Vector<float,N+1> bf_circle;
+            balsa::zipper::Vector<float,N+1> bf_circle;
             {
                 spdlog::stopwatch sw;
                 bf_circle = brute_force_smallest_circle(V);

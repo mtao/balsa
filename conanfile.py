@@ -91,6 +91,7 @@ class Balsa(ConanFile):
             self.requires("spirv-tools/1.3.268.0",override=True)
             self.requires("spirv-headers/1.3.268.0",override=True)
                                                
+        self.requires("boost/1.88.0",override=True)
     def configure(self):
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True

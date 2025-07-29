@@ -18,7 +18,7 @@ auto bounding_box(const VType &V) {
     }
     return BBox{};
 }
-template<zipper::concepts::MatrixBaseDerived VType>
+template<::zipper::concepts::MatrixBaseDerived VType>
 auto bounding_box(const VType &V) {
     BoundingBox<typename VType::value_type, VType::extents_type::static_extent(0)> bb;
     for (zipper::index_type j = 0; j < V.extent(1); ++j) {
