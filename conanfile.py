@@ -21,7 +21,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
             ("visualization", [True,False], True, [
                 "shaderc/2021.1", "glfw/3.3.8", "glm/0.9.9.8", "imgui/1.88"
                 ]),
-            ("openvdb", [True,False], True,
+            ("openvdb", [True,False], False,
                 ["openvdb/11.0.0"]
                 ),
             ("protobuf", [True,False], True,
