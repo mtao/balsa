@@ -39,6 +39,9 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
             ("pngpp", [True,False], False,
                 ["pngpp/0.2.10"]
                 ),
+            ("perfetto", [True,False], False,
+                ["perfetto/50.1"]
+                ),
             ("qt", [True,False], True,
                 ["qt/6.7.3"]
                 ),
