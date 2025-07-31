@@ -43,7 +43,7 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
                 ["perfetto/50.1"]
                 ),
             ("qt", [True,False], True,
-                ["qt/6.7.3"]
+                ["qt/6.8.3"]
                 ),
             # These are libs that i want options for but meson has to handle
             ("partio", [True,False], True,[]),

@@ -175,14 +175,12 @@ auto earclipping(const VDerived &V,
 template<zipper::concepts::ColVecs2Compatible VDerived, typename Container>
 auto earclipping(const VDerived &V,
                  const Container &C) {
-    ::zipper::MatrixBase r = std::span(earclipping_stl(eigen::as_eigen(V), C.begin(), C.end()));
-    return r.eval();
+    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C.begin(), C.end())).eval();
 }
 template<zipper::concepts::ColVecs2Compatible VDerived, typename T>
 auto earclipping(const VDerived &V,
                  const std::initializer_list<T> &C) {
-    ::zipper::MatrixBase r = std::span(earclipping_stl(eigen::as_eigen(V), C.begin(), C.end()));
-    return r.eval();
+    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C.begin(), C.end())).eval();
 }
 }// namespace balsa::geometry::triangle_mesh
 #endif
