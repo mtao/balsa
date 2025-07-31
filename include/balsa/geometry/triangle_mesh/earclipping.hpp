@@ -12,18 +12,18 @@
 #include <Eigen/Core>
 #include "balsa/geometry/winding_number.hpp"
 #include "balsa/geometry/get_angle.hpp"
-#include "balsa/eigen/types.hpp"
-#include "balsa/eigen/shape_checks.hpp"
+#include "balsa/zipper/concepts/shape_types.hpp"
+#include "balsa/eigen/zipper_compat.hpp"
 #include <numbers>
 #include <utility>
 
 namespace balsa::geometry::triangle_mesh {
 template<eigen::concepts::Vec2Compatible VDerived, std::forward_iterator BeginIt, std::forward_iterator EndIt>
-requires std::is_integral_v<std::decay_t<decltype(*std::declval<BeginIt>())>>
-  std::vector<std::array<std::decay_t<decltype(*std::declval<BeginIt>())>, 3>> earclipping_stl(
-    const VDerived &V,
-    const BeginIt &beginit,
-    const EndIt &endit) {
+    requires std::is_integral_v<std::decay_t<decltype(*std::declval<BeginIt>())>>
+std::vector<std::array<std::decay_t<decltype(*std::declval<BeginIt>())>, 3>> earclipping_stl(
+  const VDerived &V,
+  const BeginIt &beginit,
+  const EndIt &endit) {
     using Index = std::decay_t<decltype(*std::declval<BeginIt>())>;
     using Face = std::array<int, 3>;
     std::vector<Face> stlF;
@@ -170,6 +170,19 @@ template<eigen::concepts::ColVecs2Compatible VDerived, typename T>
 auto earclipping(const VDerived &V,
                  const std::initializer_list<T> &C) {
     return eigen::stl2eigen(earclipping_stl(V, C.begin(), C.end()));
+}
+
+template<zipper::concepts::ColVecs2Compatible VDerived, typename Container>
+auto earclipping(const VDerived &V,
+                 const Container &C) {
+    ::zipper::MatrixBase r = std::span(earclipping_stl(eigen::as_eigen(V), C.begin(), C.end()));
+    return r.eval();
+}
+template<zipper::concepts::ColVecs2Compatible VDerived, typename T>
+auto earclipping(const VDerived &V,
+                 const std::initializer_list<T> &C) {
+    ::zipper::MatrixBase r = std::span(earclipping_stl(eigen::as_eigen(V), C.begin(), C.end()));
+    return r.eval();
 }
 }// namespace balsa::geometry::triangle_mesh
 #endif

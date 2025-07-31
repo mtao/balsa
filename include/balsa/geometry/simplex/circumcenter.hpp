@@ -62,7 +62,7 @@ namespace detail {
 
 
         } else {
-            auto m = A.template slice(
+            auto m = A.slice(
               ::zipper::slice({}, V.extent(1)),
               ::zipper::slice({}, V.extent(1)));
             m = 2 * V.transpose() * V;

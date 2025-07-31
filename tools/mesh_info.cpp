@@ -2,6 +2,9 @@
 #include <cxxopts.hpp>
 #include <fstream>
 #include <optional>
+#include <zipper/utils/minCoeff.hpp>
+#include <zipper/utils/maxCoeff.hpp>
+#include <zipper/utils/meanCoeff.hpp>
 #include <nlohmann/json.hpp>
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/geometry/simplicial_complex/boundaries.hpp>
@@ -77,12 +80,12 @@ int main(int argc, char *argv[]) {
             auto FVol = balsa::geometry::simplicial_complex::volumes(V, F);
             auto get_stats = [](const auto &vec) {
                 nlohmann::json js;
-                double min = vec.minCoeff();
-                double max = vec.maxCoeff();
+                double min = zipper::utils::minCoeff(vec);
+                double max = zipper::utils::maxCoeff(vec);
 
                 js["min"] = min;
                 js["max"] = max;
-                js["mean"] = vec.sum() / vec.size();
+                js["mean"] = vec.as_array().sum() / vec.extent(0);
                 js["range"] = max - min;
                 return js;
             };
@@ -102,19 +105,19 @@ int main(int argc, char *argv[]) {
                 // clang-format off
             js["bounding_box"] = {
                 {"min",
-                        {  m.x() ,
-                          m.y() ,
-                          m.z() }
+                        {  m(0) ,
+                          m(1) ,
+                          m(2) }
                 },
                 {"max",
-                        {  M.x() ,
-                          M.y() ,
-                          M.z() }
+                        {  M(0) ,
+                          M(1) ,
+                          M(2) }
                 }
             };
                 // clang-format on
             } else {
-                os << "Bounding box: " << bb.min().transpose() << " => " << bb.max().transpose() << std::endl;
+                os << fmt::format("Bounding box: {} => {}", bb.min(), bb.max()) << std::endl;
             }
         }
         if (use_json) {

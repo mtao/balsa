@@ -1,6 +1,8 @@
 #include <catch2/catch_all.hpp>
+#include <spdlog/spdlog.h>
 #include <iostream>
 #include <balsa/geometry/triangle_mesh/volumes.hpp>
+#include <zipper/utils/format.hpp>
 
 #include <balsa/geometry/triangle_mesh/earclipping.hpp>
 TEST_CASE("earclipping_orientation", "[earclipping]") {

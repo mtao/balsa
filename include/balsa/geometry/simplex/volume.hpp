@@ -70,6 +70,9 @@ namespace detail {
     template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
     auto volume_signed(const SimplexVertices &V) -> SimplexVertices::value_type {
 
+        //auto m = V.rightCols(V.cols() - 1).eval();
+        //m -= V.col(0).repeat_right();
+        //auto m = (V.rightCols(V.cols() - 1) - V.col(0).repeat_right()).eval();
         auto m = V.rightCols(V.cols() - 1).eval();
         for (zipper::index_type j = 0; j < m.cols(); ++j) {
             auto v = m.col(j);

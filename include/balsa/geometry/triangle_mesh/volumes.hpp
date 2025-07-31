@@ -1,32 +1,18 @@
 #if !defined(BALSA_GEOMETRY_TRIANGLE_MESH_VOLUMES_HPP)
 #define BALSA_GEOMETRY_TRIANGLE_MESH_VOLUMES_HPP
 
-#include "balsa/geometry/simplex/volume.hpp"
+#include "balsa/geometry/simplicial_complex/volumes.hpp"
 #include "balsa/utils/factorial.hpp"
 namespace balsa::geometry::triangle_mesh {
 template<
   ::zipper::concepts::MatrixBaseDerived VertexDerived,
-  ::zipper::concepts::MatrixBaseDerived SimplexDerived,
+  ::zipper::concepts::MatrixBaseDerived SimplexDerived
   >
-    requires(std::is_integral_v<VertexDerived::value_type>)
+    requires(std::is_integral_v<typename VertexDerived::value_type>)
 auto volumes(const VertexDerived &V,
              const SimplexDerived &S) {
-    constexpr static int N = eigen::concepts::detail::compile_col_size<SimplexDerived>;// simplex dim
-    using Scalar = typename VertexDerived::value_type;
+    return simplicial_complex::volumes(V,S);
 
-    auto cols = ::zipper::detail::extents::get_extent<1>(S.extents());
-    constexpr static zipper::index_type compile_cols = SimplexDerived::extents_type::static_extent(1);
-    balsa::zipper::Vector<value_type, compile_cols> C(S.cols());
-
-    // tbb::parallel_for(int(0), int(S.cols()), [&](int j) {
-    //     auto s = S.col(j);
-    //     C(j) = volume(V(Eigen::all, s));
-    // });
-    for (int j = 0; j < S.cols(); ++j) {
-        auto s = S.col(j);
-        C(j) = simplex::volume(V(Eigen::all, s));
-    }
-    return C;
 }
 }// namespace balsa::geometry::triangle_mesh
 

@@ -98,7 +98,7 @@ namespace detail {
             // is p in CR
             {
                 auto p = V.col(start_index);
-                if ((CR.template head<Dim>() - p).squaredNorm() < CR(Dim)) {
+                if ((CR.template head<Dim>() - p).template norm_powered<2>() < CR(Dim)) {
                     return CR;
                 }
             }

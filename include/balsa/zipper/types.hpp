@@ -8,6 +8,7 @@
 
 namespace balsa::zipper {
 using index_type = ::zipper::index_type;
+using rank_type = ::zipper::rank_type;
 template<typename T, index_type A, index_type B>
 using Matrix = ::zipper::Matrix<T, A, B>;
 
