@@ -1,24 +1,24 @@
 #include "balsa/geometry/triangle_mesh/read_obj.hpp"
-#include "balsa/geometry/polygon_mesh/read_obj_impl.hpp"
+#include "../polygon_mesh/read_obj_impl.hpp"
 #include "balsa/geometry/polygon_mesh/triangulate_polygons.hpp"
 
 namespace balsa::geometry::triangle_mesh {
 namespace {
-    zipper::ColVecs2i edges_from_curves(const polygon_mesh::PLCurveBuffer<int> &curves) {
+    ColVectors<index_type,2> edges_from_curves(const polygon_mesh::PLCurveBuffer<index_type> &curves) {
 
-        int curve_count = curves.curve_count();
+        index_type curve_count = curves.curve_count();
         if (curve_count == 0) {
-            return {};
+            return {0};
         }
-        int vertex_count = curves._buffer.size();
-        int edge_count = vertex_count - curve_count;
+        index_type vertex_count = curves._buffer.size();
+        index_type edge_count = vertex_count - curve_count;
 
 
-        zipper::ColVecs2i E(2, edge_count);
-        int index = 0;
-        for (int j = 0; j < curve_count; ++j) {
+        ColVectors<index_type,2> E(edge_count);
+        index_type index = 0;
+        for (index_type j = 0; j < curve_count; ++j) {
             auto c = curves.get_curve(j);
-            for (int k = 0; k < c.size() - 1; ++k) {
+            for (index_type k = 0; k < c.extent(0) - 1; ++k) {
                 E.col(index++) = c.segment<2>(k);
             }
         }
@@ -29,7 +29,7 @@ namespace {
 
 }// namespace
 
-template<typename Scalar, int D>
+template<typename Scalar, int8_t D>
 OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
 
 

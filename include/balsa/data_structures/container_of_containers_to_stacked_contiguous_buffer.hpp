@@ -25,20 +25,20 @@ StackedContiguousBuffer<IndexType> container_of_containers_to_stacked_contiguous
 
     StackedContiguousBuffer<IndexType> ret;
     {
-        ret._offsets.resize(container.size() + 1);
+        ret._offsets.resize({container.size() + 1});
         ret._offsets(0) = 0;
         auto range = container | ranges::views::transform([](const auto &a) {
                          return a.size();
                      })
-                     | ranges::views::partial_sum | ranges::views::take_exactly(ret._offsets.size() - 1);
-        ranges::copy(range, ret._offsets.data() + 1);
+                     | ranges::views::partial_sum | ranges::views::take_exactly(ret._offsets.rows() - 1);
+        ranges::copy(range, ret._offsets.view().data() + 1);
     }
 
     {
-        ret._buffer.resize(ret._offsets(Eigen::last));
+        ret._buffer.resize({ret._offsets(ret._offsets.rows()-1)});
 
-        auto range = container | ranges::views::join | ranges::views::take_exactly(ret._buffer.size());
-        ranges::copy(range, ret._buffer.data());
+        auto range = container | ranges::views::join | ranges::views::take_exactly(ret._buffer.rows());
+        ranges::copy(range, ret._buffer.view().data());
     }
     return ret;
 }

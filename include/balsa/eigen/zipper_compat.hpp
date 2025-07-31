@@ -49,21 +49,37 @@ struct ViewTraits<balsa::eigen::EigenVectorView<EigenType, IsConst>>
 };
 }// namespace zipper::views::detail
 namespace balsa::eigen {
+namespace detail {
+    constexpr ::zipper::index_type get_index_type(Eigen::Index i) {
+        if (i == Eigen::Dynamic) {
+            return std::dynamic_extent;
+        } else {
+            return i;
+        }
+    }
+}// namespace detail
 
 
 template<concepts::EigenBaseDerived EigenType, bool IsConst>
-class EigenMatrixView : public ::zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime> {
+class EigenMatrixView : public ::zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, detail::get_index_type(EigenType::RowsAtCompileTime), detail::get_index_type(EigenType::ColsAtCompileTime)> {
 
   public:
-    using Base = ::zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
+    using Base = ::zipper::views::nullary::NullaryViewBase<EigenMatrixView<EigenType, IsConst>, typename EigenType::Scalar, detail::get_index_type(EigenType::RowsAtCompileTime), detail::get_index_type(EigenType::ColsAtCompileTime)>;
     using traits_type = ::zipper::views::detail::ViewTraits<EigenMatrixView<EigenType, IsConst>>;
     using value_type = EigenType::Scalar;
-    using extents_type = ::zipper::extents<EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>;
+    using extents_type = Base::extents_type;
     using extents_traits = ::zipper::detail::ExtentsTraits<extents_type>;
 
     EigenMatrixView(const EigenType &a)
-        requires(extents_traits::is_dynamic)
-      : Base(extents_type(a.rows() * a.cols())), m_data(a) {}
+        requires(extents_traits::rank_dynamic == 2)
+      : Base(extents_type(a.rows(), a.cols())), m_data(a) {}
+    EigenMatrixView(const EigenType &a)
+        requires(extents_traits::rank_dynamic == 1 && extents_traits::is_dynamic_extent(0))
+      : Base(extents_type(a.rows())), m_data(a) {}
+    EigenMatrixView(const EigenType &a)
+        requires(extents_traits::rank_dynamic == 1 && extents_traits::is_dynamic_extent(1))
+      : Base(extents_type(a.cols())), m_data(a) {}
+
     EigenMatrixView(const EigenType &a)
         requires(extents_traits::is_static)
       : m_data(a) {}
@@ -88,14 +104,14 @@ class EigenMatrixView : public ::zipper::views::nullary::NullaryViewBase<EigenMa
 
 template<concepts::EigenBaseDerived EigenType, bool IsConst>
     requires(EigenType::RowsAtCompileTime == 1 || EigenType::ColsAtCompileTime == 1)
-class EigenVectorView : public ::zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)> {
+class EigenVectorView : public ::zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, detail::get_index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)> {
 
   public:
-    using Base = ::zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
+    using Base = ::zipper::views::nullary::NullaryViewBase<EigenVectorView<EigenType, IsConst>, typename EigenType::Scalar, detail::get_index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
     static_assert(Base::extents_type::rank() == 1);
     using traits_type = ::zipper::views::detail::ViewTraits<EigenVectorView<EigenType, IsConst>>;
     using value_type = EigenType::Scalar;
-    using extents_type = ::zipper::extents<zipper::index_type(EigenType::RowsAtCompileTime *EigenType::ColsAtCompileTime)>;
+    using extents_type = Base::extents_type;
     using extents_traits = ::zipper::detail::ExtentsTraits<extents_type>;
 
     EigenVectorView(const EigenType &a)

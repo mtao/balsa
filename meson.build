@@ -125,13 +125,10 @@ geometry_sources = [
 #  'src/geometry/mesh/triangle/triangle_wrapper.cpp', 
 #  'src/geometry/mesh/triangle/mesh.cpp', 
 #  'src/geometry/mesh/ply.cpp', 
-#  'src/geometry/mesh/polygon_boundary_triangulation.cpp'
-]
-
-geometry_sources += [
+#  'src/geometry/mesh/polygon_boundary_triangulation.cpp',
 #  'src/geometry/point_cloud/read_xyz.cpp', 
-#  'src/geometry/polygon_mesh/read_obj.cpp', 
-#  'src/geometry/triangle_mesh/read_obj.cpp', 
+  'src/geometry/polygon_mesh/read_obj.cpp', 
+  'src/geometry/triangle_mesh/read_obj.cpp', 
 ]
 
 geometry_required_deps = core_required_deps 

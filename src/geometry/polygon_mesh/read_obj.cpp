@@ -1,5 +1,5 @@
 #include "balsa/geometry/polygon_mesh/read_obj.hpp"
-#include "balsa/geometry/polygon_mesh/read_obj_impl.hpp"
+#include "read_obj_impl.hpp"
 namespace balsa::geometry::polygon_mesh {
 // Read an obj file assuming that it returns points and maybe 3 more values,
 // which are returned in two arrays

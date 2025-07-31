@@ -8,7 +8,7 @@ namespace balsa::geometry::polygon_mesh {
 
 
 // OBJ meshes can hold multiple buffers
-template<typename Scalar = double, int D = 3>
+template<typename Scalar = double, int8_t D = 3>
 struct OBJMesh {
     PolygonMesh<Scalar, D> position;
     PolygonMesh<Scalar, 2> texture;

@@ -1,7 +1,9 @@
 
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H
-#include "read_obj.hpp"
+#include "balsa/geometry/polygon_mesh/read_obj.hpp"
+#include "balsa/zipper/stl2zipper.hpp"
+#include "balsa/zipper/types.hpp"
 #include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <fstream>
 #include <range/v3/view/take_exactly.hpp>
@@ -40,37 +42,37 @@ namespace {
 
 }// namespace
 
-template<typename Scalar, int D>
+template<typename Scalar, int8_t D>
 OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
     std::ifstream ifs(filename);
 
     auto file_lines = ranges::getlines(ifs);
 
     std::vector<std::array<Scalar, D>> v;
-    std::vector<std::vector<int>> vi;
-    std::vector<std::vector<int>> vl;
+    std::vector<std::vector<index_type>> vi;
+    std::vector<std::vector<index_type>> vl;
 
     std::vector<std::array<Scalar, 2>> t;
-    std::vector<std::vector<int>> ti;
-    std::vector<std::vector<int>> tl;
+    std::vector<std::vector<index_type>> ti;
+    std::vector<std::vector<index_type>> tl;
 
     std::vector<std::array<Scalar, D>> n;
-    std::vector<std::vector<int>> ni;
-    std::vector<std::vector<int>> nl;
+    std::vector<std::vector<index_type>> ni;
+    std::vector<std::vector<index_type>> nl;
 
 
     auto process_slash_toks = [](auto &&data) {
-        std::vector<int> v;
-        std::vector<int> n;
-        std::vector<int> t;
-        std::array<std::vector<int> *, 3> ptrs{ &v, &t, &n };
+        std::vector<index_type> v;
+        std::vector<index_type> n;
+        std::vector<index_type> t;
+        std::array<std::vector<index_type> *, 3> ptrs{ &v, &t, &n };
         for (auto &&tok : data) {
             auto slashtoks = tok | ranges::views::split('/');
             auto zip = ranges::views::zip(ptrs, slashtoks);
             for (auto &&[vecptr, str] : zip) {
                 auto s = str | ranges::to<std::string>;
                 if (!s.empty()) {
-                    int value = 0;
+                    index_type value = 0;
                     std::from_chars(s.data(), s.data() + s.size(), value);
                     vecptr->emplace_back(value - 1);
                 }
@@ -161,22 +163,27 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
     }
 
 
-    return OBJMesh<Scalar, D>{
-        .position = PolygonMesh<Scalar, D>{
-          zipper::ColVectors<Scalar, D>((v)),//
-          PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(vi) },//
-          PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(vl) },//
-        },//
-        .texture = PolygonMesh<Scalar, 2>{
-          zipper::ColVectors<Scalar, 2>(balsa::zipper::stl2zipper(t)),//
-          PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(ti) },//
-          PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(tl) },//
-        },
-        .normal = PolygonMesh<Scalar, D>{
-          zipper::ColVectors<Scalar, D>(balsa::zipper::stl2zipper(n)),//
-          PolygonBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(ni) },//
-          PLCurveBuffer<int>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<int>(nl) },//
-        },
+    PolygonMesh<Scalar, D> pos{
+        ColVectors<Scalar, D>((zipper::stl2zipper(v))),//
+        PolygonBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(vi) },//
+        PLCurveBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(vl) },//
+    };//
+    PolygonMesh<Scalar, 2> tex{
+        ColVectors<Scalar, 2>(zipper::stl2zipper(t)),//
+        PolygonBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(ti) },//
+        PLCurveBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(tl) },//
+    };
+    PolygonMesh<Scalar, D> nor{
+        ColVectors<Scalar, D>(zipper::stl2zipper(n)),//
+        PolygonBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(ni) },//
+        PLCurveBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(nl) },//
+    };
+    using RType = OBJMesh<Scalar, D>;
+    return RType{
+        .position = std::move(pos),
+        .texture = std::move(tex),
+        .normal = std::move(nor)
+
     };
 }
 }// namespace balsa::geometry::polygon_mesh

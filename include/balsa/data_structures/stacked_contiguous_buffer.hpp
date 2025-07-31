@@ -1,12 +1,12 @@
 #if !defined(BALSA_GEOMETRY_DATA_STRUCTURES_STACKED_CONTIGUOUS_BUFFER_H)
 #define BALSA_GEOMETRY_DATA_STRUCTURES_STACKED_CONTIGUOUS_BUFFER_H
 
-#include "balsa/eigen/types.hpp"
+#include "balsa/tensor_types.hpp"
 #include <tuple>
 
 
 namespace balsa::data_structures {
-template<typename IndexType = int>
+template<typename IndexType = index_type>
 struct StackedContiguousBuffer {
 
 
@@ -14,10 +14,10 @@ struct StackedContiguousBuffer {
     auto get_span_offsets(int index) const;
 
     size_t span_count() const {
-        return _offsets.size() - 1;
+        return _offsets.extent(0) - 1;
     }
-    balsa::eigen::VectorX<IndexType> _buffer;
-    balsa::eigen::VectorX<int> _offsets;
+    balsa::VectorX<IndexType> _buffer = {};
+    balsa::VectorX<int> _offsets = {};
 
     bool operator==(const StackedContiguousBuffer &o) const;
 };

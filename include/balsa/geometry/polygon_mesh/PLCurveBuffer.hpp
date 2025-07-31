@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace balsa::geometry::polygon_mesh {
-template<typename IndexType = int>
+template<typename IndexType = index_type>
 struct PLCurveBuffer : public data_structures::StackedContiguousBuffer<IndexType> {
 
     using Base = data_structures::StackedContiguousBuffer<IndexType>;

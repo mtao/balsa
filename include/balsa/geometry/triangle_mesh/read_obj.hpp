@@ -8,7 +8,7 @@ namespace balsa::geometry::triangle_mesh {
 
 
 // OBJ meshes can hold multiple buffers
-template<typename Scalar = double, int D = 3>
+template<typename Scalar = double, int8_t D = 3>
 struct OBJMesh {
     TriangleMesh<Scalar, D> position;
     TriangleMesh<Scalar, 2> texture;
