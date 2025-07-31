@@ -21,7 +21,6 @@ namespace {
             return spdlog::level::info;
         case QtWarningMsg:
             return spdlog::level::warn;
-        // case QtSystemMsg: # for some reason QtSystemMsg == QtCriticalMsg
         case QtCriticalMsg:
             return spdlog::level::critical;
         case QtFatalMsg:
@@ -39,26 +38,26 @@ void spdlogMessageOutput(QtMsgType type, const QMessageLogContext &context, cons
 
     const static std::string none = "";
     const static std::string fatal = "[FATAL]";
-    const static std::string system = "[SYSTEM]";
+    const static std::string critical = "[CRITICAL]";
 
-    std::string const *prefix = &none;
+    std::string_view prefix;
 
 
     if (type == QtFatalMsg) {
-        prefix = &fatal;
-    } else if (type == QtSystemMsg) {
-        prefix = &system;
+        prefix = fatal;
+    } else if (type == QtCriticalMsg) {
+        prefix = critical;
     }
     auto logger = spdlog::get(logger_name);
     if (context.file == nullptr) {
         logger->log(level,
                     "{}{}",
-                    *prefix,
+                    prefix,
                     localMsg.constData());
     } else {
         logger->log(level,
                     "{}{} ({}:{}, {})",
-                    *prefix,
+                    prefix,
                     localMsg.constData(),
                     context.file,
                     context.line,
