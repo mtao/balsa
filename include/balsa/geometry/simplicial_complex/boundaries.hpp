@@ -1,6 +1,7 @@
 #if !defined(BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_BOUNDARIES)
 #define BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_BOUNDARIES
 #include "balsa/eigen/types.hpp"
+#include "balsa/tensor_types.hpp"
 #include "balsa/eigen/concepts/shape_types.hpp"
 #include "balsa/zipper/types.hpp"
 #include <zipper/concepts/MatrixBaseDerived.hpp>
@@ -84,7 +85,7 @@ auto boundaries(const CellType &C) {
     typename FacetVector::span_type fm2(f2);
     CellArray c;
     typename CellVector::span_type cm(c);
-    for (int i = 0; i < C.cols(); ++i) {
+    for (index_type i = 0; i < C.cols(); ++i) {
         auto c = C.col(i);
         fm = c.template head<FacetSize>();
         for (int j = 0; j < CellSize; ++j) {

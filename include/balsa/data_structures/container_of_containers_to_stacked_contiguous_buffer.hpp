@@ -35,7 +35,7 @@ StackedContiguousBuffer<IndexType> container_of_containers_to_stacked_contiguous
     }
 
     {
-        ret._buffer.resize({ret._offsets(ret._offsets.rows()-1)});
+        ret._buffer.resize(index_type(ret._offsets(ret._offsets.rows()-1)));
 
         auto range = container | ranges::views::join | ranges::views::take_exactly(ret._buffer.rows());
         ranges::copy(range, ret._buffer.view().data());

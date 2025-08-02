@@ -25,7 +25,7 @@ std::vector<std::array<std::decay_t<decltype(*std::declval<BeginIt>())>, 3>> ear
   const BeginIt &beginit,
   const EndIt &endit) {
     using Index = std::decay_t<decltype(*std::declval<BeginIt>())>;
-    using Face = std::array<int, 3>;
+    using Face = std::array<Index, 3>;
     std::vector<Face> stlF;
 
     auto range = ranges::subrange(beginit, endit);
@@ -175,12 +175,12 @@ auto earclipping(const VDerived &V,
 template<zipper::concepts::ColVecs2Compatible VDerived, typename Container>
 auto earclipping(const VDerived &V,
                  const Container &C) {
-    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C.begin(), C.end())).eval();
+    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C)).eval();
 }
 template<zipper::concepts::ColVecs2Compatible VDerived, typename T>
 auto earclipping(const VDerived &V,
                  const std::initializer_list<T> &C) {
-    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C.begin(), C.end())).eval();
+    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C)).eval();
 }
 }// namespace balsa::geometry::triangle_mesh
 #endif

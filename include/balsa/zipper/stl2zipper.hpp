@@ -8,7 +8,7 @@ namespace balsa::zipper {
 
 
 auto stl2zipper(auto const &M) {
-    return eigen::as_zipper(eigen::stl2eigen(M));
+    return eigen::as_zipper(eigen::stl2eigen(M)).eval();
 }
 
 }// namespace balsa::zipper

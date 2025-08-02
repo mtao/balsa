@@ -80,10 +80,10 @@ namespace detail {
                 std::tuple<::zipper::Vector<value_type, Dim>, double> tupret;
                 if (size == Dim + 1) {
                     auto indices = R->as_array<Dim + 1>();
-                    tupret = simplex::circumcenter_with_squared_radius(V(Eigen::all, indices));
+                    tupret = simplex::circumcenter_with_squared_radius(V(::zipper::full_extent_t{}, indices));
                 } else {
                     auto indices = R->as_vector_with_size(size);
-                    tupret = simplex::circumcenter_with_squared_radius(V(Eigen::all, indices));
+                    tupret = simplex::circumcenter_with_squared_radius(V(::zipper::full_extent_t{}, indices));
                 }
                 const auto &[C, r] = tupret;
                 RetType ret;
@@ -124,7 +124,7 @@ namespace detail {
     //    std::iota(indices.begin(), indices.end(), 0);
 
     //    auto update_center = [&]() {
-    //        auto V = P(Eigen::all, indices);
+    //        auto V = P(zipper::full_extent_t{}, indices);
     //        // std::cout << "Updating with pts \n"
     //        //           << V << std::endl;
     //        std::tie(center, square_radius) = circumcenter_with_squared_radius(V);

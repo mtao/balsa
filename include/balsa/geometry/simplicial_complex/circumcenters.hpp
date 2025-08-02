@@ -1,25 +1,14 @@
-#if !defined(BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_VOLUMES_HPP)
-#define BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_VOLUMES_HPP
-#include "balsa/geometry/simplex/volume.hpp"
+#if !defined(BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_CIRCUMCENTERS_HPP)
+#define BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_CIRCUMCENTERS_HPP
+#include "balsa/geometry/simplex/circumcenter.hpp"
 
 namespace balsa::geometry::simplicial_complex {
 template<
   ::zipper::concepts::MatrixBaseDerived PosType,
   ::zipper::concepts::MatrixBaseDerived SimplexType>
     requires(std::is_integral_v<typename SimplexType::value_type>)
-auto volumes(const PosType &V, const SimplexType &S) {
+auto circumcenters(const PosType &V, const SimplexType &S) {
 
-    /*
-    constexpr static int cols = eigen::concepts::detail::compile_col_size<SimplexType>;
-    using RetType = eigen::RowVector<typename PosType::Scalar, cols>;
-
-    RetType R(S.cols());
-
-    for (int j = 0; j < R.size(); ++j) {
-        R(j) = simplex::volume(V(Eigen::all, S.col(j)));
-    }
-    return R;
-    */
     using value_type = typename PosType::value_type;
 
     auto cols = S.cols();
@@ -32,7 +21,7 @@ auto volumes(const PosType &V, const SimplexType &S) {
     // });
     for (zipper::index_type j = 0; j < S.extent(1); ++j) {
         auto s = S.col(j);
-        C(j) = simplex::volume(V(::zipper::full_extent_t{}, s));
+        C(j) = simplex::circumcenter(V(::zipper::full_extent_t{}, s));
     }
     return C;
 }

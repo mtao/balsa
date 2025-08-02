@@ -78,7 +78,8 @@ class EigenMatrixView : public ::zipper::views::nullary::NullaryViewBase<EigenMa
       : Base(extents_type(a.rows())), m_data(a) {}
     EigenMatrixView(const EigenType &a)
         requires(extents_traits::rank_dynamic == 1 && extents_traits::is_dynamic_extent(1))
-      : Base(extents_type(a.cols())), m_data(a) {}
+      : Base(extents_type(a.cols())), m_data(a) {
+      }
 
     EigenMatrixView(const EigenType &a)
         requires(extents_traits::is_static)
