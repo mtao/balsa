@@ -17,7 +17,7 @@
 
 namespace balsa::geometry::point_cloud {
 template<typename T>
-std::array<balsa::eigen::ColVectors<T, 3>, 2> read_xyz(const std::string &filename) {
+std::array<balsa::ColVectors<T, 3>, 2> read_xyz(const std::string &filename) {
     std::vector<std::array<T, 6>> lines;
 
 
@@ -41,7 +41,7 @@ std::array<balsa::eigen::ColVectors<T, 3>, 2> read_xyz(const std::string &filena
                           return rng.empty();
                       });
           // TODO: we might want to use the individual species somewhere
-          //auto front = toks.front();
+          // auto front = toks.front();
           auto nums = toks | ranges::views::drop(1) | ranges::views::transform([](const auto &v) {
                           T value;
                           auto s = v | ranges::to<std::string>;
@@ -55,25 +55,29 @@ std::array<balsa::eigen::ColVectors<T, 3>, 2> read_xyz(const std::string &filena
       });
 
 
-    balsa::eigen::ColVectors<T, 6> D(6, count);
+    balsa::ColVectors<T, 6> D(6, count);
 
     for (auto &&[col, arr] : ranges::views::enumerate(data_lines) | ranges::views::take_exactly(count)) {
-        //std::cout << ranges::views::all(arr) << std::endl;
-        D.col(col) = balsa::eigen::stl2eigen(arr);
+        // std::cout << ranges::views::all(arr) << std::endl;
+        ::zipper::VectorBase r = arr;
+        D.col(col) = r;
     }
 
 
-    if (D.bottomRows(3).cwiseAbs().sum() == 0) {
-        return { { D.topRows(3), {} } };
+    if (D.bottomRows(3).as_array().abs().sum() == 0) {
+        balsa::ColVectors<T, 3> U = D.template topRows<3>();
+        return { { U, {} } };
     } else {
-        return { { D.topRows(3), D.bottomRows(3) } };
+        balsa::ColVectors<T, 3> U = D.template topRows<3>();
+        balsa::ColVectors<T, 3> L = D.template bottomRows<3>();
+        return { { U, L } };
     }
 }
 
-std::array<balsa::eigen::ColVectors<float, 3>, 2> read_xyzF(const std::string &filename) {
+std::array<balsa::ColVectors<float, 3>, 2> read_xyzF(const std::string &filename) {
     return read_xyz<float>(filename);
 }
-std::array<balsa::eigen::ColVectors<double, 3>, 2> read_xyzD(const std::string &filename) {
+std::array<balsa::ColVectors<double, 3>, 2> read_xyzD(const std::string &filename) {
     return read_xyz<double>(filename);
 }
 }// namespace balsa::geometry::point_cloud

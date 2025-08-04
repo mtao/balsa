@@ -1,4 +1,4 @@
-#include "balsa/geometry/point_cloud/partio_loader_impl.hpp"
+#include "partio_loader_impl.hpp"
 #include <fmt/format.h>
 namespace balsa::geometry::point_cloud
 
@@ -19,23 +19,23 @@ void PartioFileWriter::update_size(int size) {
         _handle->addParticles(size - cur);
     }
 }
-void PartioFileWriter::set_positions(const balsa::eigen::ColVecs3d &P) {
+void PartioFileWriter::set_positions(const balsa::ColVecs3d &P) {
 
     set_attribute("position", P.cast<float>());
 }
-void PartioFileWriter::set_velocities(const balsa::eigen::ColVecs3d &V) {
+void PartioFileWriter::set_velocities(const balsa::ColVecs3d &V) {
     set_attribute("velocity", V.cast<float>());
 }
-void PartioFileWriter::set_colors(const balsa::eigen::ColVecs4d &C) {
+void PartioFileWriter::set_colors(const balsa::ColVecs4d &C) {
     set_attribute("color", C.cast<float>());
 }
-void PartioFileWriter::set_ids(const balsa::eigen::VecXi &I) {
+void PartioFileWriter::set_ids(const balsa::VecXi &I) {
     set_attribute("id", I);
 }
-void PartioFileWriter::set_radii(const balsa::eigen::VecXd &I) {
+void PartioFileWriter::set_radii(const balsa::VecXd &I) {
     set_attribute("radius", I);
 }
-void PartioFileWriter::set_densities(const balsa::eigen::VecXd &I) {
+void PartioFileWriter::set_densities(const balsa::VecXd &I) {
     set_attribute("density", I);
 }
 
@@ -67,23 +67,23 @@ std::vector<std::string> PartioFileReader::attributes() const {
 }
 
 
-balsa::eigen::ColVecs3d PartioFileReader::positions() const {
+balsa::ColVecs3d PartioFileReader::positions() const {
     return vector_attribute<float, 3>("position").cast<double>();
 }
-balsa::eigen::ColVecs3d PartioFileReader::velocities() const {
+balsa::ColVecs3d PartioFileReader::velocities() const {
     return vector_attribute<float, 3>("velocity").cast<double>();
 }
-balsa::eigen::ColVecs4d PartioFileReader::colors() const {
+balsa::ColVecs4d PartioFileReader::colors() const {
     return vector_attribute<float, 4>("color").cast<double>();
 }
-balsa::eigen::VecXi PartioFileReader::ids() const {
+balsa::VecXi PartioFileReader::ids() const {
     return attribute<int>("id");
 }
-balsa::eigen::VecXd PartioFileReader::densities() const {
+balsa::VecXd PartioFileReader::densities() const {
     return attribute<float>("density").cast<double>();
 }
 
-balsa::eigen::VecXd PartioFileReader::radii() const {
+balsa::VecXd PartioFileReader::radii() const {
     return attribute<float>("radius").cast<double>();
 }
 
@@ -110,19 +110,19 @@ bool PartioFileReader::has_radii() const {
 }
 
 
-balsa::eigen::ColVecs3d points_from_partio(const std::string &filename) {
+balsa::ColVecs3d points_from_partio(const std::string &filename) {
     return PartioFileReader(filename).positions();
 }
-std::tuple<balsa::eigen::ColVecs3d, balsa::eigen::ColVecs3d> points_and_velocity_from_partio(const std::string &filename) {
+std::tuple<balsa::ColVecs3d, balsa::ColVecs3d> points_and_velocity_from_partio(const std::string &filename) {
     PartioFileReader r(filename);
     return { r.positions(), r.velocities() };
 }
 
-void write_to_partio(const std::string &filename, const balsa::eigen::ColVecs3d &P) {
+void write_to_partio(const std::string &filename, const balsa::ColVecs3d &P) {
     PartioFileWriter w(filename);
     w.set_positions(P);
 }
-void write_to_partio(const std::string &filename, const balsa::eigen::ColVecs3d &P, const balsa::eigen::ColVecs3d &V) {
+void write_to_partio(const std::string &filename, const balsa::ColVecs3d &P, const balsa::ColVecs3d &V) {
     PartioFileWriter writer(filename);
     writer.set_positions(P);
     writer.set_velocities(V);

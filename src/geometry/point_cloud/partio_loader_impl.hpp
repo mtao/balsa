@@ -1,6 +1,7 @@
 #include <Partio.h>
 #include <PartioAttribute.h>
 #include "balsa/geometry/point_cloud/partio_loader.hpp"
+#include "balsa/concepts/tensor_shapes.hpp"
 
 namespace balsa::geometry::point_cloud
 
@@ -16,10 +17,10 @@ constexpr Partio::ParticleAttributeType
     }
     return Partio::ParticleAttributeType::NONE;
 }
-template<eigen::concepts::ColVecsDCompatible T>
+template<concepts::ColVecsDCompatible T>
 void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
-    using Scalar = typename T::Scalar;
-    constexpr static int D = T::RowsAtCompileTime;
+    using Scalar = typename T::value_type;
+    constexpr static int D = T::extents_type::static_extent(0);
 
     Partio::ParticleAttributeType type = type_to_partio_scalar<Scalar>();
 
@@ -33,14 +34,15 @@ void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
     for (int j = 0; j < V.cols(); ++j, ++it) {
         auto p = V.col(j);
         float *dat = _handle->dataWrite<float>(attr, it.index);
-        Eigen::Map<balsa::eigen::Vector<Scalar, D>>{ dat } = p;
+
+        typename balsa::Vector<float, D>::span_type(std::span<float, D>(dat,dat+D)) = p.template cast<float>();
     }
 }
 
-template<eigen::concepts::VecXCompatible T>
+template<concepts::VecXCompatible T>
 void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
 
-    using Scalar = typename T::Scalar;
+    using Scalar = typename T::value_type;
     Partio::ParticleAttributeType type = type_to_partio_scalar<Scalar>();
     Partio::ParticleAttribute attr = _handle->addAttribute(
       name.c_str(), type, 1);
@@ -64,7 +66,7 @@ bool PartioFileReader::has_attribute(const std::string &name) const {
 }
 
 template<typename T, int D>
-balsa::eigen::ColVectors<T, D> PartioFileReader::vector_attribute(const std::string &name) const {
+balsa::ColVectors<T, D> PartioFileReader::vector_attribute(const std::string &name) const {
 
     if (!has_attribute<T, D>(name)) {
         throw std::invalid_argument(fmt::format("failed to get {} as a vector of size {}", name, D));
@@ -72,7 +74,7 @@ balsa::eigen::ColVectors<T, D> PartioFileReader::vector_attribute(const std::str
     Partio::ParticleAttribute attr;
     _handle->attributeInfo(name.c_str(), attr);
 
-    balsa::eigen::ColVectors<T, D> R(D, particle_count());
+    balsa::ColVectors<T, D> R(D, particle_count());
 
     auto iterator = _handle->begin();
     Partio::ParticleAccessor acc(attr);
@@ -88,12 +90,12 @@ balsa::eigen::ColVectors<T, D> PartioFileReader::vector_attribute(const std::str
 #pragma clang diagnostic pop
 #endif
         float *data = acc.raw<T>(it);
-        R.col(cnt++) = Eigen::Map<const balsa::eigen::Vector<T, D>>{ data };
+        R.col(cnt++) = typename balsa::Vector<float, D>::const_span_type(std::span<const float, D>(data, data + D)).template cast<T>();
     }
     return R;
 }
 template<typename T>
-balsa::eigen::VectorX<T> PartioFileReader::attribute(const std::string &name) const {
+balsa::VectorX<T> PartioFileReader::attribute(const std::string &name) const {
 
     if (!has_attribute<T, 1>(name)) {
         throw std::invalid_argument(fmt::format("failed to get {} as a vector of size {}", name, 1));
@@ -101,7 +103,7 @@ balsa::eigen::VectorX<T> PartioFileReader::attribute(const std::string &name) co
     Partio::ParticleAttribute attr;
     _handle->attributeInfo(name.c_str(), attr);
 
-    balsa::eigen::VectorX<T> R(particle_count());
+    balsa::VectorX<T> R(particle_count());
     auto iterator = _handle->begin();
     Partio::ParticleAccessor acc(attr);
     iterator.addAccessor(acc);

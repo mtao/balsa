@@ -27,7 +27,7 @@ spdlog_dep = dependency('spdlog', version: spdlog_version)
 eigen_dep = dependency('eigen3', version: eigen_version)
 
 mdspan_dep = dependency('mdspan')
-zipper_proj = subproject('zipper')
+zipper_proj = subproject('zipper', default_options:{'testing': false})
 zipper_dep = zipper_proj.get_variable('zipper_dep')
 
 range_v3_dep = dependency('range-v3')
@@ -126,7 +126,7 @@ geometry_sources = [
 #  'src/geometry/mesh/triangle/mesh.cpp', 
 #  'src/geometry/mesh/ply.cpp', 
 #  'src/geometry/mesh/polygon_boundary_triangulation.cpp',
-#  'src/geometry/point_cloud/read_xyz.cpp', 
+  'src/geometry/point_cloud/read_xyz.cpp', 
   'src/geometry/polygon_mesh/read_obj.cpp', 
   'src/geometry/triangle_mesh/read_obj.cpp', 
 ]

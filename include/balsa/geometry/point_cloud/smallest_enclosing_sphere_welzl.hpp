@@ -170,7 +170,7 @@ namespace detail {
     //}
 }// namespace detail
 template<::zipper::concepts::MatrixBaseDerived ColVecs>
-auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::extent(0), 1)> {
+auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::static_extent(0), 1)> {
 
     std::vector<::zipper::index_type> reorder(P.cols());
     std::ranges::iota(reorder.begin(), reorder.end(), 0);
