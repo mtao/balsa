@@ -88,6 +88,8 @@ bool MainWindow::loadMesh(const QString &str) {
         const auto &pos = m.position;
         const RowVectors<float, 3> V = pos.vertices.transpose().cast<float>();
         const RowVectors<GLuint, 3> F = pos.triangles.transpose().cast<GLuint>();
+
+        spdlog::info("Faces:\n: {}", pos.triangles);
         auto v = V.as_span();
         auto f = F.as_span();
         load(v, f);
@@ -98,8 +100,8 @@ bool MainWindow::loadMesh(const QString &str) {
 
 void MainWindow::load(const RowVectors<float, 3>::const_span_type &V, const RowVectors<GLuint, 3>::const_span_type &F) {
 
-    spdlog::info("Vertices\n: {}", V);
-    spdlog::info("Faces:\n: {}", F);
+    // spdlog::info("Vertices\n: {}", V);
+    // spdlog::info("Faces:\n: {}", F);
     Widget *w = dynamic_cast<Widget *>(this->centralWidget());
 
     w->setMesh(V, F);

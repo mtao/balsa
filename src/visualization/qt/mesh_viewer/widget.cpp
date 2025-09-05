@@ -20,6 +20,7 @@ namespace {
       //"   col = MVP * vec4(posAttr,1.0);\n"
       //"   gl_Position = MVP * vec4(posAttr + vec3(r,g,b),1.0);\n"
       "   gl_Position = MVP * vec4(posAttr,1.0);\n"
+      "   col = vec4(posAttr,1.0);\n"
       "   gl_PointSize = 50.f;\n"
       //"   gl_Position = matrix * posAttr;\n"
       "}\n";
@@ -33,6 +34,7 @@ namespace {
       "void main() {\n"
       //"   fragColor = vec4(value,1.0);\n"
       "   fragColor = rgba;\n"
+      "   fragColor = col;\n"
       //"   fragColor = col;\n"
       "}\n";
 }// namespace

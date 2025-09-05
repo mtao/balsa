@@ -1,6 +1,8 @@
 #include "balsa/geometry/polygon_mesh/PolygonMesh.hpp"
 #include "balsa/geometry/triangle_mesh/earclipping.hpp"
 
+#include <spdlog/spdlog.h>
+#include <zipper/utils/format.hpp>
 namespace balsa::geometry::polygon_mesh {
 
 // triangulates the polygons in a polygon mesh
@@ -20,12 +22,10 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
         }
     }
     if (skipped == 0 && poly_added == 0) {
-        ColVectors<index_type, 3> a(pindices.polygon_count());
-        auto s = a.view().accessor().as_std_span();
         auto r = pindices._buffer.view().accessor().as_std_span();
-        std::copy(r.begin(), r.end(), s.begin());
-
-        return a;
+        using ET = RowVectors<index_type, 3>::extents_type;
+        RowVectors<index_type, 3>::const_span_type a(r,ET{pindices.polygon_count()});
+        return a.transpose().eval();
     } else {
         index_type total_poly = pindices.polygon_count() + poly_added - skipped;
         ColVectors<index_type, 3> F(total_poly);
