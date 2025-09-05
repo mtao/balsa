@@ -185,6 +185,8 @@ if get_option('visualization')
 
   colormap_proj = subproject('colormap_shaders')
   colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep') #, include_type:'system')
+
+  visualization_required_deps = [vulkan_dep, glm_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
   
   visualization_sources = [
     'src/visualization/vulkan/film.cpp',
@@ -196,31 +198,36 @@ if get_option('visualization')
     'src/visualization/vulkan/window.cpp',
   ]
 
-  visualization_qt_sources = [
-    'src/visualization/qt/vulkan/windows/scene.cpp',
-    'src/visualization/qt/vulkan/renderers/scene.cpp',
-    'src/visualization/qt/vulkan/film.cpp',
-    #'src/visualization/qt/vulkan/window.cpp',
-    'src/visualization/qt/mesh_viewer/main_window.cpp',
-    'src/visualization/qt/mesh_viewer/widget.cpp',
-    ]
-
-  visualization_moc_headers = [
-    'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
-    ]
-
-  visualization_qt_mocced = qt.compile_moc(
-    headers: visualization_moc_headers,
-    include_directories: include_dir,
-    dependencies: qt_dep
-    )
-
-
-  visualization_sources += visualization_qt_sources
-  visualization_sources += visualization_qt_mocced
+  if get_option('qt')
+    visualization_required_deps += qt_dep
+    visualization_qt_sources = [
+      'src/visualization/qt/vulkan/windows/scene.cpp',
+      'src/visualization/qt/vulkan/renderers/scene.cpp',
+      'src/visualization/qt/vulkan/film.cpp',
+      #'src/visualization/qt/vulkan/window.cpp',
+      'src/visualization/qt/mesh_viewer/main_window.cpp',
+      'src/visualization/qt/mesh_viewer/widget.cpp',
+      ]
+  
+  
+  
+    visualization_moc_headers = [
+      'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
+      'include/balsa/visualization/qt/mesh_viewer/widget.hpp',
+      ]
+  
+    visualization_qt_mocced = qt.compile_moc(
+      headers: visualization_moc_headers,
+      include_directories: include_dir,
+      dependencies: qt_dep
+      )
+  
+  
+    visualization_sources += visualization_qt_sources
+    visualization_sources += visualization_qt_mocced
+  endif
   visualization_sources += glsl_resource_sources
   
-  visualization_required_deps = [qt_dep, vulkan_dep, glm_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
 
 
   

@@ -16,6 +16,7 @@
 #include "balsa/eigen/zipper_compat.hpp"
 #include <numbers>
 #include <utility>
+#include <zipper/storage/StlStorage.hpp>
 
 namespace balsa::geometry::triangle_mesh {
 template<eigen::concepts::Vec2Compatible VDerived, typename IndexType>
@@ -169,13 +170,17 @@ auto earclipping(const VDerived &V,
 template<zipper::concepts::ColVecs2Compatible VDerived, typename T>
 auto earclipping(const VDerived &V,
                  const std::initializer_list<T> &C) {
-    return eigen::as_zipper(earclipping(eigen::as_eigen(V), std::span(C))).eval();
+    auto r = earclipping_stl(eigen::as_eigen(V), std::span(C));
+    ::zipper::MatrixBase M = ::zipper::storage::get_const_non_owning_stl_storage(r);
+    return M.eval();
 }
 
 template<zipper::concepts::ColVecs2Compatible VDerived, typename Index, zipper::index_type N>
 auto earclipping(const VDerived &V,
                  const ::zipper::Vector<Index, N> &C) {
-    return eigen::as_zipper(earclipping(eigen::as_eigen(V), C.view().as_std_span())).eval();
+    auto r = earclipping_stl(eigen::as_eigen(V),  C.view().as_std_span());
+    ::zipper::MatrixBase M = ::zipper::storage::get_const_non_owning_stl_storage(r);
+    return M.eval();
 }
 }// namespace balsa::geometry::triangle_mesh
 #endif

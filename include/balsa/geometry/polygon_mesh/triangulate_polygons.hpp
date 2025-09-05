@@ -21,8 +21,8 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
     }
     if (skipped == 0 && poly_added == 0) {
         ColVectors<index_type, 3> a(pindices.polygon_count());
-        auto s = a.view().accessor().as_stl_span();
-        auto r = pindices._buffer.view().accessor().as_stl_span();
+        auto s = a.view().accessor().as_std_span();
+        auto r = pindices._buffer.view().accessor().as_std_span();
         std::copy(r.begin(), r.end(), s.begin());
 
         return a;
