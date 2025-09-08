@@ -50,7 +50,7 @@ PartioFileReader::PartioFileReader(const std::string &filename) : _handle(Partio
 PartioFileReader::~PartioFileReader() {
     _handle->release();
 }
-int PartioFileReader::particle_count() const {
+auto PartioFileReader::particle_count() const -> index_type {
     return _handle->numParticles();
 }
 

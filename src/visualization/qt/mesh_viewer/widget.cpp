@@ -281,9 +281,15 @@ void Widget::mouseMoveEvent(QMouseEvent *event) {
     QPointF delta = updateMousePosition(event->position());
     qDebug() << delta;
 
-    delta *= -1e-2;
+    delta *= -1e-1;
 
-    m_view.translate(delta.x(), delta.y(), 0.0);
+    QVector3D dir(delta.x(),delta.y(),0.0);
+
+
+
+    //m_view.translate(delta.x(), delta.y(), 0.0);
+    m_view.rotate(-delta.x(), 0,1,0);
+    m_view.rotate(delta.y(), 1,0,0);
     update_mvp();
 }
 void Widget::mousePressEvent(QMouseEvent *event) {

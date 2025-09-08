@@ -1,6 +1,7 @@
 #include "balsa/visualization/qt/mesh_viewer/main_window.hpp"
 #include "balsa/visualization/qt/mesh_viewer/widget.hpp"
 #include "balsa/geometry/triangle_mesh/read_obj.hpp"
+#include "balsa/geometry/bounding_box.hpp"
 #include <QAction>
 #include <QMenu>
 #include <QMenuBar>
@@ -8,9 +9,12 @@
 #include <QFileDialog>
 #include <spdlog/spdlog.h>
 #include <zipper/utils/format.hpp>
+#include <zipper/utils/maxCoeff.hpp>
 #include <QToolBar>
 #include <QSlider>
 #include <QVBoxLayout>
+#include <zipper/Form.hpp>
+#include <zipper/views/nullary/ConstantView.hpp>
 namespace balsa::visualization::qt::mesh_viewer {
 
 MainWindow::MainWindow() {
@@ -86,10 +90,40 @@ bool MainWindow::loadMesh(const QString &str) {
     if (path.extension().string() == ".obj") {
         auto m = balsa::geometry::triangle_mesh::read_objD(path);
         const auto &pos = m.position;
-        const RowVectors<float, 3> V = pos.vertices.transpose().cast<float>();
+
+
+
+        RowVectors<float, 3> V = pos.vertices.transpose().cast<float>();
+        auto bb = balsa::geometry::bounding_box(V.transpose());
+        assert(bb.min().size() == 3);
+        assert(bb.max().size() == 3);
+        spdlog::info("Input {} {} => {}", bb.min(), bb.max(), bb.range());
+
+        double r = ::zipper::utils::maxCoeff(bb.range());
+
+        Vector3<float> center = (bb.min() + bb.max()) / 2.0;
+        for (::zipper::index_type j = 0; j < V.extent(0); ++j) {
+            auto mv = V.row(j);
+            assert(mv.size() == 3);
+            mv = (mv - center) / r;
+        }
+        bb = balsa::geometry::bounding_box(V.transpose());
+        spdlog::info("{} {} => {}", bb.min(), bb.max(), bb.range());
+        /*
+        auto fbb = balsa::geometry::bounding_box(pos.triangles);
+
+
+        assert(fbb.min().size() == 3);
+        assert(fbb.max().size() == 3);
+        for(rank_type j = 0; j < 3; ++j) {
+            assert(fbb.min()(j) >= 0);
+            assert(fbb.max()(j) < V.rows());
+        }
+        */
+
         const RowVectors<GLuint, 3> F = pos.triangles.transpose().cast<GLuint>();
 
-        spdlog::info("Faces:\n: {}", pos.triangles);
+        //spdlog::info("Faces:\n: {}", pos.triangles);
         auto v = V.as_span();
         auto f = F.as_span();
         load(v, f);

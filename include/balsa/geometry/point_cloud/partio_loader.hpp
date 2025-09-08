@@ -49,7 +49,7 @@ struct PartioFileReader {
     VecXi ids() const;
 
 
-    template<typename T, int D>
+    template<typename T, rank_type D>
     ColVectors<T, D> vector_attribute(const std::string &name) const;
     template<typename T>
     VectorX<T> attribute(const std::string &name) const;
@@ -61,10 +61,10 @@ struct PartioFileReader {
     bool has_ids() const;
     std::vector<std::string> attributes() const;
 
-    int particle_count() const;
+    index_type particle_count() const;
 
 
-    template<typename T, int D = 1>
+    template<typename T, rank_type D = 1>
     bool has_attribute(const std::string &name) const;
 
 

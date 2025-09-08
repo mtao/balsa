@@ -20,7 +20,7 @@ constexpr Partio::ParticleAttributeType
 template<concepts::ColVecsDCompatible T>
 void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
     using Scalar = typename T::value_type;
-    constexpr static int D = T::extents_type::static_extent(0);
+    constexpr static index_type D = T::extents_type::static_extent(0);
 
     Partio::ParticleAttributeType type = type_to_partio_scalar<Scalar>();
 
@@ -31,7 +31,7 @@ void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
       name.c_str(), type, D);
     update_size(V.cols());
     auto it = _handle->begin();
-    for (int j = 0; j < V.cols(); ++j, ++it) {
+    for (index_type j = 0; j < V.cols(); ++j, ++it) {
         auto p = V.col(j);
         float *dat = _handle->dataWrite<float>(attr, it.index);
 
@@ -50,13 +50,13 @@ void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
     update_size(V.size());
 
     auto it = _handle->begin();
-    for (int j = 0; j < V.size(); ++j, ++it) {
+    for (index_type j = 0; j < V.size(); ++j, ++it) {
         Scalar *dat = _handle->dataWrite<Scalar>(attr, it.index);
         *dat = V(j);
     }
 }
 
-template<typename T, int D>
+template<typename T, rank_type D>
 bool PartioFileReader::has_attribute(const std::string &name) const {
     Partio::ParticleAttribute attr;
     if (_handle->attributeInfo(name.c_str(), attr) && Partio::typeCheck<T>(attr.type) && attr.count == D) {
@@ -65,7 +65,7 @@ bool PartioFileReader::has_attribute(const std::string &name) const {
     return false;
 }
 
-template<typename T, int D>
+template<typename T, rank_type D>
 balsa::ColVectors<T, D> PartioFileReader::vector_attribute(const std::string &name) const {
 
     if (!has_attribute<T, D>(name)) {
