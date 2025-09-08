@@ -22,11 +22,11 @@ class Widget : public QOpenGLWidget {
     virtual void resizeGL(int w, int h) override;
     virtual void paintGL() override;
 
-    void setMesh(const RowVectors<double, 2>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles);
-    void setMesh(const RowVectors<double, 3>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles);
+    void setMesh(const ColVectors<double, 2>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles);
+    void setMesh(const ColVectors<double, 3>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles);
 
-    void setMesh(const RowVectors<float, 2>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles);
-    void setMesh(const RowVectors<float, 3>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles);
+    void setMesh(const ColVectors<float, 2>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles);
+    void setMesh(const ColVectors<float, 3>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles);
 
 
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -55,7 +55,7 @@ class Widget : public QOpenGLWidget {
 
   private:
     template<typename T, zipper::index_type D>
-    void _setMesh(const RowVectors<T, D>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles);
+    void _setMesh(const ColVectors<T, D>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles);
     QOpenGLBuffer m_vbo = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     QOpenGLBuffer m_ibo = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
     QOpenGLShaderProgram *m_program = nullptr;

@@ -9,8 +9,8 @@
 namespace balsa::zipper {
 using index_type = ::zipper::index_type;
 using rank_type = ::zipper::rank_type;
-template<typename T, index_type A, index_type B>
-using Matrix = ::zipper::Matrix<T, A, B>;
+template<typename T, index_type A, index_type B, bool IsRowMajor = true>
+using Matrix = ::zipper::Matrix<T, A, B, IsRowMajor>;
 
 template<typename T, index_type A>
 using SquareMatrix = Matrix<T, A, A>;
@@ -41,10 +41,11 @@ using Vector4 = Vector<T, 4>;
 template<typename T>
 using RowVector4 = RowVector<T, 4>;
 
-template<typename T, index_type D>
-using ColVectors = Matrix<T, D, std::dynamic_extent>;
-template<typename T, index_type D>
-using RowVectors = Matrix<T, std::dynamic_extent, D>;
+// by default use colmajor for colvectors to make sure our vectors are stored contiguous in memory (better for passing colvectors into opengl)
+template<typename T, index_type D, bool IsRowMajor = false>
+using ColVectors = Matrix<T, D, std::dynamic_extent, IsRowMajor>;
+template<typename T, index_type D, bool IsRowMajor = true>
+using RowVectors = Matrix<T, std::dynamic_extent, D, IsRowMajor>;
 
 using Mat3i = SquareMatrix<int, 3>;
 using Mat2i = SquareMatrix<int, 2>;

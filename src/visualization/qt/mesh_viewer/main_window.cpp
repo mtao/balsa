@@ -92,9 +92,8 @@ bool MainWindow::loadMesh(const QString &str) {
         const auto &pos = m.position;
 
 
-
-        RowVectors<float, 3> V = pos.vertices.transpose().cast<float>();
-        auto bb = balsa::geometry::bounding_box(V.transpose());
+        ColVectors<float, 3> V = pos.vertices.cast<float>();
+        auto bb = balsa::geometry::bounding_box(V);
         assert(bb.min().size() == 3);
         assert(bb.max().size() == 3);
         spdlog::info("Input {} {} => {}", bb.min(), bb.max(), bb.range());
@@ -102,13 +101,15 @@ bool MainWindow::loadMesh(const QString &str) {
         double r = ::zipper::utils::maxCoeff(bb.range());
 
         Vector3<float> center = (bb.min() + bb.max()) / 2.0;
-        for (::zipper::index_type j = 0; j < V.extent(0); ++j) {
-            auto mv = V.row(j);
+        for (::zipper::index_type j = 0; j < V.extent(1); ++j) {
+            auto mv = V.col(j);
             assert(mv.size() == 3);
             mv = (mv - center) / r;
         }
-        bb = balsa::geometry::bounding_box(V.transpose());
+        /*
+        bb = balsa::geometry::bounding_box(V);
         spdlog::info("{} {} => {}", bb.min(), bb.max(), bb.range());
+        */
         /*
         auto fbb = balsa::geometry::bounding_box(pos.triangles);
 
@@ -121,9 +122,9 @@ bool MainWindow::loadMesh(const QString &str) {
         }
         */
 
-        const RowVectors<GLuint, 3> F = pos.triangles.transpose().cast<GLuint>();
+        const ColVectors<GLuint, 3> F = pos.triangles.cast<GLuint>();
 
-        //spdlog::info("Faces:\n: {}", pos.triangles);
+        // spdlog::info("Faces:\n: {}", pos.triangles);
         auto v = V.as_span();
         auto f = F.as_span();
         load(v, f);
@@ -132,7 +133,7 @@ bool MainWindow::loadMesh(const QString &str) {
     return true;
 }
 
-void MainWindow::load(const RowVectors<float, 3>::const_span_type &V, const RowVectors<GLuint, 3>::const_span_type &F) {
+void MainWindow::load(const ColVectors<float, 3>::const_span_type &V, const ColVectors<GLuint, 3>::const_span_type &F) {
 
     // spdlog::info("Vertices\n: {}", V);
     // spdlog::info("Faces:\n: {}", F);

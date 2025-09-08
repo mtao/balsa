@@ -26,7 +26,7 @@ class MainWindow : public QMainWindow {
     void openMesh();
 
   private:
-    void load(const RowVectors<float, 3>::const_span_type &vertices, const RowVectors<uint32_t, 3>::const_span_type &triangles);
+    void load(const ColVectors<float, 3>::const_span_type &vertices, const ColVectors<uint32_t, 3>::const_span_type &triangles);
 };
 }// namespace balsa::visualization::qt::mesh_viewer
 

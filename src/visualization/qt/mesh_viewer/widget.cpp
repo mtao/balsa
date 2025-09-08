@@ -47,11 +47,11 @@ void Widget::update_mvp() {
     Q_ASSERT(m_mvp_uniform != -1);
     Q_ASSERT(m_mvp_uniform != -1);
     QMatrix4x4 MVP = m_perspective * m_view * m_model;
-    qDebug() << MVP;
+    // qDebug() << MVP;
     m_program->setUniformValue("MVP", MVP);
     GLint value = m_program->uniformLocation("value");
 
-    qDebug() << "Value: " << value;
+    // qDebug() << "Value: " << value;
     auto p = m_view.column(3);
     m_program->setUniformValue(value, p.x(), p.y(), p.z());
 
@@ -96,19 +96,19 @@ void Widget::initializeGL() {
     //     /*p=*/-0.5f, -0.500f, /*col=*/0.0f, 1.0f, 0.0f,
     //     /*p=*/+0.5f, -0.500f, /*col=*/0.0f, 0.0f, 1.0f };
     ////clang-format on
-    const RowVectors<float, 3> vertices = {
-        //{ +0.0f,
-        //  -0.5f,
-        //  +0.5f },
-        //{ +0.707f,
-        //  -0.500f,
-        //  -0.500f }
+    const ColVectors<float, 3> vertices = {
+        { +0.0f,
+          -0.5f,
+          +0.5f },
+        { +0.707f,
+          -0.500f,
+          -0.500f }
 
-        { +0.0f, +0.707f, 0.f },
-        { -0.5f, -0.500f, 0.f },
-        { +0.5f, -0.500f, 0.f }
+        //{ +0.0f, +0.707f, 0.f },
+        //{ -0.5f, -0.500f, 0.f },
+        //{ +0.5f, -0.500f, 0.f }
     };
-    const RowVectors<GLuint, 3> faces = { { 0, 1, 2 } };
+    const ColVectors<GLuint, 3> faces = { { 0 }, { 1 }, { 2 } };
 
     m_vbo.create();
     m_ibo.create();
@@ -157,13 +157,9 @@ void Widget::paintGL() {
     // m_program->release();
 
     m_program->bind();
-    QMatrix4x4 MVP = m_perspective * m_view * m_model;
-    qDebug() << MVP;
-    m_program->setUniformValue("MVP", MVP);
     m_vbo.bind();
     glf.glEnableVertexAttribArray(0);
     m_ibo.bind();
-    qDebug() << rgb;
     glf.glDrawElements(GL_TRIANGLES, size, GL_UNSIGNED_INT, nullptr);
 
     m_ibo.release();
@@ -174,24 +170,24 @@ void Widget::paintGL() {
 
     // m_program->release();
 }
-void Widget::setMesh(const RowVectors<float, 2>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles) {
+void Widget::setMesh(const ColVectors<float, 2>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles) {
     _setMesh<float, 2>(vertices, triangles);
 }
-void Widget::setMesh(const RowVectors<float, 3>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles) {
+void Widget::setMesh(const ColVectors<float, 3>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles) {
     _setMesh<float, 3>(vertices, triangles);
     //
 }
 
-void Widget::setMesh(const RowVectors<double, 2>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles) {
+void Widget::setMesh(const ColVectors<double, 2>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles) {
     _setMesh<double, 2>(vertices, triangles);
 }
-void Widget::setMesh(const RowVectors<double, 3>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles) {
+void Widget::setMesh(const ColVectors<double, 3>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles) {
     _setMesh<double, 3>(vertices, triangles);
     //
 }
 
 template<typename T, zipper::index_type Dim>
-void Widget::_setMesh(const RowVectors<T, Dim>::const_span_type &vertices, const RowVectors<GLuint, 3>::const_span_type &triangles) {
+void Widget::_setMesh(const ColVectors<T, Dim>::const_span_type &vertices, const ColVectors<GLuint, 3>::const_span_type &triangles) {
 
     // size = vertices.extent(0);
     size = triangles.extent(0) * triangles.extent(1);
@@ -221,7 +217,6 @@ void Widget::_setMesh(const RowVectors<T, Dim>::const_span_type &vertices, const
 
 
 void Widget::setR(int value) {
-    qDebug() << "got R " << value;
     rgb.setRed(value);
     makeCurrent();
     m_program->bind();
@@ -230,7 +225,6 @@ void Widget::setR(int value) {
     update();
 }
 void Widget::setG(int value) {
-    qDebug() << "got G " << value;
     rgb.setGreen(
       value);
     makeCurrent();
@@ -240,7 +234,6 @@ void Widget::setG(int value) {
     update();
 }
 void Widget::setB(int value) {
-    qDebug() << "got B " << value;
     rgb.setBlue(
       value);
     makeCurrent();
@@ -283,13 +276,12 @@ void Widget::mouseMoveEvent(QMouseEvent *event) {
 
     delta *= -1e-1;
 
-    QVector3D dir(delta.x(),delta.y(),0.0);
+    QVector3D dir(delta.x(), delta.y(), 0.0);
 
 
-
-    //m_view.translate(delta.x(), delta.y(), 0.0);
-    m_view.rotate(-delta.x(), 0,1,0);
-    m_view.rotate(delta.y(), 1,0,0);
+    // m_view.translate(delta.x(), delta.y(), 0.0);
+    m_view.rotate(-delta.x(), 0, 1, 0);
+    m_view.rotate(delta.y(), 1, 0, 0);
     update_mvp();
 }
 void Widget::mousePressEvent(QMouseEvent *event) {
