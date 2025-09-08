@@ -12,8 +12,8 @@ using rank_type = ::zipper::rank_type;
 template<typename T, index_type A, index_type B, bool IsRowMajor = true>
 using Matrix = ::zipper::Matrix<T, A, B, IsRowMajor>;
 
-template<typename T, index_type A>
-using SquareMatrix = Matrix<T, A, A>;
+template<typename T, index_type A, bool IsRowMajor = true>
+using SquareMatrix = Matrix<T, A, A, IsRowMajor>;
 template<typename T>
 using MatrixX = SquareMatrix<T, std::dynamic_extent>;
 
