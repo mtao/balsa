@@ -1,7 +1,7 @@
 #include <Partio.h>
 #include <PartioAttribute.h>
 #include "balsa/geometry/point_cloud/partio_loader.hpp"
-#include "balsa/concepts/tensor_shapes.hpp"
+#include "balsa/zipper/concepts/shape_types.hpp"
 
 namespace balsa::geometry::point_cloud
 
@@ -17,7 +17,7 @@ constexpr Partio::ParticleAttributeType
     }
     return Partio::ParticleAttributeType::NONE;
 }
-template<concepts::ColVecsDCompatible T>
+template<zipper::concepts::ColVecsDCompatible T>
 void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
     using Scalar = typename T::value_type;
     constexpr static index_type D = T::extents_type::static_extent(0);
@@ -35,11 +35,11 @@ void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
         auto p = V.col(j);
         float *dat = _handle->dataWrite<float>(attr, it.index);
 
-        typename balsa::Vector<float, D>::span_type(std::span<float, D>(dat,dat+D)) = p.template cast<float>();
+        typename balsa::Vector<float, D>::span_type(std::span<float, D>(dat, dat + D)) = p.template cast<float>();
     }
 }
 
-template<concepts::VecXCompatible T>
+template<::zipper::concepts::VectorBaseDerived T>
 void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
 
     using Scalar = typename T::value_type;

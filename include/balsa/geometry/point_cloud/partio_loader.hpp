@@ -2,7 +2,7 @@
 #define BALSA_GEOMETRY_POINT_CLOUD_PARTIO_LOADER_HPP
 #include "balsa/tensor_types.hpp"
 
-#include "balsa/concepts/tensor_shapes.hpp"
+#include "balsa/zipper/concepts/shape_types.hpp"
 
 // NOTE: if you wish to use custom attributes you want to include partio_loader_impl.hpp
 // this design is so that we can avoid designing
@@ -26,11 +26,9 @@ struct PartioFileWriter {
     void update_size(int size);
     void write();
 
-    template<balsa::concepts::ColVecsDCompatible T>
-    void set_attribute(const std::string &name, const T &V);
+    void set_attribute(const std::string &name, balsa::zipper::concepts::ColVecsDCompatible auto const &V);
 
-    template<balsa::concepts::VecXCompatible T>
-    void set_attribute(const std::string &name, const T &V);
+    void set_attribute(const std::string &name, ::zipper::concepts::VectorBaseDerived auto const &V);
 
   private:
     std::string _filename;
