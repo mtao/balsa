@@ -8,7 +8,7 @@ option('partio', type : 'boolean', value : true, description : 'Use partio')
 option('imgui', type : 'boolean', value : true, description : 'Use imgui')
 option('igl', type : 'boolean', value : true, description : 'Use libigl')
 option('alembic', type : 'boolean', value : true, description : 'Use alembic')
-option('perfetto', type : 'boolean', value : true, description : 'Use perfetto')
+option('perfetto', type : 'boolean', value : false, description : 'Use perfetto')
 
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
 option('glfw', type : 'boolean', value : true, description : 'Use glfw')
