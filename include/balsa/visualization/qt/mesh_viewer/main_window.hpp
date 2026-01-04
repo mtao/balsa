@@ -20,10 +20,9 @@ class MainWindow : public QMainWindow {
     Widget *m_widget = nullptr;
 
 
-  private:
-    bool loadMesh(const QString &path);
-  private slots:
+  public slots:
     void openMesh();
+    bool loadMesh(const QString &path);
 
   private:
     void load(const ColVectors<float, 3>::const_span_type &vertices, const ColVectors<uint32_t, 3>::const_span_type &triangles);

@@ -1,4 +1,6 @@
 #include "balsa/visualization/qt/mesh_viewer/widget.hpp"
+#include <range/v3/view/getlines.hpp>
+#include <fstream>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 #include <spdlog/spdlog.h>
@@ -7,36 +9,22 @@
 #include <QOpenGLShaderProgram>
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <filesystem>
 namespace balsa::visualization::qt::mesh_viewer {
 namespace {
-    static const std::string vertexShaderSource =
-      "#version  460\n"
-      "in highp vec3 posAttr;\n"
-      //"attribute lowp vec4 colAttr;\n"
-      "out lowp vec4 col;\n"
-      "uniform highp mat4 MVP;\n"
-      "void main() {\n"
-      //"   col = colAttr;\n"
-      //"   col = MVP * vec4(posAttr,1.0);\n"
-      //"   gl_Position = MVP * vec4(posAttr + vec3(r,g,b),1.0);\n"
-      "   gl_Position = MVP * vec4(posAttr,1.0);\n"
-      "   col = vec4(posAttr,1.0);\n"
-      "   gl_PointSize = 50.f;\n"
-      //"   gl_Position = matrix * posAttr;\n"
-      "}\n";
+    auto get_source(const std::filesystem::path &&name) -> std::string {
 
-    static const std::string fragmentShaderSource =
-      "#version  460\n"
-      "layout (location = 0) out lowp vec4 fragColor;\n"
-      "in lowp vec4 col;\n"
-      "uniform highp vec3 value;\n"
-      "uniform vec4 rgba;\n"
-      "void main() {\n"
-      //"   fragColor = vec4(value,1.0);\n"
-      "   fragColor = rgba;\n"
-      "   fragColor = col;\n"
-      //"   fragColor = col;\n"
-      "}\n";
+        std::filesystem::path source_path = __FILE__;
+        source_path = std::filesystem::absolute(source_path);
+        std::filesystem::path src = source_path.parent_path() / name;
+        std::ifstream ifs(src);
+        std::string file_lines = ranges::getlines(ifs);
+        return file_lines;
+    }
+    static const std::string vertexShaderSource = get_source("shaders/phong.vert");
+
+    static const std::string fragmentShaderSource = get_source("shaders/phong.frag");
+    ;
 }// namespace
 void Widget::update_mvp() {
 

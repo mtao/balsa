@@ -175,7 +175,7 @@ if get_option('visualization')
   endif
 
   shaderc_dep = dependency('shaderc')
-  subdir('resources')
+  # subdir('resources')
 
   if get_option('imgui')
     imgui_dep = dependency('imgui')
@@ -222,11 +222,17 @@ if get_option('visualization')
       dependencies: qt_dep
       )
   
+    shader_resource_files = ['src/visualization/qt/mesh_viewer/shaders/shaders.qrc']
+
+    visualization_qt_rcced = []
+
+    subdir('src/visualization/qt/mesh_viewer/shaders/')
   
     visualization_sources += visualization_qt_sources
     visualization_sources += visualization_qt_mocced
+    visualization_sources += visualization_qt_rcced
   endif
-  visualization_sources += glsl_resource_sources
+  #visualization_sources += glsl_resource_sources
   
 
 

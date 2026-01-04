@@ -13,7 +13,11 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
     balsa::visualization::qt::mesh_viewer::MainWindow mw;
+    const auto& args = app.arguments();
 
     mw.show();
+    if(args.size() > 1) {
+        mw.loadMesh(args.at(1));
+    }
     return app.exec();
 }
