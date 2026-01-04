@@ -17,7 +17,6 @@ cc = meson.get_compiler('cpp')
 dl_lib = cc.find_library('dl')
 
 
-vulkan_dep = dependency('vulkan', required: false)
 
 
 fmt_dep = dependency('fmt', version: fmt_version)
@@ -56,6 +55,11 @@ if get_option('embree')
 endif
 
 
+
+# 'src/algebra/pascal_triangle.cpp',
+
+
+
 if get_option('qt')
   #qt= import('qt') // TODO: figure out if this is useful
   qt= import('qt6')
@@ -66,214 +70,22 @@ if get_option('qt')
   qt_dep = dependency('qt6', modules: qt_required_modules)
 endif
 
-# 'src/algebra/pascal_triangle.cpp',
-
-
-#===========================================
-# Core 
-#===========================================
-
-filesystem_sources = [
-   'src/filesystem/get_relative_path.cpp', 
-   'src/filesystem/prepend_to_filename.cpp'
- ]
-filesystem_headers = [
-  'include/balsa/filesystem/get_relative_path.hpp',
-  'include/balsa/filesystem/prepend_to_filename.hpp',
-]
-
-core_sources = [
-  'src/logging/stopwatch.cpp',
-  'src/logging/json_sink.cpp', 
- ] + filesystem_sources
-
-core_headers = [
-  'include/eigen/types.hpp'
-] + filesystem_headers
-
-include_dir = [include_directories('include')]
-
-
-if get_option('qt')
-  core_sources += 'src/qt/spdlog_logger.cpp'
-  core_required_deps += qt_dep
-endif
 
 
 
-if get_option('json')
-  nlohmann_json_dep = dependency('nlohmann_json')
-  core_required_deps += nlohmann_json_dep
-endif
 
 
 
-#===========================================
-# Geometry
-#===========================================
-
-geometry_sources = [
-#  'src/geometry/mesh/shapes/cube.cpp', 
-#  'src/geometry/mesh/shapes/tube.cpp', 
-#  'src/geometry/mesh/halfedge.cpp', 
-#  'src/geometry/mesh/halfedge_fv_map.cpp', 
-#  'src/geometry/mesh/read_obj.cpp', 
-#  'src/geometry/point_cloud/read_xyz.cpp', 
-#  'src/geometry/mesh/write_obj.cpp', 
-#  'src/geometry/mesh/boundary_elements.cpp', 
-#  'src/geometry/mesh/write_ply.cpp', 
-#  'src/geometry/mesh/triangle/triangle_wrapper.cpp', 
-#  'src/geometry/mesh/triangle/mesh.cpp', 
-#  'src/geometry/mesh/ply.cpp', 
-#  'src/geometry/mesh/polygon_boundary_triangulation.cpp',
-  'src/geometry/point_cloud/read_xyz.cpp', 
-  'src/geometry/polygon_mesh/read_obj.cpp', 
-  'src/geometry/triangle_mesh/read_obj.cpp', 
-]
-
-geometry_required_deps = core_required_deps 
-#geometry_required_deps += TBB_dep
-
-if get_option('alembic')
-  alembic_dep = dependency('alembic')
-  core_required_deps += alembic_dep
-endif
-
-if get_option('partio') 
-  partio_dep = dependency('partio', required: false)
-  if not partio_dep.found()
-    partio_opts = cmake.subproject_options()
-    partio_opts.add_cmake_defines({'PARTIO_TOOLS_ENABLED': false,'PARTIO_PYTHON_ENABLED': false,'PARTIO_DOC_ENABLED': false})
-
-    partio_subproj = cmake.subproject('partio', options: partio_opts)
-    partio_dep = partio_subproj.dependency('partio')
-  endif
-
-  geometry_required_deps += partio_dep
-  geometry_sources += 'src/geometry/point_cloud/partio_loader.cpp'
-endif
 
 
 
-geometry_headers = [
-  'include/mtao/geometry/mesh/halfedge.hpp', 
-  'include/mtao/geometry/mesh/halfedge_fv_map.hpp', 
-  'include/mtao/geometry/mesh/read_obj.hpp', 
-  'include/mtao/geometry/mesh/boundary_matrix.h', 
-  'include/mtao/geometry/mesh/boundary_facets.h'
-]
-
-
-
-#===========================================
-# Visualization 
-#===========================================
+subdir('core')
+subdir('geometry')
 
 if get_option('visualization')
-  if not get_option('qt')
-    error('Qt required for shader storage, please enable to use visualization!')
-  endif
-
-  shaderc_dep = dependency('shaderc')
-  # subdir('resources')
-
-  if get_option('imgui')
-    imgui_dep = dependency('imgui')
-  endif
-
-  glm_dep = dependency('glm')
-
-  colormap_proj = subproject('colormap_shaders')
-  colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep') #, include_type:'system')
-
-  visualization_required_deps = [vulkan_dep, glm_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
-  
-  visualization_sources = [
-    'src/visualization/vulkan/film.cpp',
-    #'src/visualization/vulkan/camera.cpp',
-    'src/visualization/vulkan/scene_base.cpp',
-    'src/visualization/shaders/abstract_shader.cpp',
-    'src/visualization/shaders/flat.cpp',
-    'src/visualization/vulkan/native_film.cpp',
-    'src/visualization/vulkan/window.cpp',
-  ]
-
-  if get_option('qt')
-    visualization_required_deps += qt_dep
-    visualization_qt_sources = [
-      'src/visualization/qt/vulkan/windows/scene.cpp',
-      'src/visualization/qt/vulkan/renderers/scene.cpp',
-      'src/visualization/qt/vulkan/film.cpp',
-      #'src/visualization/qt/vulkan/window.cpp',
-      'src/visualization/qt/mesh_viewer/main_window.cpp',
-      'src/visualization/qt/mesh_viewer/widget.cpp',
-      ]
-  
-  
-  
-    visualization_moc_headers = [
-      'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
-      'include/balsa/visualization/qt/mesh_viewer/widget.hpp',
-      ]
-  
-    visualization_qt_mocced = qt.compile_moc(
-      headers: visualization_moc_headers,
-      include_directories: include_dir,
-      dependencies: qt_dep
-      )
-  
-    shader_resource_files = ['src/visualization/qt/mesh_viewer/shaders/shaders.qrc']
-
-    visualization_qt_rcced = []
-
-    subdir('src/visualization/qt/mesh_viewer/shaders/')
-  
-    visualization_sources += visualization_qt_sources
-    visualization_sources += visualization_qt_mocced
-    visualization_sources += visualization_qt_rcced
-  endif
-  #visualization_sources += glsl_resource_sources
-  
-
-
-  
-
-
-  if get_option('glfw')
-    glfw_dep = dependency('glfw3')
-    visualization_required_deps += glfw_dep
-    visualization_sources += [
-      'src/visualization/glfw/window.cpp',
-      'src/visualization/glfw/vulkan/film.cpp',
-      'src/visualization/glfw/vulkan/window.cpp',
-    ]
-  endif
-
-endif
-
-core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
-
-core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)
-
-
-geometry_required_deps += core_dep
-
-geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)
-geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_required_deps, include_directories: include_dir)
-
-
-
-if get_option('visualization')
-  visualization_required_deps += core_dep
-  visualization_required_deps += geometry_dep
-
-  visualization_lib = library('balsaVisualization', visualization_sources, dependencies: visualization_required_deps, include_directories: [include_dir])
-  visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_required_deps, include_directories: [include_dir])
+  subdir('visualization')
   
 endif
 
 
 
-subdir('tests')
-subdir('examples')
-subdir('tools')

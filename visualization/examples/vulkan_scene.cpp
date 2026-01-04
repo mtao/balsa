@@ -2,7 +2,7 @@
 #else
 #include <spdlog/spdlog.h>
 #include <balsa/visualization/shaders/flat.hpp>
-#include "example_vulkan_scene.hpp"
+#include "vulkan_scene.hpp"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <colormap/colormap.h>

@@ -2,7 +2,7 @@
 #include <spdlog/spdlog.h>
 #include <iostream>
 #include <GLFW/glfw3.h>
-#include "example_vulkan_scene.hpp"
+#include "vulkan_scene.hpp"
 #include <balsa/visualization/glfw//vulkan//film.hpp>
 #include <balsa/visualization/glfw//vulkan//window.hpp>
 

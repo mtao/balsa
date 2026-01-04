@@ -9,7 +9,7 @@
 //#include <balsa/visualization/shaders/flat.hpp>
 #include <balsa/qt/spdlog_logger.hpp>
 //
-//#include "example_vulkan_scene.hpp"
+//#include "vulkan_scene.hpp"
 //#include <balsa/visualization/qt/vulkan/film.hpp>
 //#include <QVulkanWindow>
 
