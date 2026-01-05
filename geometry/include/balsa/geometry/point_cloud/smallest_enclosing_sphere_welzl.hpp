@@ -1,6 +1,5 @@
 #if !defined(BALSA_GEOMETRY_POINT_CLOUD_SMALLEST_ENCLOSING_SPHERE_WELZL_H)
 #define BALSA_GEOMETRY_POINT_CLOUD_SMALLEST_ENCLOSING_SPHERE_WELZL_H
-#include <spdlog/spdlog.h>
 
 #include "balsa/geometry/simplex/point_in_circumcircle.hpp"
 #include "balsa/zipper/types.hpp"
@@ -30,6 +29,7 @@ auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typen
 
 namespace detail {
 
+    // linked list
     struct WelzlNode {
         ::zipper::index_type index;
         WelzlNode *parent = nullptr;
@@ -69,15 +69,18 @@ namespace detail {
         constexpr static ::zipper::index_type Dim = ColVecs::extents_type::static_extent(0);
         using value_type = typename ColVecs::value_type;
         using RetType = ::zipper::Vector<value_type, ::zipper::utils::extents::plus(Dim, 1)>;
-        if (start_index == V.cols() || (R != nullptr && R->size() == Dim + 1)) {
-            if (R == nullptr) {
 
+        // either we have gotten to the end of the extents or the linked list length is the right size for checking diameter
+        if (start_index == V.cols() || (R != nullptr && R->size() == Dim + 1)) {
+            if (R == nullptr) { // we're at the end but haven't found any points. zero it is
                 return RetType(::zipper::views::nullary::ConstantView<value_type>(value_type(0)));
             } else {
                 // TODO: has to handle more degenerate cases
                 size_t size = R->size();
 
-                std::tuple<::zipper::Vector<value_type, Dim>, double> tupret;
+                // get the best sphere thusfar
+                std::tuple<::zipper::Vector<value_type, Dim>, double> tupret{};
+                // stupid optimization to not do heap allocation if necessary for getting vertex indices
                 if (size == Dim + 1) {
                     auto indices = R->as_array<Dim + 1>();
                     tupret = simplex::circumcenter_with_squared_radius(V(::zipper::full_extent_t{}, indices));
@@ -97,7 +100,7 @@ namespace detail {
 
             // is p in CR
             {
-                auto p = V.col(start_index);
+                ::zipper::VectorBase p = V.col(start_index);
                 if ((CR.template head<Dim>() - p).template norm_powered<2>() < CR(Dim)) {
                     return CR;
                 }
@@ -128,7 +131,6 @@ namespace detail {
     //        // std::cout << "Updating with pts \n"
     //        //           << V << std::endl;
     //        std::tie(center, square_radius) = circumcenter_with_squared_radius(V);
-    //        // spdlog::info("Updated circle from indices {}: center {} r2 {}", fmt::join(indices, ","), fmt::join(center, ","), square_radius);
     //    };
 
     //    update_center();

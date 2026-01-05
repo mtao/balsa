@@ -1,7 +1,7 @@
 #pragma once
 #include "balsa/eigen/types.hpp"
-#include <range/v3/view/enumerate.hpp>
 #include "balsa/eigen/container_size.hpp"
+#include <ranges>
 #include <bitset>
 namespace balsa::eigen {
 
@@ -49,7 +49,7 @@ auto stl2eigen(const Container &vec) {
         constexpr int D = InnerType::RowsAtCompileTime;
         static_assert(D != Eigen::Dynamic, "To guarantee constant sizes we only support converting containers of constant size Eigen Vectors");
         Matrix<T, D, CSize> ret(D, vec.size());
-        for (auto &&[i, arr] : ranges::views::enumerate(vec)) {
+        for (auto &&[i, arr] : std::ranges::views::enumerate(vec)) {
             ret.col(i) = arr;
         }
         return ret;
@@ -64,7 +64,7 @@ auto stl2eigen(const Container &vec) {
         static_assert(D != Eigen::Dynamic, "To guarantee constant sizes we only support converting containers of constant size Eigen Vectors");
 
         ColVectors<T, D> ret(D, vec.size());
-        for (auto &&[i, arr] : ranges::views::enumerate(vec)) {
+        for (auto &&[i, arr] : std::ranges::views::enumerate(vec)) {
             ret.col(i) = stl2eigen(arr);
         }
 

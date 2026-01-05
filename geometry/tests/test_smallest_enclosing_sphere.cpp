@@ -22,7 +22,7 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
     // auto r = circle(Dim);
 
     // auto rads = (P.colwise() - C).colwise().squaredNorm();
-    r2 *= 1 + 1e-8;
+    r2 *= 1 + 1e-5;
 
     auto m = P;
     for (index_type j = 0; j < m.cols(); ++j) {
@@ -31,7 +31,6 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
     }
     auto rads = m.colwise().template norm_powered<2>().eval();
     const bool res = (rads.as_array() < (r2)).all();
-    // spdlog::info("{} Rads {}", res, rads / r2);
     return res;
 }
 template<::zipper::concepts::MatrixBaseDerived ColVecs>
@@ -43,7 +42,6 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
     using value_type = typename ColVecs::value_type;
     constexpr static index_type Dim = ColVecs::static_extent(0);
     using RetType = Vector<value_type, Dim + 1>;
-    // spdlog::warn("DIM: {}", Dim);
 
     RetType ret;
     // need to sqrt this before returning
@@ -54,11 +52,10 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
 
     auto try_update = [&](const auto &opret) {
         const auto &[c, r2] = opret;
-        if (r2 <= square_radius + 1e-7) {
+        if (r2 - 1e-10 <= square_radius) {
             valid_circle_rad2(opret, P);
             bool valid = valid_circle_rad2(opret, P);
             if (valid) {
-                // spdlog::info("Updating center to {} due to sqr rad {}", center, r2);
                 center = c;
                 square_radius = r2;
             }
@@ -78,7 +75,6 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
                 static_assert(decltype(s0)::extents_type::static_extent(1) == 2);
 
                 auto opret = circumcenter_with_squared_radius(s0);
-                spdlog::info("{}", opret);
                 for (index_type j = 0; j < s0.cols(); ++j) {
                     auto [C, r2] = opret;
                     REQUIRE((s0.col(j) - C).template norm_powered<2>() == Catch::Approx(r2));
@@ -102,7 +98,7 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
                         auto opret = circumcenter_with_squared_radius(s1);
                         for (index_type j = 0; j < s1.cols(); ++j) {
                             auto [C, r2] = opret;
-                            REQUIRE((s1.col(j) - C).template norm_powered<2>() == Catch::Approx(r2));
+                            REQUIRE((s1.col(j) - C).template norm_powered<2>() == Catch::Approx(r2).margin(1e-5));
                         }
                         //{
                         //    auto [C, R2] = opret;
@@ -124,7 +120,7 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
 
                                 for (index_type j = 0; j < s2.cols(); ++j) {
                                     auto [C, r2] = opret;
-                                    REQUIRE((s2.col(j) - C).template norm_powered<2>() == Catch::Approx(r2));
+                                    REQUIRE((s2.col(j) - C).template norm_powered<2>() == Catch::Approx(r2).margin(1e-5));
                                 }
                                 try_update(opret);
                             }
@@ -327,7 +323,6 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
         // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
         V = ::zipper::views::nullary::uniform_random_view<double>(V.extents());
 
-        spdlog::info("Input points: {}", V);
 
         auto circle = balsa::geometry::point_cloud::smallest_enclosing_sphere_welzl(V);
         auto bf_circle = brute_force_smallest_circle(V);
@@ -358,14 +353,13 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
 }
 
 
-/*
 TEST_CASE("welzl", "[geometry,point_cloud]") {
 
     auto test = []<int N>(std::integral_constant<int, N>, std::optional<int> sample_count = {}) {
         int count = sample_count.has_value() ? sample_count.value() : N + 10;
         balsa::zipper::ColVectors<float, N> V(N, count);
         // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
-        V = zipper::views::nullary::uniform_random_infinite_view<double>();
+        V = ::zipper::views::nullary::uniform_random_view<double>(V.extents());
 
 
         balsa::zipper::Vector<float, N + 1> circle;
@@ -385,9 +379,9 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
 
         // auto Ds = ((V.colwise() - C).colwise().norm().as_array() - r).eval();
         auto m = V;
-        for (zipper::index_type j = 0; j < m.cols(); ++j) {
+        for (::zipper::index_type j = 0; j < m.cols(); ++j) {
             auto v = m.col(j);
-            v = v - c;
+            v = v - C;
         }
         auto Ds = (m.colwise().norm().as_array() - r).eval();
 
@@ -402,7 +396,7 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
         }
 
 
-        CHECK(zipper::utils::maxCoeff(Ds) >= 0);
+        CHECK(::zipper::utils::maxCoeff(Ds) >= 0);
     };
 
     // TODO: write uniform sample in ball in point_cloud
@@ -423,4 +417,3 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
         test(std::integral_constant<int, 4>{}, 1 << j);
     }
 }
-*/

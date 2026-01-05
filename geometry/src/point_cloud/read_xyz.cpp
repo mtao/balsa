@@ -1,5 +1,4 @@
 #include "balsa/geometry/point_cloud/read_xyz.hpp"
-#include "balsa/eigen/stl2eigen.hpp"
 #include <range/v3/view/getlines.hpp>
 #include <range/v3/view/remove_if.hpp>
 #include <range/v3/algorithm/copy.hpp>
@@ -7,11 +6,11 @@
 #include <range/v3/view/concat.hpp>
 #include <range/v3/view/drop.hpp>
 #include <charconv>
-#include <range/v3/view/transform.hpp>
 #include <range/v3/view/repeat.hpp>
 #include <range/v3/view/take_exactly.hpp>
 #include <range/v3/range/conversion.hpp>
 #include <fstream>
+#include <ranges>
 #include <iterator>
 #include <array>
 
@@ -36,13 +35,13 @@ std::array<balsa::ColVectors<T, 3>, 2> read_xyz(const std::string &filename) {
     auto file_lines = ranges::getlines(ifs);
 
     auto data_lines =
-      file_lines | ranges::views::transform([](const auto &line) {
+      file_lines | std::ranges::views::transform([](const auto &line) {
           auto toks = line | ranges::views::split(' ') | ranges::views::remove_if([](const auto &rng) {
                           return rng.empty();
                       });
           // TODO: we might want to use the individual species somewhere
           // auto front = toks.front();
-          auto nums = toks | ranges::views::drop(1) | ranges::views::transform([](const auto &v) {
+          auto nums = toks | ranges::views::drop(1) | std::ranges::views::transform([](const auto &v) {
                           T value;
                           auto s = v | ranges::to<std::string>;
                           std::from_chars(s.data(), s.data() + s.size(), value);
@@ -57,7 +56,8 @@ std::array<balsa::ColVectors<T, 3>, 2> read_xyz(const std::string &filename) {
 
     balsa::ColVectors<T, 6> D(6, count);
 
-    for (auto &&[col, arr] : ranges::views::enumerate(data_lines) | ranges::views::take_exactly(count)) {
+    // TODO: take_exactly
+    for (auto &&[col, arr] : std::ranges::views::enumerate(data_lines) | std::ranges::views::take(count)) {
         // std::cout << ranges::views::all(arr) << std::endl;
         ::zipper::VectorBase r = arr;
         D.col(col) = r;
