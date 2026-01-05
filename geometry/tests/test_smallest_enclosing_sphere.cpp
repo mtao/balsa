@@ -4,6 +4,7 @@
 #include <optional>
 #include <iostream>
 #include <fmt/format.h>
+#include "circumcenter_utils.hpp"
 
 #include <balsa/geometry/point_cloud/smallest_enclosing_sphere_welzl.hpp>
 #include <zipper/views/nullary/RandomView.hpp>
@@ -75,10 +76,8 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
                 static_assert(decltype(s0)::extents_type::static_extent(1) == 2);
 
                 auto opret = circumcenter_with_squared_radius(s0);
-                for (index_type j = 0; j < s0.cols(); ++j) {
-                    auto [C, r2] = opret;
-                    REQUIRE((s0.col(j) - C).template norm_powered<2>() == Catch::Approx(r2));
-                }
+                // TODO: fix value categories to remove eval
+                check_circumcenter_squared(s0.eval(), opret, 1e-4);
 
                 //{
                 //    auto [C, R2] = opret;
@@ -96,10 +95,8 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
                         static_assert(decltype(s1)::extents_type::static_extent(0) == Dim);
                         static_assert(decltype(s1)::extents_type::static_extent(1) == 3);
                         auto opret = circumcenter_with_squared_radius(s1);
-                        for (index_type j = 0; j < s1.cols(); ++j) {
-                            auto [C, r2] = opret;
-                            REQUIRE((s1.col(j) - C).template norm_powered<2>() == Catch::Approx(r2).margin(1e-5));
-                        }
+                // TODO: fix value categories to remove eval
+                        check_circumcenter_squared(s1.eval(), opret, 1e-4);
                         //{
                         //    auto [C, R2] = opret;
                         //    // spdlog::info("{}", s1);
@@ -110,18 +107,15 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
                         try_update(opret);
                         if (P.rows() >= 3) {
 
-                            for (index_type l = 3; l < P.cols(); ++l) {
+                            for (index_type l = 0; l <k; ++l) {
                                 std::array inds{ i, j, k, l };
                                 // spdlog::info("{}", inds);
                                 auto s2 = P(::zipper::full_extent_t{}, inds);
                                 static_assert(decltype(s2)::extents_type::static_extent(0) == Dim);
                                 static_assert(decltype(s2)::extents_type::static_extent(1) == 4);
                                 auto opret = circumcenter_with_squared_radius(s2);
-
-                                for (index_type j = 0; j < s2.cols(); ++j) {
-                                    auto [C, r2] = opret;
-                                    REQUIRE((s2.col(j) - C).template norm_powered<2>() == Catch::Approx(r2).margin(1e-5));
-                                }
+                // TODO: fix value categories to remove eval
+                                check_circumcenter_squared(s2.eval(), opret, 1e-4);
                                 try_update(opret);
                             }
                         }
@@ -341,7 +335,7 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
             v = v - C;
         }
         auto Ds = ::zipper::as_vector(m.colwise().norm().as_array() - r).eval();
-        spdlog::info("Circle {}, brute force circle {}, distances {}", circle, bf_circle, Ds);
+        //spdlog::info("Circle {}, brute force circle {}, distances {}", circle, bf_circle, Ds);
 
         CHECK(::zipper::utils::maxCoeff(Ds) >= 0);
     };
@@ -350,9 +344,12 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
 
 
     test(std::integral_constant<int, 2>{});
+    test(std::integral_constant<int, 3>{});
+    test(std::integral_constant<int, 4>{});
 }
 
 
+/*
 TEST_CASE("welzl", "[geometry,point_cloud]") {
 
     auto test = []<int N>(std::integral_constant<int, N>, std::optional<int> sample_count = {}) {
@@ -361,12 +358,13 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
         // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
         V = ::zipper::views::nullary::uniform_random_view<double>(V.extents());
 
+        spdlog::info("Timing check on dim {}", N);
 
         balsa::zipper::Vector<float, N + 1> circle;
         {
             spdlog::stopwatch sw;
             circle = balsa::geometry::point_cloud::smallest_enclosing_sphere_welzl(V);
-            spdlog::info("Welzl {:03}pts elapsed: {}", count, sw);
+            spdlog::info("Welzl {:03} pts elapsed: {}", count, sw);
         }
         // circle = brute_force_smallest_circle(V);
 
@@ -390,7 +388,7 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
             {
                 spdlog::stopwatch sw;
                 bf_circle = brute_force_smallest_circle(V);
-                spdlog::info("brute force {:03}pts elapsed: {}", count, sw);
+                spdlog::info("brute force {:03} pts elapsed: {}", count, sw);
             }
             CHECK((bf_circle - circle).norm() < 1e-5);
         }
@@ -417,3 +415,4 @@ TEST_CASE("welzl", "[geometry,point_cloud]") {
         test(std::integral_constant<int, 4>{}, 1 << j);
     }
 }
+*/

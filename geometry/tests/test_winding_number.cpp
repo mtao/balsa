@@ -29,9 +29,10 @@ TEST_CASE("winding numbers", "[winding_number]") {
 
     for (int i = 0; i < 20; ++i) {
         balsa::eigen::Vec2d p = balsa::eigen::Vec2d::Random();
-        std::cout << p.transpose() << ": ";
-        std::cout << winding_number(V, curve, p) << " ";
-        std::cout << "BLoop: " << mesh_winding_number(V, E, B, p) << " ";
-        std::cout << "Just Edges: " << mesh_winding_number(V, E, p) << std::endl;
+        // TODO: actually test?
+        //std::cout << p.transpose() << ": ";
+        //std::cout << winding_number(V, curve, p) << " ";
+        //std::cout << "BLoop: " << mesh_winding_number(V, E, B, p) << " ";
+        //std::cout << "Just Edges: " << mesh_winding_number(V, E, p) << std::endl;
     }
 }

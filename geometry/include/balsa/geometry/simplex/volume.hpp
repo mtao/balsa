@@ -1,5 +1,6 @@
 #if !defined(BALSA_GEOMETRY_SIMPLEX_VOLUME_HPP)
 #define BALSA_GEOMETRY_SIMPLEX_VOLUME_HPP
+#include <spdlog/spdlog.h>
 #include <numeric>
 #include <stdexcept>
 #include <fmt/format.h>
@@ -69,6 +70,7 @@ namespace detail {
 
     template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
     auto volume_signed(const SimplexVertices &V) -> SimplexVertices::value_type {
+        spdlog::info("Volume signed");
 
         //auto m = V.rightCols(V.cols() - 1).eval();
         //m -= V.col(0).repeat_right();
@@ -96,6 +98,7 @@ namespace detail {
 
     template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
     auto volume_unsigned(const SimplexVertices &V) -> typename SimplexVertices::value_type {
+        spdlog::info("Volume unsigned");
         auto m = V.rightCols(V.cols() - 1).eval();
         for (zipper::index_type j = 0; j < m.cols(); ++j) {
             auto v = m.col(j);

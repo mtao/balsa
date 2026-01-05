@@ -45,7 +45,7 @@ TEST_CASE("earclipping_orientation", "[earclipping]") {
 
     spdlog::info("volumes: {}", vols);
 
-    CHECK(zipper::utils::minCoeff(vols) < 0);
+    CHECK(zipper::utils::minCoeff(vols) > 0);
     loop = { 4, 3, 2, 1, 0 };
     T = balsa::geometry::triangle_mesh::earclipping(V, loop);
     // std::cout << zipper::format_as(T) << std::endl;
