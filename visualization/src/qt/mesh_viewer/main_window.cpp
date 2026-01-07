@@ -23,7 +23,7 @@ MainWindow::MainWindow() {
     createMenus();
     setCentralWidget(m_widget);
 
-    QToolBar *bar = new QToolBar(this);
+    auto *bar = new QToolBar(this);
     auto r = new QSlider(Qt::Orientation::Horizontal, this);
     r->setMinimum(0);
     r->setMaximum(255);
@@ -37,7 +37,7 @@ MainWindow::MainWindow() {
     b->setMaximum(255);
     bar->addWidget(b);
 
-    QVBoxLayout *layout = new QVBoxLayout(this);
+    auto *layout = new QVBoxLayout(this);
     bar->setLayout(layout);
 
 
@@ -61,7 +61,7 @@ void MainWindow::createFileMenu() {
 
 
     const QIcon openIcon = QIcon::fromTheme("document-open");
-    QAction *openAct = new QAction(openIcon, tr("&Open"), this);
+    auto *openAct = new QAction(openIcon, tr("&Open"), this);
     openAct->setShortcuts(QKeySequence::Open);
     openAct->setStatusTip(tr("Open a mesh"));
     file_menu->addAction(openAct);
@@ -79,7 +79,7 @@ void MainWindow::openMesh() {
     }
 }
 
-bool MainWindow::loadMesh(const QString &str) {
+auto MainWindow::loadMesh(const QString &str) -> bool {
 
     spdlog::info("Tried to load {}", str.toStdString());
 
@@ -137,7 +137,7 @@ void MainWindow::load(const ColVectors<float, 3>::const_span_type &V, const ColV
 
     // spdlog::info("Vertices\n: {}", V);
     // spdlog::info("Faces:\n: {}", F);
-    Widget *w = dynamic_cast<Widget *>(this->centralWidget());
+    auto *w = dynamic_cast<Widget *>(this->centralWidget());
 
     w->setMesh(V, F);
 }
