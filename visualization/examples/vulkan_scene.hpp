@@ -19,6 +19,7 @@ class BasicImGuiScene : public balsa::visualization::vulkan::SceneBase {
     void initialize(balsa::visualization::vulkan::Film &film) override;
     void draw(balsa::visualization::vulkan::Film &film) override;
     void begin_render_pass(balsa::visualization::vulkan::Film &film) override;
+    void release_vulkan_resources() override;
 
     // Call after the Film is initialized (render pass exists) but before exec().
     // If glfw_window is non-null, the GLFW platform backend (input, clipboard)
@@ -49,6 +50,7 @@ class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::sce
     void initialize(balsa::visualization::vulkan::Film &film);
     void draw(balsa::visualization::vulkan::Film &film);
     void begin_render_pass(balsa::visualization::vulkan::Film &film) override;
+    void release_vulkan_resources() override;
 
   private:
     void create_graphics_pipeline(balsa::visualization::vulkan::Film &film);

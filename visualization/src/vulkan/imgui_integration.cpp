@@ -95,6 +95,7 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
 
     // --- Populate ImGui Vulkan init info ---
     ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.ApiVersion = VK_API_VERSION_1_0;
     init_info.Instance = static_cast<VkInstance>(film.instance());
     init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(film.physical_device());
     init_info.Device = _device;
@@ -111,12 +112,13 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
         }
     };
 
-    init_info.Subpass = 0;
-    init_info.MSAASamples = static_cast<VkSampleCountFlagBits>(film.sample_count());
+    // ImGui 1.92+: RenderPass, Subpass, MSAASamples moved into PipelineInfoMain
+    init_info.PipelineInfoMain.RenderPass = static_cast<VkRenderPass>(film.default_render_pass());
+    init_info.PipelineInfoMain.Subpass = 0;
+    init_info.PipelineInfoMain.MSAASamples = static_cast<VkSampleCountFlagBits>(film.sample_count());
 
     // --- Init Vulkan rendering backend ---
-    VkRenderPass render_pass = static_cast<VkRenderPass>(film.default_render_pass());
-    if (!ImGui_ImplVulkan_Init(&init_info, render_pass)) {
+    if (!ImGui_ImplVulkan_Init(&init_info)) {
         vkDestroyDescriptorPool(_device, _descriptor_pool, nullptr);
         _descriptor_pool = VK_NULL_HANDLE;
         ImGui::DestroyContext(_context);
@@ -131,50 +133,10 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
         _has_glfw_backend = true;
     }
 
-    // --- Upload fonts ---
-    upload_fonts(film);
+    // ImGui 1.92+: font texture upload is handled automatically by the backend
+    // via ImGuiBackendFlags_RendererHasTextures — no manual upload_fonts() needed.
 
     spdlog::debug("ImGuiIntegration initialized (GLFW backend: {})", _has_glfw_backend);
-}
-
-// ---------------------------------------------------------------------------
-// upload_fonts
-// ---------------------------------------------------------------------------
-
-void ImGuiIntegration::upload_fonts(Film &film) {
-    // imgui 1.88: manual font upload via a one-shot command buffer
-    VkDevice device = static_cast<VkDevice>(film.device());
-    VkCommandPool pool = static_cast<VkCommandPool>(film.graphics_command_pool());
-    VkQueue queue = static_cast<VkQueue>(film.graphics_queue());
-
-    VkCommandBufferAllocateInfo alloc_info = {};
-    alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc_info.commandPool = pool;
-    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc_info.commandBufferCount = 1;
-
-    VkCommandBuffer cmd;
-    vkAllocateCommandBuffers(device, &alloc_info, &cmd);
-
-    VkCommandBufferBeginInfo begin_info = {};
-    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(cmd, &begin_info);
-
-    ImGui_ImplVulkan_CreateFontsTexture(cmd);
-
-    vkEndCommandBuffer(cmd);
-
-    VkSubmitInfo submit_info = {};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd;
-    vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
-
-    ImGui_ImplVulkan_DestroyFontUploadObjects();
-
-    vkFreeCommandBuffers(device, pool, 1, &cmd);
 }
 
 // ---------------------------------------------------------------------------

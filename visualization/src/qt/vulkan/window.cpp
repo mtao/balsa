@@ -39,9 +39,13 @@ class Window::Renderer : public QVulkanWindowRenderer {
 
     void releaseResources() override {
         spdlog::debug("Qt Renderer: releaseResources");
-        // The scene may hold Vulkan resources (pipelines, layouts, etc.)
-        // that must be destroyed before Qt tears down the VkDevice.
-        // This is our last chance — Qt destroys the device after this returns.
+        // Release scene's Vulkan resources while the device is still valid.
+        // This handles the case where external shared_ptr holders keep the
+        // scene alive beyond this point.
+        const auto &sc = _outer->scene();
+        if (sc) {
+            sc->release_vulkan_resources();
+        }
         _outer->set_scene(nullptr);
         _outer->_film.reset();
     }

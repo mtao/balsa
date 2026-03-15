@@ -13,6 +13,10 @@ SceneBase::SceneBase() {}
 SceneBase::~SceneBase() {
 }
 
+void SceneBase::release_vulkan_resources() {
+    // Default: nothing to release.  Subclasses override as needed.
+}
+
 void SceneBase::end_render_pass(Film &film) {
     vk::CommandBuffer cmdBuf = film.current_command_buffer();
     cmdBuf.endRenderPass();

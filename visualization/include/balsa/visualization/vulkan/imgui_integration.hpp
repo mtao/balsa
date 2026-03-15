@@ -73,9 +73,6 @@ class ImGuiIntegration {
     bool is_initialized() const { return _context != nullptr; }
 
   private:
-    // Upload font atlas to GPU via a one-shot command buffer.
-    void upload_fonts(Film &film);
-
     ImGuiContext *_context = nullptr;
     VkDescriptorPool _descriptor_pool = VK_NULL_HANDLE;
     VkDevice _device = VK_NULL_HANDLE;// cached for cleanup

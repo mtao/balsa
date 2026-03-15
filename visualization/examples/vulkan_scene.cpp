@@ -37,19 +37,22 @@ std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
 BasicImGuiScene::BasicImGuiScene() {}
 
 BasicImGuiScene::~BasicImGuiScene() {
-    // Shut down ImGui explicitly before destroying our pipeline.
-    // (ImGui owns its own internal pipeline, but good hygiene is to tear
-    // it down first while the device is definitely still valid.)
-    _imgui.shutdown();
+    release_vulkan_resources();
+}
 
+void BasicImGuiScene::release_vulkan_resources() {
+    _imgui.shutdown();
     if (device) {
         device.waitIdle();
         if (pipeline) {
             device.destroyPipeline(pipeline);
+            pipeline = vk::Pipeline{};
         }
         if (pipeline_layout) {
             device.destroyPipelineLayout(pipeline_layout);
+            pipeline_layout = vk::PipelineLayout{};
         }
+        device = vk::Device{};
     }
 }
 
@@ -277,14 +280,21 @@ void BasicImGuiScene::create_graphics_pipeline(balsa::visualization::vulkan::Fil
 HelloTriangleScene::HelloTriangleScene() {}
 // HelloTriangleScene::HelloTriangleScene(balsa::visualization::vulkan::Film &film)
 HelloTriangleScene::~HelloTriangleScene() {
+    release_vulkan_resources();
+}
+
+void HelloTriangleScene::release_vulkan_resources() {
     if (device) {
         device.waitIdle();
         if (pipeline) {
             device.destroyPipeline(pipeline);
+            pipeline = vk::Pipeline{};
         }
         if (pipeline_layout) {
             device.destroyPipelineLayout(pipeline_layout);
+            pipeline_layout = vk::PipelineLayout{};
         }
+        device = vk::Device{};
     }
 }
 void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film &film) {

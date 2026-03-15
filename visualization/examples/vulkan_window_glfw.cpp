@@ -22,6 +22,8 @@ int main(int argc, char *argv[]) {
         scene->init_imgui(window.film(), window.glfw_window());
 
         window.set_scene(scene);
+        scene.reset();// Window is sole owner — ensures scene is destroyed
+                      // during window teardown while the device is still valid.
 
         return window.exec();
 

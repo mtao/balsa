@@ -27,6 +27,8 @@ int main(int argc, char *argv[]) {
 
     auto scene = std::make_shared<HelloTriangleScene>();
     window.set_scene(scene);
+    scene.reset();// Window is sole owner — ensures scene is destroyed
+                  // in releaseResources() while the device is still valid.
 
     return window.exec();
 }
