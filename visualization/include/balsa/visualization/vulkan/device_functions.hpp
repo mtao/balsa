@@ -1,5 +1,5 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_DEVIE_FUNCTIONS_HPP)
-#define BALSA_VISUALIZATION_VULKAN_DEVIE_FUNCTIONS_HPP
+#if !defined(BALSA_VISUALIZATION_VULKAN_DEVICE_FUNCTIONS_HPP)
+#define BALSA_VISUALIZATION_VULKAN_DEVICE_FUNCTIONS_HPP
 
 #include <vulkan/vulkan_raii.hpp>
 #include <set>
@@ -21,7 +21,7 @@ struct DeviceFunctions {
       VkDebugUtilsMessengerEXT messenger,
       VkAllocationCallbacks const *pAllocator);
 
-    VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSuuportKHR(
+    VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(
       VkPhysicalDevice physicalDevice,
       uint32_t queueFamilyIndex,
       VkSurfaceKHR surface,

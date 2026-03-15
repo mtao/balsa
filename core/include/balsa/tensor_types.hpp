@@ -39,9 +39,9 @@ using RowVector4 = zipper::RowVector4<T>;
 
 
 template<typename T, index_type D>
-using ColVectors = zipper::ColVectors<T,D>;
+using ColVectors = zipper::ColVectors<T, D>;
 template<typename T, index_type D>
-using RowVectors = zipper::RowVectors<T,D>;
+using RowVectors = zipper::RowVectors<T, D>;
 
 using Mat3i = SquareMatrix<int, 3>;
 using Mat2i = SquareMatrix<int, 2>;
@@ -86,10 +86,6 @@ using MatXd = MatrixX<double>;
 using VecXd = VectorX<double>;
 using RowVecXd = RowVectorX<double>;
 
-using Vec2i = Vector2<int>;
-using Vec3i = Vector3<int>;
-using Vec4i = Vector4<int>;
-
-}// namespace balsazipper
+}// namespace balsa
 
 #endif

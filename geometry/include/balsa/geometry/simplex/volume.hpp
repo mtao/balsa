@@ -40,33 +40,6 @@ auto volume(const MatType &V) -> typename MatType::value_type;
 
 
 namespace detail {
-    /*
-    template<eigen::concepts::MatrixBaseDerived MatType>
-    auto volume_signed(const MatType &V) {
-
-        auto m = (V.rightCols(V.cols() - 1).colwise() - V.col(0)).eval();
-
-        if constexpr (eigen::concepts::ColStaticCompatible<MatType>) {
-            constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
-            return m.determinant() / balsa::utils::factorial(cols);
-        } else {
-            return m.determinant() / balsa::utils::factorial(m.cols());
-        }
-    }
-
-    template<eigen::concepts::MatrixBaseDerived MatType>
-    auto volume_unsigned(const MatType &V) -> typename MatType::Scalar {
-        auto m = (V.rightCols(V.cols() - 1).colwise() - V.col(0)).eval();
-        if constexpr (eigen::concepts::ColStaticCompatible<MatType>) {
-            constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
-            constexpr static int quotient = balsa::utils::factorial(cols);
-            return std::sqrt((m.transpose() * m).determinant()) / quotient;
-        } else {
-            int quotient = balsa::utils::factorial(m.cols());
-            return std::sqrt((m.transpose() * m).determinant()) / quotient;
-        }
-    }
-    */
 
     template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
     auto volume_signed(const SimplexVertices &V) -> SimplexVertices::value_type {

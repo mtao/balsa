@@ -1,3 +1,4 @@
+#pragma once
 #include "balsa/geometry/polygon_mesh/PolygonMesh.hpp"
 #include "balsa/geometry/triangle_mesh/earclipping.hpp"
 
@@ -24,11 +25,11 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
     if (skipped == 0 && poly_added == 0) {
         auto r = pindices._buffer.view().accessor().as_std_span();
         using ET = ColVectors<index_type, 3>::extents_type;
-        ColVectors<index_type, 3>::const_span_type a(r,ET{pindices.polygon_count()});
+        ColVectors<index_type, 3>::const_span_type a(r, ET{ pindices.polygon_count() });
         return a;
     } else {
         index_type total_poly = pindices.polygon_count() + poly_added - skipped;
-        ColVectors<index_type, 3> F(total_poly);
+        ColVectors<index_type, 3> result(total_poly);
         index_type out_index = 0;
         for (size_t j = 0; j < pindices.polygon_count(); ++j) {
 
@@ -36,14 +37,13 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
             if (p.size() < 3) {
                 continue;
             } else if (p.size() == 3) {
-                F.col(out_index++) = p;
+                result.col(out_index++) = p;
             } else if (p.size() == 4) {
-                F.col(out_index++) = { p(0), p(1), p(2) };
-                F.col(out_index++) = { p(0), p(2), p(3) };
+                result.col(out_index++) = { p(0), p(1), p(2) };
+                result.col(out_index++) = { p(0), p(2), p(3) };
             } else {
 
-
-                zipper::ColVectors<index_type, 3> F(0);
+                zipper::ColVectors<index_type, 3> tris(0);
                 if constexpr (D == 3) {
                     auto a = pmesh.vertices.col(p(0));
                     auto b = pmesh.vertices.col(p(1));
@@ -53,8 +53,8 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
                     u = u / u.norm();
                     // u.normalize();
                     Vector<Scalar, 3> N;
-                    for (index_type j = 1; j < p.size(); ++j) {
-                        auto c = pmesh.vertices.col(p(j));
+                    for (index_type k = 1; k < p.size(); ++k) {
+                        auto c = pmesh.vertices.col(p(k));
                         auto v = UV.row(1);
                         v = (c - a).normalized();
                         N = u.cross(v);
@@ -62,17 +62,16 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
                             break;
                         }
                     }
-                    F = balsa::geometry::triangle_mesh::earclipping(UV * pmesh.vertices, p);
+                    tris = balsa::geometry::triangle_mesh::earclipping(UV * pmesh.vertices, p);
                 } else if constexpr (D == 2) {
-                    F = balsa::geometry::triangle_mesh::earclipping(pmesh.vertices, p);
+                    tris = balsa::geometry::triangle_mesh::earclipping(pmesh.vertices, p);
                 }
-                for (index_type j = 0; j < F.cols(); ++j) {
-                    auto f = F.col(j);
-                    F.col(out_index) = f;
+                for (index_type k = 0; k < tris.cols(); ++k) {
+                    result.col(out_index++) = tris.col(k);
                 }
             }
         }
-        return F;
+        return result;
     }
 }
 }// namespace balsa::geometry::polygon_mesh

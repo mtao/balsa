@@ -5,28 +5,29 @@
 #include "abstract_feature.hpp"
 #include "embedding_traits.hpp"
 
-namespace balsa::visualization::scene_graph{
+namespace balsa::scene_graph {
 
 
-    template <concepts::embedding_traits embedding_traits>
-    class AbstractFeatureGroup {
-        public:
-        using scalar_type = Scalar;
-        constexpr static int dimension = D;
-        using abstract_feature_type = AbstractFeature<D,Scalar>;
+template<concepts::embedding_traits ETraits>
+class AbstractFeatureGroup {
+  public:
+    using scalar_type = typename ETraits::scalar_type;
+    constexpr static unsigned int dimension = ETraits::embedding_dimension;
+    using abstract_feature_type = AbstractFeature<ETraits>;
 
-        private:
-        template<int, typename,typename> friend class FeatureGroup;
-        void add(abstract_feature_type& feature);
-        void remove(abstract_feature_type& feature);
+  private:
+    template<concepts::embedding_traits, typename>
+    friend class FeatureGroup;
+    void add(abstract_feature_type &feature);
+    void remove(abstract_feature_type &feature);
 
 
-        std::vector<std::reference_wrapper<abstract_feature_type>> _features;
-
-    };
-
-    template <unsigned int D, typename FeatureType, typename Scalar>
-class FeatureGroup {
-
+    std::vector<std::reference_wrapper<abstract_feature_type>> _features;
 };
-}// namespace balsa::visualization::vulkan
+
+template<concepts::embedding_traits ETraits, typename FeatureType>
+class FeatureGroup {
+};
+}// namespace balsa::scene_graph
+
+#endif

@@ -3,15 +3,13 @@
 #include <memory>
 
 namespace balsa::visualization::vulkan {
-    class Buffer: public std::enable_shared_from_this<Object> {
-        using Ptr = std::shared_ptr<Object>;
+class Buffer : public std::enable_shared_from_this<Buffer> {
+    using Ptr = std::shared_ptr<Buffer>;
 
 
+  private:
+    int32_t _id;
+};
+}// namespace balsa::visualization::vulkan
 
-        private:
-
-        int32_t _id;
-
-
-    };
-}
+#endif

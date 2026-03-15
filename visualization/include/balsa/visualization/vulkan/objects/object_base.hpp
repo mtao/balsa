@@ -12,13 +12,13 @@
 namespace balsa::visualization::vulkan::objects {
 class ObjectBase {
   public:
-      static ObjectBase from_shader(Film& film, const shaders::AbstractShader& shader);
-      ObjectBase(Film& film, const vk::Pipeline& pipeline);
+    static ObjectBase from_shader(Film &film, const shaders::AbstractShader &shader);
+    ObjectBase(Film &film, const vk::Pipeline &pipeline);
     virtual ~ObjectBase();
 
 
   private:
 };
-}// namespace balsa::visualization::vulkan
+}// namespace balsa::visualization::vulkan::objects
 
 #endif

@@ -1,8 +1,5 @@
 #include <catch2/catch_all.hpp>
 #include <zipper/utils/maxCoeff.hpp>
-#include <spdlog/stopwatch.h>
-#include <optional>
-#include <iostream>
 #include <fmt/format.h>
 #include "circumcenter_utils.hpp"
 
@@ -17,12 +14,8 @@ template<typename Circ, ::zipper::concepts::MatrixBaseDerived ColVecs>
     requires(!ColVecs::extents_traits::is_dynamic_extent(0))
 bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
 
-    // constexpr static int Dim = ColVecs::RowsAtCompileTime;
     auto [C, r2] = circle;
-    // auto C = circle.template head<Dim>();
-    // auto r = circle(Dim);
 
-    // auto rads = (P.colwise() - C).colwise().squaredNorm();
     r2 *= 1 + 1e-5;
 
     auto m = P;
@@ -34,6 +27,40 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
     const bool res = (rads.as_array() < (r2)).all();
     return res;
 }
+
+// Recursively enumerate all k-subsets of indices [0, n) and try each as a
+// circumscribing simplex. This generalizes the old nested-loop approach so
+// it works for any dimension (including D=4 which needs quintuples).
+template<::zipper::concepts::MatrixBaseDerived ColVecs, typename TryUpdateFn>
+    requires(!ColVecs::extents_traits::is_dynamic_extent(0))
+void brute_force_enumerate_subsets(
+  const ColVecs &P,
+  std::vector<index_type> &current,
+  index_type max_index,
+  index_type subset_size,
+  TryUpdateFn &try_update) {
+
+    using namespace balsa::geometry::simplex;
+
+    if (current.size() == static_cast<size_t>(subset_size)) {
+        auto s = P(::zipper::full_extent_t{}, current);
+        auto opret = circumcenter_with_squared_radius(s);
+        check_circumcenter_squared(s.eval(), opret, 1e-4);
+        try_update(opret);
+        return;
+    }
+
+    // Pick next index strictly less than the last one picked (descending order)
+    index_type upper = current.empty() ? max_index : current.back();
+    // Need enough remaining indices to fill the subset
+    index_type remaining_needed = subset_size - static_cast<index_type>(current.size()) - 1;
+    for (index_type i = upper - 1; i >= remaining_needed && i < max_index; --i) {
+        current.push_back(i);
+        brute_force_enumerate_subsets(P, current, max_index, subset_size, try_update);
+        current.pop_back();
+    }
+}
+
 template<::zipper::concepts::MatrixBaseDerived ColVecs>
     requires(!ColVecs::extents_traits::is_dynamic_extent(0))
 auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::value_type, ColVecs::extents_type::static_extent(0) + 1> {
@@ -45,7 +72,6 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
     using RetType = Vector<value_type, Dim + 1>;
 
     RetType ret;
-    // need to sqrt this before returning
     auto center = ret.template head<Dim>();
     value_type &square_radius = ret(Dim);
     square_radius = std::numeric_limits<double>::max();
@@ -54,7 +80,6 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
     auto try_update = [&](const auto &opret) {
         const auto &[c, r2] = opret;
         if (r2 - 1e-10 <= square_radius) {
-            valid_circle_rad2(opret, P);
             bool valid = valid_circle_rad2(opret, P);
             if (valid) {
                 center = c;
@@ -62,74 +87,19 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
             }
         }
     };
-    if (P.cols() >= 1) {
-        //    center = P.col(0);
-        //    square_radius = 1e-10;
-        //} else {
-        for (index_type i = 0; i < P.cols(); ++i) {
-            for (index_type j = 0; j < i; ++j) {
-                std::array inds{ i, j };
-                auto s0 = P(::zipper::full_extent_t{}, inds);
-                using T = std::decay_t<decltype(s0)>;
 
-                static_assert(decltype(s0)::extents_type::static_extent(0) == Dim);
-                static_assert(decltype(s0)::extents_type::static_extent(1) == 2);
-
-                auto opret = circumcenter_with_squared_radius(s0);
-                // TODO: fix value categories to remove eval
-                check_circumcenter_squared(s0.eval(), opret, 1e-4);
-
-                //{
-                //    auto [C, R2] = opret;
-                //    spdlog::info("{}: {} {}", inds, s0, C);
-                //    spdlog::info("{} {} {}", R2, (s0.col(0) - C).template norm_powered<2>(), (s0.col(1) - C).template norm_powered<2>());
-                //    spdlog::info("{} {} {}", R2, (s0.col(0) - C), (s0.col(1) - C));
-                //}
-
-                // spdlog::info("{}", inds);
-                try_update(opret);
-                if (Dim >= 2) {
-                    for (index_type k = 0; k < j; ++k) {
-                        std::array inds{ i, j, k };
-                        auto s1 = P(::zipper::full_extent_t{}, inds);
-                        static_assert(decltype(s1)::extents_type::static_extent(0) == Dim);
-                        static_assert(decltype(s1)::extents_type::static_extent(1) == 3);
-                        auto opret = circumcenter_with_squared_radius(s1);
-                // TODO: fix value categories to remove eval
-                        check_circumcenter_squared(s1.eval(), opret, 1e-4);
-                        //{
-                        //    auto [C, R2] = opret;
-                        //    // spdlog::info("{}", s1);
-                        //    // spdlog::info("{} {}: {} {} {}", fmt::join(inds, ","), R2, (s1.col(0) - C).template norm_powered<2>(), (s1.col(1) - C).template norm_powered<2>(), (s1.col(2) - C).template norm_powered<2>());
-                        //}
-
-                        // spdlog::info("{}", inds);
-                        try_update(opret);
-                        if (P.rows() >= 3) {
-
-                            for (index_type l = 0; l <k; ++l) {
-                                std::array inds{ i, j, k, l };
-                                // spdlog::info("{}", inds);
-                                auto s2 = P(::zipper::full_extent_t{}, inds);
-                                static_assert(decltype(s2)::extents_type::static_extent(0) == Dim);
-                                static_assert(decltype(s2)::extents_type::static_extent(1) == 4);
-                                auto opret = circumcenter_with_squared_radius(s2);
-                // TODO: fix value categories to remove eval
-                                check_circumcenter_squared(s2.eval(), opret, 1e-4);
-                                try_update(opret);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Try all k-subsets for k = 2, 3, ..., min(D+1, P.cols())
+    index_type max_subset = std::min<index_type>(Dim + 1, P.cols());
+    for (index_type k = 2; k <= max_subset; ++k) {
+        std::vector<index_type> current;
+        current.reserve(k);
+        brute_force_enumerate_subsets(P, current, P.cols(), k, try_update);
     }
 
     REQUIRE(square_radius < std::numeric_limits<double>::max());
     REQUIRE(valid_circle_rad2(std::make_tuple(center.eval(), square_radius), P));
     square_radius = std::sqrt(square_radius);
 
-    // spdlog::info("Square rad: {}", square_radius);
     return ret;
 }
 
@@ -335,9 +305,11 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
             v = v - C;
         }
         auto Ds = ::zipper::as_vector(m.colwise().norm().as_array() - r).eval();
-        //spdlog::info("Circle {}, brute force circle {}, distances {}", circle, bf_circle, Ds);
 
-        CHECK(::zipper::utils::maxCoeff(Ds) >= 0);
+        // maxCoeff(Ds) should be ≈ 0: the tightest sphere has at least one
+        // boundary point. Allow small floating-point slack in both directions.
+        CHECK(::zipper::utils::maxCoeff(Ds) >= -1e-5);
+        CHECK(::zipper::utils::maxCoeff(Ds) <= 1e-5);
     };
 
     // TODO: write uniform sample in ball in point_cloud
@@ -347,72 +319,3 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
     test(std::integral_constant<int, 3>{});
     test(std::integral_constant<int, 4>{});
 }
-
-
-/*
-TEST_CASE("welzl", "[geometry,point_cloud]") {
-
-    auto test = []<int N>(std::integral_constant<int, N>, std::optional<int> sample_count = {}) {
-        int count = sample_count.has_value() ? sample_count.value() : N + 10;
-        balsa::zipper::ColVectors<float, N> V(N, count);
-        // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
-        V = ::zipper::views::nullary::uniform_random_view<double>(V.extents());
-
-        spdlog::info("Timing check on dim {}", N);
-
-        balsa::zipper::Vector<float, N + 1> circle;
-        {
-            spdlog::stopwatch sw;
-            circle = balsa::geometry::point_cloud::smallest_enclosing_sphere_welzl(V);
-            spdlog::info("Welzl {:03} pts elapsed: {}", count, sw);
-        }
-        // circle = brute_force_smallest_circle(V);
-
-
-        // circle = bf_circle;
-
-        auto C = circle.template head<N>();
-        auto r = circle(N);
-
-
-        // auto Ds = ((V.colwise() - C).colwise().norm().as_array() - r).eval();
-        auto m = V;
-        for (::zipper::index_type j = 0; j < m.cols(); ++j) {
-            auto v = m.col(j);
-            v = v - C;
-        }
-        auto Ds = (m.colwise().norm().as_array() - r).eval();
-
-        if (!sample_count.has_value()) {
-            balsa::zipper::Vector<float, N + 1> bf_circle;
-            {
-                spdlog::stopwatch sw;
-                bf_circle = brute_force_smallest_circle(V);
-                spdlog::info("brute force {:03} pts elapsed: {}", count, sw);
-            }
-            CHECK((bf_circle - circle).norm() < 1e-5);
-        }
-
-
-        CHECK(::zipper::utils::maxCoeff(Ds) >= 0);
-    };
-
-    // TODO: write uniform sample in ball in point_cloud
-
-
-    test(std::integral_constant<int, 2>{});
-    test(std::integral_constant<int, 3>{});
-
-    for (int j = 1; j < 4; ++j) {
-        test(std::integral_constant<int, 2>{}, 1 << j);
-    }
-    std::cout << "Three dims" << std::endl;
-    for (int j = 1; j < 4; ++j) {
-        test(std::integral_constant<int, 3>{}, 1 << j);
-    }
-    std::cout << "Four dims" << std::endl;
-    for (int j = 1; j < 4; ++j) {
-        test(std::integral_constant<int, 4>{}, 1 << j);
-    }
-}
-*/

@@ -113,15 +113,20 @@ template<typename T, zipper::rank_type Dim>
 template<::zipper::concepts::VectorBaseDerived Vec>
 void BoundingBox<T, Dim>::expand(const Vec &a) {
 
-    m_min = ::zipper::as_vector(::zipper::min(a.as_array(), m_min.as_array()));
-    m_max = ::zipper::as_vector(::zipper::max(a.as_array(), m_max.as_array()));
+    for (zipper::index_type i = 0; i < m_min.extent(0); ++i) {
+        T val = a(i);
+        if (val < m_min(i)) m_min(i) = val;
+        if (val > m_max(i)) m_max(i) = val;
+    }
 }
 
 template<typename T, zipper::rank_type Dim>
 void BoundingBox<T, Dim>::expand(const BoundingBox &a) {
 
-    m_min = ::zipper::as_vector(::zipper::min(a.m_min.as_array(), m_min.as_array()));
-    m_max = ::zipper::as_vector(::zipper::max(a.m_max.as_array(), m_max.as_array()));
+    for (zipper::index_type i = 0; i < m_min.extent(0); ++i) {
+        if (a.m_min(i) < m_min(i)) m_min(i) = a.m_min(i);
+        if (a.m_max(i) > m_max(i)) m_max(i) = a.m_max(i);
+    }
 }
 template<typename T, zipper::rank_type Dim>
 template<::zipper::concepts::VectorBaseDerived Vec>
@@ -134,7 +139,7 @@ bool BoundingBox<T, Dim>::contains(const Vec &x) const {
 template<typename T, zipper::rank_type Dim>
 bool BoundingBox<T, Dim>::contains(const BoundingBox &o) const {
 
-    ((m_min.array() <= o.m_min.array()) && (m_max.array() >= o.m_max.array())).all();
+    return ((m_min.array() <= o.m_min.array()) && (m_max.array() >= o.m_max.array())).all();
 }
 }// namespace balsa::geometry
 #endif

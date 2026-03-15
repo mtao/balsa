@@ -56,6 +56,7 @@ using ColVecs3i = ColVectors<int, 3>;
 using ColVecs2i = ColVectors<int, 2>;
 using RowVecs3i = RowVectors<int, 3>;
 using RowVecs2i = RowVectors<int, 2>;
+using Vec4i = Vector<int, 4>;
 using Vec3i = Vector<int, 3>;
 using Vec2i = Vector<int, 2>;
 using MatXi = MatrixX<int>;
@@ -91,10 +92,6 @@ using Vec2d = Vector<double, 2>;
 using MatXd = MatrixX<double>;
 using VecXd = VectorX<double>;
 using RowVecXd = RowVectorX<double>;
-
-using Vec2i = Vector2<int>;
-using Vec3i = Vector3<int>;
-using Vec4i = Vector4<int>;
 
 }// namespace balsa::eigen
 

@@ -3,7 +3,7 @@
 
 #include "balsa/scene_graph/abstract_feature.hpp"
 #include "balsa/scene_graph/abstract_transformation.hpp"
-#include "balsa/scene_graph//camera.hpp"
+#include "balsa/scene_graph/camera.hpp"
 
 namespace balsa::visualization::vulkan {
 class Film;
@@ -22,3 +22,5 @@ class Drawable : public scene_graph::AbstractFeature<typename TransformationType
     virtual void draw(const camera_type &cam, Film &film) = 0;
 };
 }// namespace balsa::visualization::vulkan
+
+#endif
