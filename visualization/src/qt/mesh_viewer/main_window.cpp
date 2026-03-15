@@ -9,12 +9,12 @@
 #include <QFileDialog>
 #include <spdlog/spdlog.h>
 #include <zipper/utils/format.hpp>
-#include <zipper/utils/maxCoeff.hpp>
+#include <zipper/utils/max_coeff.hpp>
 #include <QToolBar>
 #include <QSlider>
 #include <QVBoxLayout>
 #include <zipper/Form.hpp>
-#include <zipper/views/nullary/ConstantView.hpp>
+#include <zipper/expression/nullary/Constant.hpp>
 namespace balsa::visualization::qt::mesh_viewer {
 
 MainWindow::MainWindow() {

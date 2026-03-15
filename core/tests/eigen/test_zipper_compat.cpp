@@ -1,7 +1,6 @@
 #include <catch2/catch_all.hpp>
 #include <iostream>
 #include <balsa/eigen/zipper_compat.hpp>
-#include <range/v3/view/zip.hpp>
 #include <balsa/eigen/types.hpp>
 #include <zipper/Vector.hpp>
 #include <zipper/Matrix.hpp>
@@ -32,18 +31,18 @@ TEST_CASE("eigen2zipper", "[zipper,eigen]") {
         }
     }
 
-    for (const auto &[A, B, a, b, c] : ranges::views::zip(A, B, a.view(), b.view(), c.view())) {
-        CHECK(A == a);
-        CHECK(B == b);
-        CHECK(b == a + 4);
-        CHECK(c == b);
+    for (int i = 0; i < 4; ++i) {
+        CHECK(A(i) == a(i));
+        CHECK(B(i) == b(i));
+        CHECK(b(i) == a(i) + 4);
+        CHECK(c(i) == b(i));
     }
     auto sum = A + B;
     auto sumz = balsa::eigen::as_zipper(sum);
 
     REQUIRE(int(sumz.extent(0)) == sum.size());
-    for (const auto &[s, S] : ranges::views::zip(sum, sumz.view())) {
-        CHECK(s == S);
+    for (int i = 0; i < sum.size(); ++i) {
+        CHECK(sum(i) == sumz(i));
     }
 }
 TEST_CASE("zipper2eigen", "[zipper,eigen]") {
@@ -67,11 +66,11 @@ TEST_CASE("zipper2eigen", "[zipper,eigen]") {
     REQUIRE(c.rows() == 4);
 
 
-    for (const auto &[A, B, a, b, c] : ranges::views::zip(A.view(), B.view(), a, b, c)) {
-        CHECK(A == a);
-        CHECK(B == b);
-        CHECK(b == a + 4);
-        CHECK(c == b);
+    for (int i = 0; i < 4; ++i) {
+        CHECK(A(i) == a(i));
+        CHECK(B(i) == b(i));
+        CHECK(b(i) == a(i) + 4);
+        CHECK(c(i) == b(i));
     }
     auto sumz = A + B;
     auto sum = balsa::eigen::as_eigen(sumz);
@@ -81,4 +80,3 @@ TEST_CASE("zipper2eigen", "[zipper,eigen]") {
         CHECK(sumz(i) == sum(i));
     }
 }
-

@@ -28,7 +28,7 @@ struct PartioFileWriter {
 
     void set_attribute(const std::string &name, balsa::zipper::concepts::ColVecsDCompatible auto const &V);
 
-    void set_attribute(const std::string &name, ::zipper::concepts::VectorBaseDerived auto const &V);
+    void set_attribute(const std::string &name, ::zipper::concepts::Vector auto const &V);
 
   private:
     std::string _filename;

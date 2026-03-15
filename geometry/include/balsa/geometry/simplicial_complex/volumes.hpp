@@ -4,8 +4,8 @@
 
 namespace balsa::geometry::simplicial_complex {
 template<
-  ::zipper::concepts::MatrixBaseDerived PosType,
-  ::zipper::concepts::MatrixBaseDerived SimplexType>
+  ::zipper::concepts::Matrix PosType,
+  ::zipper::concepts::Matrix SimplexType>
     requires(std::is_integral_v<typename SimplexType::value_type>)
 auto volumes(const PosType &V, const SimplexType &S) {
 

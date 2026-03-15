@@ -16,7 +16,7 @@
 #include "balsa/eigen/zipper_compat.hpp"
 #include <numbers>
 #include <utility>
-#include <zipper/storage/StlStorage.hpp>
+#include <zipper/storage/StlStorageInfo.hpp>
 
 namespace balsa::geometry::triangle_mesh {
 template<eigen::concepts::Vec2Compatible VDerived, typename IndexType>
@@ -134,9 +134,12 @@ std::vector<std::array<IndexType, 3>> earclipping_stl(
     auto c = V.col(f[2]);
     auto cb = c - b;
     auto ab = a - b;
-    // auto ac = a - c;
-    if (cb.x() * ab.y() - cb.y() * ab.x() < 1e-10) {
+    auto cross = cb.x() * ab.y() - cb.y() * ab.x();
+    if (cross < -1e-10) {
         std::swap(f[0], f[1]);
+    } else if (std::abs(cross) <= 1e-10) {
+        // degenerate (collinear) final triangle — skip it
+        return stlF;
     }
     stlF.push_back(f);
     //} else {
@@ -171,15 +174,15 @@ template<zipper::concepts::ColVecs2Compatible VDerived, typename T>
 auto earclipping(const VDerived &V,
                  const std::initializer_list<T> &C) {
     auto r = earclipping_stl(eigen::as_eigen(V), std::span(C));
-    ::zipper::MatrixBase M = ::zipper::storage::get_const_non_owning_stl_storage(r);
+    ::zipper::MatrixBase M = ::zipper::expression::nullary::get_const_non_owning_stl_storage(r);
     return M.eval();
 }
 
 template<zipper::concepts::ColVecs2Compatible VDerived, typename Index, zipper::index_type N>
 auto earclipping(const VDerived &V,
                  const ::zipper::Vector<Index, N> &C) {
-    auto r = earclipping_stl(eigen::as_eigen(V),  C.view().as_std_span());
-    ::zipper::MatrixBase M = ::zipper::storage::get_const_non_owning_stl_storage(r);
+    auto r = earclipping_stl(eigen::as_eigen(V), C.expression().as_std_span());
+    ::zipper::MatrixBase M = ::zipper::expression::nullary::get_const_non_owning_stl_storage(r);
     return M.eval();
 }
 }// namespace balsa::geometry::triangle_mesh

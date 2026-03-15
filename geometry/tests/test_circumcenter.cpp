@@ -2,14 +2,14 @@
 #include <iostream>
 
 #include <zipper/utils/format.hpp>
-#include <zipper/views/nullary/RandomView.hpp>
-#include <zipper/utils/meanCoeff.hpp>
+#include <zipper/expression/nullary/Random.hpp>
+#include <zipper/utils/mean_coeff.hpp>
 #include <balsa/geometry/simplex/circumcenter.hpp>
 
 using namespace Catch;
 TEST_CASE("circumcenter", "[simplex]") {
     auto random_simplex_test = []<int N>(std::integral_constant<int, N>) {
-        balsa::zipper::Matrix<double, N, N + 1> V = zipper::views::nullary::uniform_random_view<double>({});
+        balsa::zipper::Matrix<double, N, N + 1> V = zipper::expression::nullary::uniform_random<double>({});
 
         auto [C, radius] = balsa::geometry::simplex::circumcenter_with_radius(V);
 
@@ -25,10 +25,10 @@ TEST_CASE("circumcenter", "[simplex]") {
 
         double mean = zipper::utils::meanCoeff(R);
         CHECK(radius == Approx(mean));
-        //spdlog::info("points in R^{} got radius {}, distances to center were {}",  N, mean, fmt::join(R, ","));
+        // spdlog::info("points in R^{} got radius {}, distances to center were {}",  N, mean, fmt::join(R, ","));
 
 
-        for (zipper::index_type j = 0; j < R.view().size(); ++j) {
+        for (zipper::index_type j = 0; j < R.size(); ++j) {
             CHECK(R(j) == Approx(radius));
         }
         balsa::zipper::Vector<double, N> CSPD = balsa::geometry::simplex::circumcenter_spd(V);
@@ -50,7 +50,7 @@ TEST_CASE("circumcenter", "[simplex]") {
 
 TEST_CASE("smallest_circle", "[simplex]") {
     auto random_simplex_test = [](zipper::index_type n, zipper::index_type m) {
-        balsa::zipper::MatrixX<double> V = zipper::views::nullary::uniform_random_view<double>(zipper::create_dextents(n, m));
+        balsa::zipper::MatrixX<double> V = zipper::expression::nullary::uniform_random<double>(zipper::create_dextents(n, m));
 
         // circumcircle of a set of random dynamic points
         auto [C, radius] = balsa::geometry::simplex::circumcenter_with_radius(V);
@@ -77,7 +77,7 @@ TEST_CASE("smallest_circle", "[simplex]") {
         double mean = zipper::utils::meanCoeff(R);
         CHECK(radius == Approx(mean));
 
-        //spdlog::info("{} points in R^{} got radius {}, distances to center were {}", m, n, mean, fmt::join(R, ","));
+        // spdlog::info("{} points in R^{} got radius {}, distances to center were {}", m, n, mean, fmt::join(R, ","));
     };
 
     for (int j = 0; j < 10; ++j) {

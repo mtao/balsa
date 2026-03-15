@@ -4,7 +4,7 @@
 #include "balsa/tensor_types.hpp"
 #include "balsa/eigen/concepts/shape_types.hpp"
 #include "balsa/zipper/types.hpp"
-#include <zipper/concepts/MatrixBaseDerived.hpp>
+#include <zipper/concepts/Matrix.hpp>
 #include <zipper/utils/extents/extent_arithmetic.hpp>
 
 #include <set>
@@ -60,7 +60,7 @@ auto boundaries(const CellType &C) {
     }
     return F;
 }
-template<::zipper::concepts::MatrixBaseDerived CellType>
+template<::zipper::concepts::Matrix CellType>
 auto boundaries(const CellType &C) {
 
 

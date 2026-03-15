@@ -181,7 +181,7 @@ void Widget::_setMesh(const ColVectors<T, Dim>::const_span_type &vertices, const
     size = triangles.extent(0) * triangles.extent(1);
     auto &glf = functions();
     m_vbo.bind();
-    auto v = vertices.view().as_std_span();
+    auto v = vertices.expression().as_std_span();
     m_vbo.allocate(v.data(), v.size() * sizeof(T));
 
     glf.glEnableVertexAttribArray(0);
@@ -196,7 +196,7 @@ void Widget::_setMesh(const ColVectors<T, Dim>::const_span_type &vertices, const
     m_ibo.bind();
     // GLuint f[] = { 0, 1, 2 };
     // m_ibo.allocate(f, sizeof(f));
-    auto f = triangles.view().as_std_span();
+    auto f = triangles.expression().as_std_span();
     m_ibo.allocate(f.data(), f.size() * sizeof(GLuint));
 
     m_ibo.release();

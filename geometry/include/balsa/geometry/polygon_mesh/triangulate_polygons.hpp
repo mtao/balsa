@@ -23,7 +23,7 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
         }
     }
     if (skipped == 0 && poly_added == 0) {
-        auto r = pindices._buffer.view().accessor().as_std_span();
+        auto r = pindices._buffer.expression().as_std_span();
         using ET = ColVectors<index_type, 3>::extents_type;
         ColVectors<index_type, 3>::const_span_type a(r, ET{ pindices.polygon_count() });
         return a;
@@ -57,7 +57,7 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
                         auto c = pmesh.vertices.col(p(k));
                         auto v = UV.row(1);
                         v = (c - a).normalized();
-                        N = u.cross(v);
+                        N = u.eval().cross(v.eval());
                         if (N.norm() > 1e-2) {
                             break;
                         }

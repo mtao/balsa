@@ -1,7 +1,7 @@
 
 #include <balsa/geometry/point_cloud/read_xyz.hpp>
 #include <balsa/geometry/point_cloud/partio_loader.hpp>
-#include <zipper/views/nullary/ConstantView.hpp>
+#include <zipper/expression/nullary/Constant.hpp>
 // #include <balsa/eigen/stack.hpp>
 #include <iostream>
 
@@ -19,14 +19,14 @@ int main(int argc, char *argv[]) {
     if (use_color) {
         balsa::ColVecs4d C(size);
         C.topRows<3>() = N;
-        C.row(3) = ::zipper::views::nullary::ConstantView<double>(1.0);
+        C.row(3) = ::zipper::expression::nullary::Constant<double>(1.0);
         w.set_colors(C);
         // w.set_colors(balsa::vstack(N, balsa::RowVecXd::Ones(size)));
     }
 
     if (argc > 3) {
         double scale = std::stof(argv[3]);
-        w.set_radii(::zipper::views::nullary::ConstantView<double, std::dynamic_extent>(scale, ::zipper::create_dextents(size)));
+        w.set_radii(::zipper::expression::nullary::Constant<double, std::dynamic_extent>(scale, ::zipper::create_dextents(size)));
     }
 
 

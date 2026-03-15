@@ -5,14 +5,13 @@
 #include <stdexcept>
 #include <fmt/format.h>
 #include "balsa/zipper/types.hpp"
-#include "zipper/concepts/MatrixBaseDerived.hpp"
+#include <zipper/concepts/Matrix.hpp>
 #include <zipper/utils/determinant.hpp>
 
 #include "balsa/eigen/types.hpp"
 #include "balsa/eigen/concepts/matrix_types.hpp"
 #include "balsa/eigen/concepts/shape_types.hpp"
 #include "balsa/utils/factorial.hpp"
-#include <zipper/concepts/MatrixBaseDerived.hpp>
 #include "balsa/eigen/zipper_compat.hpp"
 
 namespace balsa::geometry::simplex {
@@ -28,20 +27,20 @@ template<eigen::concepts::MatrixBaseDerived MatType>
 auto volume(const MatType &V) -> typename MatType::Scalar;
 
 // signed volume of a simplex, only works for N,N+1 shaped matrices
-template<::zipper::concepts::MatrixBaseDerived MatType>
+template<::zipper::concepts::Matrix MatType>
     requires(MatType::extents_traits::is_dynamic || MatType::extents_type::static_extent(0) + 1 == MatType::extents_type::static_extent(1))
 auto volume_signed(const MatType &V) -> typename MatType::value_type;
 
-template<::zipper::concepts::MatrixBaseDerived MatType>
+template<::zipper::concepts::Matrix MatType>
 auto volume_unsigned(const MatType &V) -> typename MatType::value_type;
 
-template<::zipper::concepts::MatrixBaseDerived MatType>
+template<::zipper::concepts::Matrix MatType>
 auto volume(const MatType &V) -> typename MatType::value_type;
 
 
 namespace detail {
 
-    template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
+    template<::zipper::concepts::Matrix SimplexVertices>
     auto volume_signed(const SimplexVertices &V) -> SimplexVertices::value_type {
         spdlog::trace("Volume signed");
 
@@ -69,7 +68,7 @@ namespace detail {
         }
     }
 
-    template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
+    template<::zipper::concepts::Matrix SimplexVertices>
     auto volume_unsigned(const SimplexVertices &V) -> typename SimplexVertices::value_type {
         spdlog::trace("Volume unsigned");
         auto m = V.rightCols(V.cols() - 1).eval();
@@ -129,7 +128,7 @@ auto volume(const MatType &V) -> typename MatType::Scalar {
 
 
 // signed volume of a simplex, only works for N,N+1 shaped matrices
-template<::zipper::concepts::MatrixBaseDerived MatType>
+template<::zipper::concepts::Matrix MatType>
     requires(MatType::extents_traits::is_dynamic || MatType::extents_type::static_extent(0) + 1 == MatType::extents_type::static_extent(1))
 auto volume_signed(const MatType &V) -> typename MatType::value_type {
     auto cols = ::zipper::detail::extents::get_extent<1>(V.extents());
@@ -143,13 +142,13 @@ auto volume_signed(const MatType &V) -> typename MatType::value_type {
     return detail::volume_signed(V);
 }
 
-template<::zipper::concepts::MatrixBaseDerived MatType>
+template<::zipper::concepts::Matrix MatType>
 auto volume_unsigned(const MatType &V) -> typename MatType::value_type {
     return detail::volume_unsigned(V);
 }
 
 
-template<::zipper::concepts::MatrixBaseDerived MatType>
+template<::zipper::concepts::Matrix MatType>
 auto volume(const MatType &V) -> typename MatType::value_type {
     auto cols = ::zipper::detail::extents::get_extent<1>(V.extents());
     auto rows = ::zipper::detail::extents::get_extent<0>(V.extents());

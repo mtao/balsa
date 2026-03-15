@@ -12,8 +12,8 @@ class AlternatingDigitalTree {
   public:
     using Scalar = T;
     constexpr static int Dim = D;
-    //using BoundingBox = Eigen::AlignedBox<Scalar, Dim>;
-    using BoundingBox = geometry::BoundingBox<T,D>;
+    // using BoundingBox = Eigen::AlignedBox<Scalar, Dim>;
+    using BoundingBox = geometry::BoundingBox<T, D>;
 
 
     // void insert(AlignedBox);
@@ -29,8 +29,8 @@ class AlternatingDigitalTree {
             ChildNodeHandleType right = nullptr;
 
 
-  template <zipper::concepts::VectorBaseDerived Vec>
-            std::weak_ordering operator<=>(const Vec& v) const {
+            template<zipper::concepts::Vector Vec>
+            std::weak_ordering operator<=>(const Vec &v) const {
                 return dividing_position <=> v(CD);
             }
             Scalar dividing_position;

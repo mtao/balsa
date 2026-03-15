@@ -1,21 +1,24 @@
 #if !defined(BALSA_CONCEPTS_TENSOR_SHAPES_HPP)
 #define BALSA_CONCEPTS_TENSOR_SHAPES_HPP
 #include <array>
-#include <zipper/concepts/ZipperBaseDerived.hpp>
+#include <zipper/concepts/Zipper.hpp>
+#include <zipper/concepts/Matrix.hpp>
+#include <zipper/concepts/Vector.hpp>
+#include <zipper/concepts/Form.hpp>
 #include "balsa/tensor_types.hpp"
 
 namespace balsa::concepts {
 
 namespace detail {
     // extract the compile time rows of the input type
-    template<::zipper::concepts::ZipperBaseDerived Type>
+    template<::zipper::concepts::Zipper Type>
     constexpr index_type compile_row_size = Type::extents_type::static_extent(0);
     // extract the compile time cols of the input type
-    template<::zipper::concepts::ZipperBaseDerived Type>
+    template<::zipper::concepts::Zipper Type>
     constexpr index_type compile_col_size = Type::extents_type::static_extent(1);
 
     // output the compiletime shape in an array<int,2>
-    template<::zipper::concepts::ZipperBaseDerived Mat>
+    template<::zipper::concepts::Zipper Mat>
     consteval std::array<int, 2> compile_shape_as_array() {
         return std::array<int, 2>{ { compile_row_size<Mat>,
                                      compile_col_size<Mat> } };
@@ -54,11 +57,11 @@ namespace detail {
 
 // Specifies if a matrix has static rows
 template<typename T>
-concept RowStaticCompatible = ::zipper::concepts::ZipperBaseDerived<T> && detail::has_static_size(detail::compile_row_size<T>);
+concept RowStaticCompatible = ::zipper::concepts::Zipper<T> && detail::has_static_size(detail::compile_row_size<T>);
 
 // Specifies if a matrix has static columns
 template<typename T>
-concept ColStaticCompatible = ::zipper::concepts::ZipperBaseDerived<T> && detail::has_static_size(detail::compile_col_size<T>);
+concept ColStaticCompatible = ::zipper::concepts::Zipper<T> && detail::has_static_size(detail::compile_col_size<T>);
 
 
 // specifies if a matrix has static size
@@ -67,65 +70,65 @@ concept RowColStaticCompatible = RowStaticCompatible<T> && ColStaticCompatible<T
 
 // specifies if a matrix has a dynamic number of rows
 template<typename T>
-concept RowDynamicCompatible = ::zipper::concepts::ZipperBaseDerived<T> && detail::has_dynamic_size(detail::compile_row_size<T>);
+concept RowDynamicCompatible = ::zipper::concepts::Zipper<T> && detail::has_dynamic_size(detail::compile_row_size<T>);
 
 // specifies if a matrix has a dynamic number of columns
 template<typename T>
-concept ColDynamicCompatible = ::zipper::concepts::ZipperBaseDerived<T> && detail::has_dynamic_size(detail::compile_col_size<T>);
+concept ColDynamicCompatible = ::zipper::concepts::Zipper<T> && detail::has_dynamic_size(detail::compile_col_size<T>);
 
 template<index_type R, typename T>
-concept RowCompatible = ::zipper::concepts::ZipperBaseDerived<T> && ((T::extents_type::static_extent(0) == R) || (T::extents_type::static_extent(0) == std::dynamic_extent));
+concept RowCompatible = ::zipper::concepts::Zipper<T> && ((T::extents_type::static_extent(0) == R) || (T::extents_type::static_extent(0) == std::dynamic_extent));
 template<index_type C, typename T>
-concept ColCompatible = ::zipper::concepts::ZipperBaseDerived<T> && ((T::extents_type::static_extent(1) == C) || (T::extents_type::static_extent(1) == std::dynamic_extent));
+concept ColCompatible = ::zipper::concepts::Zipper<T> && ((T::extents_type::static_extent(1) == C) || (T::extents_type::static_extent(1) == std::dynamic_extent));
 template<index_type R, int C, typename T>
-concept ShapeCompatible = ::zipper::concepts::ZipperBaseDerived<T> && RowCompatible<R, T> && ColCompatible<C, T>;
+concept ShapeCompatible = ::zipper::concepts::Zipper<T> && RowCompatible<R, T> && ColCompatible<C, T>;
 
 
 template<typename T>
-concept VecCompatible = ::zipper::concepts::VectorBaseDerived<T>;
+concept VecCompatible = ::zipper::concepts::Vector<T>;
 template<typename T>
-concept RowVecCompatible = ::zipper::concepts::FormBaseDerived<T>;
+concept RowVecCompatible = ::zipper::concepts::Form<T>;
 
 template<typename T>
-concept VecXCompatible = ::zipper::concepts::VectorBaseDerived<T> && RowDynamicCompatible<T>;
+concept VecXCompatible = ::zipper::concepts::Vector<T> && RowDynamicCompatible<T>;
 template<typename T>
-concept RowVecXCompatible = ::zipper::concepts::FormBaseDerived<T> && RowDynamicCompatible<T>;
+concept RowVecXCompatible = ::zipper::concepts::Form<T> && RowDynamicCompatible<T>;
 
 
 template<index_type D, typename T>
-concept SquareMatrixDCompatible = ::zipper::concepts::MatrixBaseDerived<T> && ShapeCompatible<D, D, T>;
+concept SquareMatrixDCompatible = ::zipper::concepts::Matrix<T> && ShapeCompatible<D, D, T>;
 
 template<typename T>
-concept SquareMatrix2Compatible = ::zipper::concepts::MatrixBaseDerived<T> && SquareMatrixDCompatible<2, T>;
+concept SquareMatrix2Compatible = ::zipper::concepts::Matrix<T> && SquareMatrixDCompatible<2, T>;
 template<typename T>
-concept SquareMatrix3Compatible = ::zipper::concepts::MatrixBaseDerived<T> && SquareMatrixDCompatible<3, T>;
+concept SquareMatrix3Compatible = ::zipper::concepts::Matrix<T> && SquareMatrixDCompatible<3, T>;
 template<typename T>
-concept SquareMatrix4Compatible = ::zipper::concepts::MatrixBaseDerived<T> && SquareMatrixDCompatible<4, T>;
+concept SquareMatrix4Compatible = ::zipper::concepts::Matrix<T> && SquareMatrixDCompatible<4, T>;
 
 template<typename T>
-concept RowVecsDCompatible = ::zipper::concepts::MatrixBaseDerived<T> && ColStaticCompatible<T>;
+concept RowVecsDCompatible = ::zipper::concepts::Matrix<T> && ColStaticCompatible<T>;
 template<typename T>
-concept ColVecsDCompatible = ::zipper::concepts::MatrixBaseDerived<T> && RowStaticCompatible<T>;
+concept ColVecsDCompatible = ::zipper::concepts::Matrix<T> && RowStaticCompatible<T>;
 
 template<typename T>
-concept ColVecs2Compatible = ::zipper::concepts::MatrixBaseDerived<T> && RowCompatible<2, T>;
+concept ColVecs2Compatible = ::zipper::concepts::Matrix<T> && RowCompatible<2, T>;
 template<typename T>
-concept ColVecs3Compatible = ::zipper::concepts::MatrixBaseDerived<T> && RowCompatible<3, T>;
+concept ColVecs3Compatible = ::zipper::concepts::Matrix<T> && RowCompatible<3, T>;
 template<typename T>
-concept ColVecs4Compatible = ::zipper::concepts::MatrixBaseDerived<T> && RowCompatible<4, T>;
+concept ColVecs4Compatible = ::zipper::concepts::Matrix<T> && RowCompatible<4, T>;
 
 
 // TODO: will i someday figureo ut how to template this?
 template<typename T>
-concept RowVecs2Compatible = ::zipper::concepts::MatrixBaseDerived<T> && ColCompatible<2, T>;
+concept RowVecs2Compatible = ::zipper::concepts::Matrix<T> && ColCompatible<2, T>;
 template<typename T>
-concept RowVecs3Compatible = ::zipper::concepts::MatrixBaseDerived<T> && ColCompatible<3, T>;
+concept RowVecs3Compatible = ::zipper::concepts::Matrix<T> && ColCompatible<3, T>;
 template<typename T>
-concept RowVecs4Compatible = ::zipper::concepts::MatrixBaseDerived<T> && ColCompatible<4, T>;
+concept RowVecs4Compatible = ::zipper::concepts::Matrix<T> && ColCompatible<4, T>;
 
 
 template<index_type R, typename T>
-concept VecDCompatible = ::zipper::concepts::MatrixBaseDerived<T> && ShapeCompatible<R, 1, T>;
+concept VecDCompatible = ::zipper::concepts::Matrix<T> && ShapeCompatible<R, 1, T>;
 
 
 template<typename T>

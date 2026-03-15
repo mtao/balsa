@@ -14,7 +14,7 @@ namespace balsa::geometry::point_cloud {
 // Declarations
 
 // returns a D+1 dimensional vector where the first D entries are the center point, the last entry is the radius
-template<::zipper::concepts::MatrixBaseDerived ColVecs>
+template<::zipper::concepts::Matrix ColVecs>
 auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::static_extent(0), 1)>;
 
 
@@ -55,7 +55,7 @@ namespace detail {
             return ret;
         }
     };
-    template<::zipper::concepts::MatrixBaseDerived ColVecs>
+    template<::zipper::concepts::Matrix ColVecs>
         requires(ColVecs::static_extent(0) != std::dynamic_extent)
     auto welzl_square_radius(const ColVecs &V, ::zipper::index_type start_index, WelzlNode *R) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::static_extent(0), 1)> {
 
@@ -66,7 +66,7 @@ namespace detail {
         // either we have gotten to the end of the extents or the linked list length is the right size for checking diameter
         if (start_index == V.cols() || (R != nullptr && R->size() == Dim + 1)) {
             if (R == nullptr) {// we're at the end but haven't found any points. zero it is
-                return RetType(::zipper::views::nullary::ConstantView<value_type>(value_type(0)));
+                return RetType(::zipper::expression::nullary::Constant<value_type>(value_type(0)));
             } else {
                 // TODO: has to handle more degenerate cases
                 size_t size = R->size();
@@ -104,7 +104,7 @@ namespace detail {
         }
     }
 }// namespace detail
-template<::zipper::concepts::MatrixBaseDerived ColVecs>
+template<::zipper::concepts::Matrix ColVecs>
 auto smallest_enclosing_sphere_welzl(const ColVecs &P) -> ::zipper::Vector<typename ColVecs::value_type, ::zipper::utils::extents::plus(ColVecs::static_extent(0), 1)> {
 
     std::vector<::zipper::index_type> reorder(P.cols());

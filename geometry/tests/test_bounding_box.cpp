@@ -3,8 +3,8 @@
 
 #include <balsa/geometry/bounding_box.hpp>
 #include <balsa/zipper/types.hpp>
-#include <zipper/views/nullary/ConstantView.hpp>
-#include <zipper/views/nullary/RandomView.hpp>
+#include <zipper/expression/nullary/Constant.hpp>
+#include <zipper/expression/nullary/Random.hpp>
 
 using namespace Catch;
 

@@ -1,12 +1,12 @@
 #pragma once
-#include <zipper/concepts/MatrixBaseDerived.hpp>
+#include <zipper/concepts/Matrix.hpp>
 #include <balsa/geometry/simplex/circumcenter.hpp>
 #include <catch2/catch_approx.hpp>
 
 
 namespace {
 
-void check_circumcenter_squared(::zipper::concepts::MatrixBaseDerived auto const &V, const auto &CR, double margin = 1e-8) {
+void check_circumcenter_squared(::zipper::concepts::Matrix auto const &V, const auto &CR, double margin = 1e-8) {
 
     using namespace Catch;
     auto [C, radius] = CR;

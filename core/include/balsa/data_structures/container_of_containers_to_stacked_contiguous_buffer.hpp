@@ -28,7 +28,7 @@ auto container_of_containers_to_stacked_contiguous_buffer(const ContainerType &c
                          return a.size();
                      })
                      | ranges::views::partial_sum | std::ranges::views::take(ret._offsets.rows() - 1);
-        std::ranges::copy(range, ret._offsets.view().data() + 1);
+        std::ranges::copy(range, ret._offsets.expression().data() + 1);
     }
 
     {
@@ -36,7 +36,7 @@ auto container_of_containers_to_stacked_contiguous_buffer(const ContainerType &c
 
         // TODO: could be take exactly?
         auto range = container | std::ranges::views::join | std::ranges::views::take(ret._buffer.rows());
-        std::ranges::copy(range, ret._buffer.view().data());
+        std::ranges::copy(range, ret._buffer.expression().data());
     }
     return ret;
 }

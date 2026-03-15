@@ -42,6 +42,9 @@ class Window : public QVulkanWindow
     // QVulkanWindow override: creates our inner Renderer.
     QVulkanWindowRenderer *createRenderer() override;
 
+    // Qt window lifecycle
+    void closeEvent(QCloseEvent *e) override;
+
     // Qt input event overrides (dispatch to InputHandler)
     void mousePressEvent(QMouseEvent *e) override;
     void mouseReleaseEvent(QMouseEvent *e) override;
@@ -55,6 +58,7 @@ class Window : public QVulkanWindow
     std::string _title;
     int _initial_width;
     int _initial_height;
+    bool _closing = false;
 
     // Persistent Film, created in Renderer::initResources() and valid
     // until Renderer::releaseResources().

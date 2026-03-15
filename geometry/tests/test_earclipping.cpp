@@ -4,7 +4,7 @@
 #include <iostream>
 #include <balsa/geometry/triangle_mesh/volumes.hpp>
 #include <zipper/utils/format.hpp>
-#include <zipper/utils/minCoeff.hpp>
+#include <zipper/utils/min_coeff.hpp>
 
 #include <balsa/geometry/triangle_mesh/earclipping.hpp>
 TEST_CASE("earclipping_orientation", "[earclipping]") {

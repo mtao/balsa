@@ -5,6 +5,7 @@
 #include <QVulkanInstance>
 #include <QMouseEvent>
 #include <QResizeEvent>
+#include <QCloseEvent>
 
 namespace balsa::visualization::qt::vulkan {
 
@@ -48,14 +49,17 @@ class Window::Renderer : public QVulkanWindowRenderer {
     void startNextFrame() override {
         // Bridge: Qt says "render now" -> we call draw_frame() which
         // runs pre_draw_hook -> scene->draw -> post_draw_hook.
-        if (_outer->_film) {
+        if (_outer->_film && !_outer->_closing) {
             _outer->draw_frame();
         }
 
         // Signal Qt that the frame is ready for presentation.
         _outer->QVulkanWindow::frameReady();
-        // Request continuous rendering (throttled by vsync/presentation rate).
-        _outer->QVulkanWindow::requestUpdate();
+        // Request continuous rendering (throttled by vsync/presentation rate),
+        // but only if the window is not closing.
+        if (!_outer->_closing) {
+            _outer->QVulkanWindow::requestUpdate();
+        }
     }
 
   private:
@@ -126,6 +130,7 @@ int Window::exec() {
 }
 
 void Window::request_close() {
+    _closing = true;
     QVulkanWindow::close();
 }
 
@@ -149,6 +154,17 @@ void Window::set_title(std::string_view title) {
 
 QVulkanWindowRenderer *Window::createRenderer() {
     return new Renderer(this);
+}
+
+
+// ============================================================
+// Qt window lifecycle
+// ============================================================
+
+void Window::closeEvent(QCloseEvent *e) {
+    _closing = true;
+    QVulkanWindow::closeEvent(e);
+    QGuiApplication::quit();
 }
 
 

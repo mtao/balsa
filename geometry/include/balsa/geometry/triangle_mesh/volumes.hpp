@@ -5,8 +5,8 @@
 #include "balsa/utils/factorial.hpp"
 namespace balsa::geometry::triangle_mesh {
 template<
-  ::zipper::concepts::MatrixBaseDerived VertexDerived,
-  ::zipper::concepts::MatrixBaseDerived SimplexDerived>
+  ::zipper::concepts::Matrix VertexDerived,
+  ::zipper::concepts::Matrix SimplexDerived>
     requires(std::is_integral_v<typename SimplexDerived::value_type>)
 auto volumes(const VertexDerived &V,
              const SimplexDerived &S) {

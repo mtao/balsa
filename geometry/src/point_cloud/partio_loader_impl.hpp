@@ -39,7 +39,7 @@ void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
     }
 }
 
-template<::zipper::concepts::VectorBaseDerived T>
+template<::zipper::concepts::Vector T>
 void PartioFileWriter::set_attribute(const std::string &name, const T &V) {
 
     using Scalar = typename T::value_type;
