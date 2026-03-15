@@ -9,6 +9,8 @@
 #include <tuple>
 #include "balsa/zipper/types.hpp"
 #include "zipper/concepts/Matrix.hpp"
+#include "zipper/concepts/Vector.hpp"
+#include "zipper/concepts/Zipper.hpp"
 
 namespace balsa::geometry::simplex {
 
@@ -34,13 +36,14 @@ namespace detail {
 
     // Back-substitution for upper triangular system R*x = b.
     // Near-zero pivots are treated as zero (for rank-deficient systems).
-    template<::zipper::concepts::Matrix RMat, ::zipper::concepts::Matrix BVec>
+    template<::zipper::concepts::Matrix RMat, ::zipper::concepts::Zipper BVec>
     auto upper_triangular_solve(const RMat &R, const BVec &b) {
         using value_type = typename RMat::value_type;
         constexpr auto N = RMat::static_extent(1);
         ::zipper::Vector<value_type, N> x(R.extent(1));
         const value_type pivot_tol = std::numeric_limits<value_type>::epsilon() * 100;
-        for (::zipper::index_type i = R.extent(1) - 1; i >= 0; --i) {
+        for (::zipper::index_type ii = 0; ii < R.extent(1); ++ii) {
+            ::zipper::index_type i = R.extent(1) - 1 - ii;
             value_type s = b(i);
             for (::zipper::index_type j = i + 1; j < R.extent(1); ++j) {
                 s -= R(i, j) * x(j);
@@ -51,7 +54,7 @@ namespace detail {
     }
 
     // Solve A*x = b via QR decomposition with back-substitution.
-    template<::zipper::concepts::Matrix AMat, ::zipper::concepts::Matrix BVec>
+    template<::zipper::concepts::Matrix AMat, ::zipper::concepts::Zipper BVec>
     auto qr_solve(const AMat &A, const BVec &b) {
         auto [Q, R] = ::zipper::utils::decomposition::qr(A);
         auto Qtb = (Q.transpose() * b).eval();
