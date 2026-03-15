@@ -20,3 +20,10 @@ test_welzl = executable('test_welzl_smallest_sphere',
   'test_smallest_enclosing_sphere.cpp',
   dependencies: [geometry_dep, catch2_with_main_dep])
 test('welzl smallest sphere test', test_welzl)
+
+if get_option('quiver')
+  test_quiver_bridge = executable('test_quiver_bridge',
+    'test_quiver_bridge.cpp',
+    dependencies: [geometry_dep, catch2_with_main_dep])
+  test('quiver bridge test', test_quiver_bridge)
+endif
