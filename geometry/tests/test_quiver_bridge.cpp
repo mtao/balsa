@@ -3,7 +3,7 @@
 #include <cmath>
 #include <vector>
 
-#include <balsa/geometry/quiver/to_col_vectors.hpp>
+#include <quiver/zipper/to_col_vectors.hpp>
 #include <balsa/geometry/quiver/simplex_transforms.hpp>
 #include <balsa/utils/factorial.hpp>
 #include <quiver/attributes/IncidentData.hpp>
@@ -11,6 +11,7 @@
 #include <quiver/topology/SimplexIndices.hpp>
 
 using namespace Catch;
+namespace qz = quiver::zipper;
 namespace bgq = balsa::geometry::quiver;
 
 // ── to_col_vectors with ReferencingStorage ────────────────────────────────
@@ -25,8 +26,8 @@ TEST_CASE("to_col_vectors referencing storage 2D triangle",
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
-    auto M = bgq::to_col_vectors(id);
+    auto id = qz::make_incident_data(positions.data(), indices);
+    auto M = qz::to_col_vectors(id);
 
     // Result should be a 2x3 matrix
     REQUIRE(M.extent(0) == 2);
@@ -52,8 +53,8 @@ TEST_CASE("to_col_vectors referencing storage 3D triangle",
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
-    auto M = bgq::to_col_vectors(id);
+    auto id = qz::make_incident_data(positions.data(), indices);
+    auto M = qz::to_col_vectors(id);
 
     REQUIRE(M.extent(0) == 3);
     REQUIRE(M.extent(1) == 3);
@@ -83,8 +84,8 @@ TEST_CASE("to_col_vectors referencing with scattered indices",
     };
     std::array<int64_t, 3> indices = { 4, 1, 3 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
-    auto M = bgq::to_col_vectors(id);
+    auto id = qz::make_incident_data(positions.data(), indices);
+    auto M = qz::to_col_vectors(id);
 
     REQUIRE(M.extent(0) == 2);
     REQUIRE(M.extent(1) == 3);
@@ -111,8 +112,8 @@ TEST_CASE("to_col_vectors owning storage", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(values, indices);
-    auto M = bgq::to_col_vectors(id);
+    auto id = qz::make_incident_data(values, indices);
+    auto M = qz::to_col_vectors(id);
 
     REQUIRE(M.extent(0) == 2);
     REQUIRE(M.extent(1) == 3);
@@ -136,7 +137,7 @@ TEST_CASE("to_std_array round-trip", "[quiver_bridge]") {
     for (size_t i = 0; i < 3; ++i) {
         v(i) = original[i];
     }
-    auto result = bgq::to_std_array(v);
+    auto result = qz::to_std_array(v);
 
     static_assert(std::is_same_v<decltype(result), std::array<double, 3>>);
     CHECK(result[0] == Approx(1.5));
@@ -168,7 +169,7 @@ TEST_CASE("simplex_col_vectors standalone SimplexIndices",
     };
 
     // First triangle: vertices 0, 1, 2
-    auto M0 = bgq::simplex_col_vectors<0, 2>(si, positions.data(), 0);
+    auto M0 = qz::simplex_col_vectors<0, 2>(si, positions.data(), 0);
     REQUIRE(M0.extent(0) == 2);
     REQUIRE(M0.extent(1) == 3);
 
@@ -180,7 +181,7 @@ TEST_CASE("simplex_col_vectors standalone SimplexIndices",
     CHECK(M0(1, 2) == Approx(1.0));
 
     // Second triangle: vertices 1, 2, 3
-    auto M1 = bgq::simplex_col_vectors<0, 2>(si, positions.data(), 1);
+    auto M1 = qz::simplex_col_vectors<0, 2>(si, positions.data(), 1);
     CHECK(M1(0, 0) == Approx(1.0));
     CHECK(M1(1, 0) == Approx(0.0));
     CHECK(M1(0, 1) == Approx(0.0));
@@ -205,7 +206,7 @@ TEST_CASE("simplex_col_vectors 3D tetrahedra", "[quiver_bridge]") {
         { 0.0, 0.0, 1.0 }
     };
 
-    auto M = bgq::simplex_col_vectors<0, 3>(si, positions.data(), 0);
+    auto M = qz::simplex_col_vectors<0, 3>(si, positions.data(), 0);
     REQUIRE(M.extent(0) == 3);
     REQUIRE(M.extent(1) == 4);
 
@@ -239,7 +240,7 @@ TEST_CASE("VolumeTransform 2D right triangle", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     double vol = bgq::VolumeTransform{}(id);
 
     // 2x3 matrix: rows+1 == cols, so signed volume = det / 2! = 0.5
@@ -254,7 +255,7 @@ TEST_CASE("VolumeTransform 2D scaled triangle", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     double vol = bgq::VolumeTransform{}(id);
 
     // area = 0.5 * 2 * 3 = 3.0
@@ -270,7 +271,7 @@ TEST_CASE("VolumeTransform 3D triangle (unsigned)", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     double vol = bgq::VolumeTransform{}(id);
 
     // This is the area of the triangle with vertices on the unit axes
@@ -289,7 +290,7 @@ TEST_CASE("VolumeTransform 3D tetrahedron", "[quiver_bridge]") {
     };
     std::array<int64_t, 4> indices = { 0, 1, 2, 3 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     double vol = bgq::VolumeTransform{}(id);
 
     // det / 3! = 1.0 / 6.0
@@ -314,7 +315,7 @@ TEST_CASE("VolumeTransform identity simplex parametric",
             indices[j] = j;
         }
 
-        auto id = bgq::make_incident_data(positions.data(), indices);
+        auto id = qz::make_incident_data(positions.data(), indices);
         double vol = bgq::VolumeTransform{}(id);
 
         CHECK(vol == Approx(1.0 / balsa::utils::factorial(N)));
@@ -338,7 +339,7 @@ TEST_CASE("CircumcenterTransform 2D right triangle", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto C = bgq::CircumcenterTransform{}(id);
 
     static_assert(std::is_same_v<decltype(C), std::array<double, 2>>);
@@ -356,7 +357,7 @@ TEST_CASE("CircumcenterTransform equilateral triangle", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto C = bgq::CircumcenterTransform{}(id);
 
     // Circumcenter of equilateral triangle = centroid
@@ -378,7 +379,7 @@ TEST_CASE("CircumcenterTransform 3D tet", "[quiver_bridge]") {
     };
     std::array<int64_t, 4> indices = { 0, 1, 2, 3 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto C = bgq::CircumcenterTransform{}(id);
 
     static_assert(std::is_same_v<decltype(C), std::array<double, 3>>);
@@ -399,7 +400,7 @@ TEST_CASE("CircumcenterTransform 3D triangle (SPSD path)",
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto C = bgq::CircumcenterTransform{}(id);
 
     CHECK(C[0] == Approx(0.5));
@@ -418,7 +419,7 @@ TEST_CASE("CircumcenterWithSquaredRadiusTransform", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto [C, r2] = bgq::CircumcenterWithSquaredRadiusTransform{}(id);
 
     CHECK(C[0] == Approx(0.5));
@@ -438,7 +439,7 @@ TEST_CASE("CircumcenterWithRadiusTransform", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto [C, r] = bgq::CircumcenterWithRadiusTransform{}(id);
 
     CHECK(C[0] == Approx(0.5));
@@ -465,7 +466,7 @@ TEST_CASE("circumcenter equidistance via bridge", "[quiver_bridge]") {
             indices[j] = j;
         }
 
-        auto id = bgq::make_incident_data(positions.data(), indices);
+        auto id = qz::make_incident_data(positions.data(), indices);
         auto [C, r] = bgq::CircumcenterWithRadiusTransform{}(id);
 
         // Check all vertices are at distance r from C
@@ -529,8 +530,8 @@ TEST_CASE("bridge with float scalars", "[quiver_bridge]") {
     };
     std::array<int64_t, 3> indices = { 0, 1, 2 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
-    auto M = bgq::to_col_vectors(id);
+    auto id = qz::make_incident_data(positions.data(), indices);
+    auto M = qz::to_col_vectors(id);
 
     static_assert(std::is_same_v<typename decltype(M)::value_type, float>);
     REQUIRE(M.extent(0) == 2);
@@ -556,7 +557,7 @@ TEST_CASE("VolumeTransform 2D edge", "[quiver_bridge]") {
     };
     std::array<int64_t, 2> indices = { 0, 1 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     double vol = bgq::VolumeTransform{}(id);
 
     // unsigned volume of an edge = length / 1! = length
@@ -571,7 +572,7 @@ TEST_CASE("VolumeTransform 1D edge (signed)", "[quiver_bridge]") {
     };
     std::array<int64_t, 2> indices = { 0, 1 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     double vol = bgq::VolumeTransform{}(id);
 
     CHECK(vol == Approx(5.0));
@@ -585,7 +586,7 @@ TEST_CASE("CircumcenterTransform edge midpoint", "[quiver_bridge]") {
     };
     std::array<int64_t, 2> indices = { 0, 1 };
 
-    auto id = bgq::make_incident_data(positions.data(), indices);
+    auto id = qz::make_incident_data(positions.data(), indices);
     auto C = bgq::CircumcenterTransform{}(id);
 
     CHECK(C[0] == Approx(3.0));
