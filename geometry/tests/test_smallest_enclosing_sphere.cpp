@@ -1,16 +1,16 @@
 #include <catch2/catch_all.hpp>
-#include <zipper/utils/maxCoeff.hpp>
+#include <zipper/utils/max_coeff.hpp>
 #include <fmt/format.h>
 #include "circumcenter_utils.hpp"
 
 #include <balsa/geometry/point_cloud/smallest_enclosing_sphere_welzl.hpp>
-#include <zipper/views/nullary/RandomView.hpp>
+#include <zipper/expression/nullary/Random.hpp>
 #include <balsa/tensor_types.hpp>
 
 
 using namespace balsa;
 namespace {
-template<typename Circ, ::zipper::concepts::MatrixBaseDerived ColVecs>
+template<typename Circ, ::zipper::concepts::Matrix ColVecs>
     requires(!ColVecs::extents_traits::is_dynamic_extent(0))
 bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
 
@@ -31,7 +31,7 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
 // Recursively enumerate all k-subsets of indices [0, n) and try each as a
 // circumscribing simplex. This generalizes the old nested-loop approach so
 // it works for any dimension (including D=4 which needs quintuples).
-template<::zipper::concepts::MatrixBaseDerived ColVecs, typename TryUpdateFn>
+template<::zipper::concepts::Matrix ColVecs, typename TryUpdateFn>
     requires(!ColVecs::extents_traits::is_dynamic_extent(0))
 void brute_force_enumerate_subsets(
   const ColVecs &P,
@@ -61,7 +61,7 @@ void brute_force_enumerate_subsets(
     }
 }
 
-template<::zipper::concepts::MatrixBaseDerived ColVecs>
+template<::zipper::concepts::Matrix ColVecs>
     requires(!ColVecs::extents_traits::is_dynamic_extent(0))
 auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::value_type, ColVecs::extents_type::static_extent(0) + 1> {
 
@@ -106,7 +106,7 @@ auto brute_force_smallest_circle(const ColVecs &P) -> Vector<typename ColVecs::v
 template<index_type D>
 std::array<balsa::zipper::ColVectors<double, D>, 2>
   make_inside_outside_points(size_t count, const balsa::zipper::Vector<double, D> &C, double inside, double outside = 0) {
-    // make sure inside is
+    // make sure inside is positive
     inside = std::abs(inside);
     if (outside == 0) {
         outside = 5 * inside;
@@ -116,53 +116,34 @@ std::array<balsa::zipper::ColVectors<double, D>, 2>
     }
     double inside_r = inside;
 
+    // Generate uniform random directions on the unit sphere in any dimension D
+    // by normalizing D-dimensional Gaussian vectors (each coordinate ~ N(0,1)).
+    balsa::zipper::ColVectors<double, D> directions(count);
+    directions = ::zipper::expression::nullary::normal_random<double>(directions.extents());
+    for (index_type j = 0; j < directions.cols(); ++j) {
+        auto v = directions.col(j);
+        double n = v.norm();
+        if (n > 1e-12) {
+            v = v * (1.0 / n);
+        }
+    }
 
-    balsa::zipper::VecXd phi(count);
-    phi = ::zipper::views::nullary::uniform_random_view<double>(phi.extents());
-    // convert from [-1,1] to [-pi,pi]
-    phi = M_PI * phi;
-
-
+    // Random radii for inside points: uniform in [0, inside_r]
     balsa::zipper::VecXd inner_radii(count);
-    inner_radii = ::zipper::views::nullary::uniform_random_view<double>(inner_radii.extents());
-    // convert from [-1,1] to [0,pi]
+    inner_radii = ::zipper::expression::nullary::uniform_random<double>(inner_radii.extents());
     inner_radii = ::zipper::as_vector((inner_radii.as_array() * inside).abs());
 
+    // Random radii for outside points: uniform in [inside_r, outside]
     balsa::VecXd outer_radii(count);
-    outer_radii = ::zipper::views::nullary::uniform_random_view<double>(outer_radii.extents());
-    // convert from [-1,1] to [0,pi]
+    outer_radii = ::zipper::expression::nullary::uniform_random<double>(outer_radii.extents());
     outer_radii = ::zipper::as_vector((outer_radii.as_array() * (outside - inside)).abs() + inside);
 
-    balsa::zipper::VecXd cp = phi.unary_expr([](double x) { return std::cos(x); });
-    balsa::zipper::VecXd sp = phi.unary_expr([](double x) { return std::sin(x); });
     {
         balsa::zipper::ColVectors<double, D> inside(count);
         balsa::zipper::ColVectors<double, D> outside(count);
 
-        if constexpr (D == 2) {
-            inside.row(0) = cp;
-            inside.row(1) = sp;
-        } else {
-            static_assert(D == 3);
-            balsa::zipper::VecXd theta(count);
-            theta = ::zipper::views::nullary::uniform_random_view<double>(theta.extents());
-            // convert from [-1,1] to [0,pi]
-            theta = ::zipper::as_vector((M_PI * theta.as_array()).abs());
-
-            balsa::zipper::VecXd ct = theta.unary_expr([](double x) { return std::cos(x); });
-            balsa::zipper::VecXd st = theta.unary_expr([](double x) { return std::sin(x); });
-
-            inside.row(0) = ::zipper::as_vector((sp.as_array() * ct.as_array()));
-            inside.row(1) = ::zipper::as_vector((sp.as_array() * st.as_array()));
-            inside.row(2) = ::zipper::as_vector(cp.as_array());
-        }
-
-        outside = inside;
-        // spdlog::info("Norms: {}", outside.colwise().norm());
-        // spdlog::info("Inside {}", inner_radii);
-        // spdlog::info("Outer {}", outer_radii);
-        // spdlog::info("Inside {}", ::zipper::as_vector(inner_radii.as_array() >= inside_r).template cast<int>());
-        // spdlog::info("Outer {}", ::zipper::as_vector(outer_radii.as_array() >= inside_r).template cast<int>());
+        inside = directions;
+        outside = directions;
 
         for (index_type j = 0; j < inside.cols(); ++j) {
             auto v = inside.col(j);
@@ -174,16 +155,10 @@ std::array<balsa::zipper::ColVectors<double, D>, 2>
             v = v * outer_radii(j);
             v = v + C;
         }
-        // inside = inside * inner_radii.asDiagonal();
-        // outside = outside * outer_radii.asDiagonal();
-
-        // inside.colwise() += C;
-        // outside.colwise() += C;
         fmt::print("{}\n{}\n", inside, outside);
 
         REQUIRE(valid_circle_rad2(std::make_tuple(C, inside_r * inside_r), inside));
         REQUIRE_FALSE(valid_circle_rad2(std::make_tuple(C, inside_r * inside_r), outside));
-        // spdlog::info("Making data where center {} rad {} is valid", C, inside_r);
         return { { inside, outside } };
     }
 }
@@ -210,23 +185,31 @@ TEST_CASE("sphere_sampling_test", "[testing_internal]") {
         }
     };
 
-    auto make_check = [&](const balsa::zipper::Vec3d &center, double inner, double outer) {
-        auto [inside, outside] = make_inside_outside_points(100, center, inner, outer);
-        check(inside, center, 0, inner);
-        check(outside, center, inner, outer);
+    auto make_check = []<int N>(std::integral_constant<int, N>, const auto &check, double inner, double outer) {
+        balsa::zipper::Vector<double, N> center;
+        center = ::zipper::expression::nullary::Constant<double>(0);
+        {
+            auto [inside, outside] = make_inside_outside_points(100, center, inner, outer);
+            check(inside, center, 0, inner);
+            check(outside, center, inner, outer);
+        }
+        center = ::zipper::expression::nullary::uniform_random<double>(::zipper::extents<>{});
+        {
+            auto [inside, outside] = make_inside_outside_points(100, center, inner, outer);
+            check(inside, center, 0, inner);
+            check(outside, center, inner, outer);
+        }
     };
-    balsa::zipper::Vec3d center;
-    center = ::zipper::views::nullary::ConstantView<double>(0);
 
-    make_check(center, 1, 2);
-    make_check(center, 1, 0);
-    make_check(center, 3, 5);
-    make_check(center, 3, 5);
-    center = ::zipper::views::nullary::uniform_random_infinite_view<double>({});
-    make_check(center, 1, 2);
-    make_check(center, 1, 0);
-    make_check(center, 3, 5);
-    make_check(center, 3, 5);
+    auto run = [&]<int N>(std::integral_constant<int, N> tag) {
+        make_check(tag, check, 1, 2);
+        make_check(tag, check, 1, 0);
+        make_check(tag, check, 3, 5);
+    };
+
+    run(std::integral_constant<int, 2>{});
+    run(std::integral_constant<int, 3>{});
+    run(std::integral_constant<int, 4>{});
 }
 
 
@@ -234,7 +217,7 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
 
     auto run = []<int N>(std::integral_constant<int, N>) {
         balsa::zipper::Vector<double, N> center;
-        center = ::zipper::views::nullary::uniform_random_infinite_view<double>();
+        center = ::zipper::expression::nullary::uniform_random<double>(::zipper::extents<>{});
 
         double init_bound = 3;
         auto [inside, outside] = make_inside_outside_points(10, center, init_bound);
@@ -257,26 +240,14 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
                 v = v - c;
             }
             auto V = m.colwise().norm().eval();
-            // spdlog::info("inside rads: {}", V / r);
-            // spdlog::info("inside rads: {}", V / (r * r));
             CHECK((V.as_array() <= (r + 1e-8)).all());
         }
-        //{
-        //    // auto V = (outside.colwise() - c).colwise().norm().eval();
-        //    auto m = outside;
-        //    for (index_type j = 0; j < m.cols(); ++j) {
-        //        auto v = m.col(j);
-        //        v = v - c;
-        //    }
-        //    auto V = m.colwise().norm().eval();
-        //    spdlog::info("outside rads: {}", V / r);
-        //    CHECK((V.as_array() >= (r - 1e-5)).all());
-        //}
     };
 
     for (int j = 0; j < 5; ++j) {
         run(std::integral_constant<int, 2>{});
         run(std::integral_constant<int, 3>{});
+        run(std::integral_constant<int, 4>{});
     }
 }
 
@@ -285,7 +256,7 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
     auto test = []<int N>(std::integral_constant<int, N>) {
         balsa::zipper::ColVectors<float, N> V(N, N + 5);
         // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
-        V = ::zipper::views::nullary::uniform_random_view<double>(V.extents());
+        V = ::zipper::expression::nullary::uniform_random<double>(V.extents());
 
 
         auto circle = balsa::geometry::point_cloud::smallest_enclosing_sphere_welzl(V);
