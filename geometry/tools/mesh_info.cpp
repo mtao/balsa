@@ -1,5 +1,5 @@
 #include <iostream>
-#include <cxxopts.hpp>
+#include <CLI/CLI.hpp>
 #include <fstream>
 #include <optional>
 #include <zipper/utils/minCoeff.hpp>
@@ -12,48 +12,37 @@
 #include <balsa/geometry/bounding_box.hpp>
 
 int main(int argc, char *argv[]) {
-    cxxopts::Options opts("mesh_view", "a simple mesh statistics tool");
+    CLI::App app{ "a simple mesh statistics tool", "mesh_info" };
 
-    // clang-format off
-    opts.add_options()
-        ("filenames", "Arguments without options",cxxopts::value<std::vector<std::string>>())
-        ("a,all", "show all statistics", cxxopts::value<bool>()->default_value("false"))
-        ("j,json", "output as json", cxxopts::value<bool>()->default_value("false"))
-        ("o,output", "output filepath", cxxopts::value<std::string>())
-        ("c,counts", "show element counts", cxxopts::value<bool>()->default_value("false"))
-        ("b,bounding_box", "show bounding box", cxxopts::value<bool>()->default_value("false"))
-        ("v,volumes", "show simplex volumes", cxxopts::value<bool>()->default_value("false"))
-        ("h,help", "Print usage");
+    std::vector<std::string> filenames;
+    bool do_all = false;
+    bool use_json = false;
+    std::string output_path;
+    bool show_counts = false;
+    bool show_bounding_box = false;
+    bool show_volumes = false;
 
-    opts.parse_positional({"filenames"});
+    app.add_option("filenames", filenames, "Input mesh files")
+      ->required()
+      ->check(CLI::ExistingFile);
+    app.add_flag("-a,--all", do_all, "show all statistics");
+    app.add_flag("-j,--json", use_json, "output as json");
+    app.add_option("-o,--output", output_path, "output filepath");
+    app.add_flag("-c,--counts", show_counts, "show element counts");
+    app.add_flag("-b,--bounding_box", show_bounding_box, "show bounding box");
+    app.add_flag("-v,--volumes", show_volumes, "show simplex volumes");
 
-    // clang-format on
+    CLI11_PARSE(app, argc, argv);
 
     using json = nlohmann::json;
-    auto res = opts.parse(argc, argv);
-
-    if (res.count("help")) {
-        std::cout << opts.help() << std::endl;
-        return 0;
-    }
 
     std::optional<std::ofstream> ofs_opt;
-    if (res.count("output")) {
-        ofs_opt.emplace(res["output"].as<std::string>().c_str());
+    if (!output_path.empty()) {
+        ofs_opt.emplace(output_path.c_str());
     }
 
     std::ostream &os = ofs_opt ? *ofs_opt : std::cout;
 
-    bool use_json = res["json"].as<bool>();
-    bool do_all = res["all"].as<bool>();
-
-#if 0
-    std::vector<std::string> filenames;
-    filenames.emplace_back(
-      res["filenames"].as<std::string>());
-#else
-    auto filenames = res["filenames"].as<std::vector<std::string>>();
-#endif
     for (auto &&filename : filenames) {
         json js;
         if (use_json) {
@@ -63,7 +52,7 @@ int main(int argc, char *argv[]) {
         auto mesh = balsa::geometry::triangle_mesh::read_objD(filename).position;
 
         auto [V, F, E] = mesh;
-        if (do_all || res["simplex_counts"].as<bool>()) {
+        if (do_all || show_counts) {
             if (E.cols() == 0) {
                 E = balsa::geometry::simplicial_complex::boundaries(F);
             }
@@ -75,7 +64,7 @@ int main(int argc, char *argv[]) {
                 os << "#V,#E,#F: " << V.cols() << "," << E.cols() << "," << F.cols() << std::endl;
             }
         }
-        if (do_all || res["volumes"].as<bool>()) {
+        if (do_all || show_volumes) {
             auto EVol = balsa::geometry::simplicial_complex::volumes(V, E);
             auto FVol = balsa::geometry::simplicial_complex::volumes(V, F);
             auto get_stats = [](const auto &vec) {
@@ -96,7 +85,7 @@ int main(int argc, char *argv[]) {
         }
 
 
-        if (do_all || res["bounding_box"].as<bool>()) {
+        if (do_all || show_bounding_box) {
             auto bb = balsa::geometry::bounding_box(V);
             if (use_json) {
 

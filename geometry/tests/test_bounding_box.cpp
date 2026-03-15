@@ -1,13 +1,11 @@
 #include <catch2/catch_all.hpp>
 #include <spdlog/spdlog.h>
-#include <iostream>
 
 #include <balsa/geometry/bounding_box.hpp>
 #include <balsa/zipper/types.hpp>
 #include <zipper/views/nullary/ConstantView.hpp>
 #include <zipper/views/nullary/RandomView.hpp>
 
-#include <bitset>
 using namespace Catch;
 
 TEST_CASE("bounding_box", "[bounding_box][geometry]") {
@@ -22,8 +20,8 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         auto bb = balsa::geometry::bounding_box(V);
 
 
-        //spdlog::info("{} {}", fmt::join(bb.min(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
-        //spdlog::info("{} {}", fmt::join(bb.max(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
+        // spdlog::info("{} {}", fmt::join(bb.min(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
+        // spdlog::info("{} {}", fmt::join(bb.max(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
         CHECK(bb.min() == zipper::Vector<float, 3>({ 0, 0, 0 }));
         CHECK(bb.min() == zipper::Vector<float, 3>({ 0, 0, 0 }));
         CHECK(bb.max() == bb.min());

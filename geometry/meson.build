@@ -26,8 +26,8 @@ geometry_required_deps = core_required_deps
 #geometry_required_deps += TBB_dep
 
 if get_option('alembic')
-  alembic_dep = dependency('alembic')
-  core_required_deps += alembic_dep
+  alembic_dep = dependency('Alembic')
+  geometry_required_deps += alembic_dep
 endif
 
 if get_option('partio') 
@@ -62,3 +62,4 @@ geometry_lib = library('balsaGeometry', geometry_sources, include_directories: i
 geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_required_deps, include_directories: include_dir)
 
 subdir('tests')
+subdir('tools')

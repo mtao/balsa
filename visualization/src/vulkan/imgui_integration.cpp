@@ -102,10 +102,8 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
     init_info.Queue = static_cast<VkQueue>(film.graphics_queue());
     init_info.PipelineCache = VK_NULL_HANDLE;
     init_info.DescriptorPool = _descriptor_pool;
-    init_info.Subpass = 0;
     init_info.MinImageCount = film.swapchain_image_count();
     init_info.ImageCount = film.swapchain_image_count();
-    init_info.MSAASamples = static_cast<VkSampleCountFlagBits>(film.sample_count());
     init_info.Allocator = nullptr;
     init_info.CheckVkResultFn = [](VkResult err) {
         if (err != VK_SUCCESS) {
@@ -113,8 +111,12 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
         }
     };
 
+    init_info.Subpass = 0;
+    init_info.MSAASamples = static_cast<VkSampleCountFlagBits>(film.sample_count());
+
     // --- Init Vulkan rendering backend ---
-    if (!ImGui_ImplVulkan_Init(&init_info, static_cast<VkRenderPass>(film.default_render_pass()))) {
+    VkRenderPass render_pass = static_cast<VkRenderPass>(film.default_render_pass());
+    if (!ImGui_ImplVulkan_Init(&init_info, render_pass)) {
         vkDestroyDescriptorPool(_device, _descriptor_pool, nullptr);
         _descriptor_pool = VK_NULL_HANDLE;
         ImGui::DestroyContext(_context);
@@ -140,39 +142,39 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
 // ---------------------------------------------------------------------------
 
 void ImGuiIntegration::upload_fonts(Film &film) {
-    // One-shot command buffer to upload the font atlas to the GPU.
-    VkCommandPool cmd_pool = static_cast<VkCommandPool>(film.graphics_command_pool());
+    // imgui 1.88: manual font upload via a one-shot command buffer
+    VkDevice device = static_cast<VkDevice>(film.device());
+    VkCommandPool pool = static_cast<VkCommandPool>(film.graphics_command_pool());
+    VkQueue queue = static_cast<VkQueue>(film.graphics_queue());
 
     VkCommandBufferAllocateInfo alloc_info = {};
     alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc_info.commandPool = cmd_pool;
+    alloc_info.commandPool = pool;
     alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc_info.commandBufferCount = 1;
 
-    VkCommandBuffer cmd_buf;
-    vkAllocateCommandBuffers(_device, &alloc_info, &cmd_buf);
+    VkCommandBuffer cmd;
+    vkAllocateCommandBuffers(device, &alloc_info, &cmd);
 
     VkCommandBufferBeginInfo begin_info = {};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &begin_info);
 
-    vkBeginCommandBuffer(cmd_buf, &begin_info);
-    ImGui_ImplVulkan_CreateFontsTexture(cmd_buf);
-    vkEndCommandBuffer(cmd_buf);
+    ImGui_ImplVulkan_CreateFontsTexture(cmd);
+
+    vkEndCommandBuffer(cmd);
 
     VkSubmitInfo submit_info = {};
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd_buf;
-
-    VkQueue queue = static_cast<VkQueue>(film.graphics_queue());
+    submit_info.pCommandBuffers = &cmd;
     vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
     vkQueueWaitIdle(queue);
 
-    vkFreeCommandBuffers(_device, cmd_pool, 1, &cmd_buf);
-
-    // ImGui internally allocated staging buffers for the upload — clean them up
     ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+    vkFreeCommandBuffers(device, pool, 1, &cmd);
 }
 
 // ---------------------------------------------------------------------------

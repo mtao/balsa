@@ -130,7 +130,7 @@ class NativeFilm : public Film {
         vk::raii::ImageView image_view_raii = nullptr;
         vk::raii::CommandBuffer command_buffer_raii = nullptr;
         vk::raii::Fence command_fence_raii = nullptr;
-        bool command_fence_waitable = false;
+        bool command_fence_waitable = true;
         vk::raii::Framebuffer framebuffer_raii = nullptr;
         vk::raii::CommandBuffer present_command_buffer_raii = nullptr;
         // vk::Image msaa_image = nullptr;
