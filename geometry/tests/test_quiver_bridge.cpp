@@ -7,6 +7,7 @@
 #include <balsa/geometry/quiver/simplex_transforms.hpp>
 #include <balsa/utils/factorial.hpp>
 #include <quiver/attributes/IncidentData.hpp>
+#include <quiver/attributes/StoredAttribute.hpp>
 #include <quiver/topology/SimplexIndices.hpp>
 
 using namespace Catch;
@@ -150,12 +151,13 @@ TEST_CASE("simplex_col_vectors standalone SimplexIndices",
           "[quiver_bridge]") {
     // Two 2D triangles: {0,1,2} and {1,2,3}
     using SI = quiver::topology::SimplexIndices<0, 2>;
-    std::vector<SI::attribute_value_type> tri_data = {
-        { 0, 1, 2 },
-        { 1, 2, 3 }
-    };
+    using SA = quiver::attributes::StoredAttribute<SI::attribute_value_type>;
 
-    SI si(std::move(tri_data));
+    SA storage(std::vector<SI::attribute_value_type>{
+      { 0, 1, 2 },
+      { 1, 2, 3 } });
+    quiver::attributes::AttributeHandle<SI::attribute_value_type> handle(storage);
+    SI si(handle);
     REQUIRE(si.valid());
 
     std::vector<std::array<double, 2>> positions = {
@@ -190,9 +192,11 @@ TEST_CASE("simplex_col_vectors standalone SimplexIndices",
 TEST_CASE("simplex_col_vectors 3D tetrahedra", "[quiver_bridge]") {
     // Single tet in 3D: vertices {0,1,2,3}
     using SI = quiver::topology::SimplexIndices<0, 3>;
-    std::vector<SI::attribute_value_type> tet_data = { { 0, 1, 2, 3 } };
+    using SA = quiver::attributes::StoredAttribute<SI::attribute_value_type>;
 
-    SI si(std::move(tet_data));
+    SA storage(std::vector<SI::attribute_value_type>{ { 0, 1, 2, 3 } });
+    quiver::attributes::AttributeHandle<SI::attribute_value_type> handle(storage);
+    SI si(handle);
 
     std::vector<std::array<double, 3>> positions = {
         { 0.0, 0.0, 0.0 },
@@ -481,39 +485,35 @@ TEST_CASE("circumcenter equidistance via bridge", "[quiver_bridge]") {
 }
 
 
-// ── SimplexIndices owning constructor standalone test ──────────────────────
+// ── SimplexIndices via StoredAttribute standalone test ─────────────────────
 
-TEST_CASE("SimplexIndices owning constructor", "[quiver_bridge]") {
+TEST_CASE("SimplexIndices via StoredAttribute", "[quiver_bridge]") {
     using SI = quiver::topology::SimplexIndices<0, 2>;
+    using SA = quiver::attributes::StoredAttribute<SI::attribute_value_type>;
     static_assert(SI::total_indices == 3);
 
-    std::vector<SI::attribute_value_type> data = {
-        { 0, 1, 2 },
-        { 1, 2, 3 },
-        { 2, 3, 4 }
-    };
-
-    SI si(data);
+    SA storage(std::vector<SI::attribute_value_type>{
+      { 0, 1, 2 },
+      { 1, 2, 3 },
+      { 2, 3, 4 } });
+    quiver::attributes::AttributeHandle<SI::attribute_value_type> handle(storage);
+    SI si(handle);
     REQUIRE(si.valid());
 
     // Access through handle
     CHECK(si.handle()[0] == SI::attribute_value_type{ 0, 1, 2 });
     CHECK(si.handle()[1] == SI::attribute_value_type{ 1, 2, 3 });
     CHECK(si.handle()[2] == SI::attribute_value_type{ 2, 3, 4 });
-
-    // Copy should share ownership (shared_ptr semantics)
-    SI si_copy = si;
-    REQUIRE(si_copy.valid());
-    CHECK(si_copy.handle()[0] == SI::attribute_value_type{ 0, 1, 2 });
 }
 
-TEST_CASE("SimplexIndices owning constructor 3D tet", "[quiver_bridge]") {
+TEST_CASE("SimplexIndices via StoredAttribute 3D tet", "[quiver_bridge]") {
     using SI = quiver::topology::SimplexIndices<0, 3>;
+    using SA = quiver::attributes::StoredAttribute<SI::attribute_value_type>;
     static_assert(SI::total_indices == 4);
 
-    std::vector<SI::attribute_value_type> data = { { 0, 1, 2, 3 } };
-
-    SI si(std::move(data));
+    SA storage(std::vector<SI::attribute_value_type>{ { 0, 1, 2, 3 } });
+    quiver::attributes::AttributeHandle<SI::attribute_value_type> handle(storage);
+    SI si(handle);
     REQUIRE(si.valid());
     CHECK(si.handle()[0] == SI::attribute_value_type{ 0, 1, 2, 3 });
 }
