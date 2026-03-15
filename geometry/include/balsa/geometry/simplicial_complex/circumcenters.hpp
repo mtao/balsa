@@ -1,6 +1,7 @@
 #if !defined(BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_CIRCUMCENTERS_HPP)
 #define BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_CIRCUMCENTERS_HPP
 #include "balsa/geometry/simplex/circumcenter.hpp"
+#include <zipper/Matrix.hpp>
 
 namespace balsa::geometry::simplicial_complex {
 
@@ -19,11 +20,11 @@ auto circumcenters(const PosType &V, const SimplexType &S) {
 
     using value_type = typename PosType::value_type;
 
-    constexpr static zipper::index_type compile_rows = PosType::extents_type::static_extent(0);
-    constexpr static zipper::index_type compile_cols = SimplexType::extents_type::static_extent(1);
-    balsa::zipper::Matrix<value_type, compile_rows, compile_cols> C(V.extent(0), S.extent(1));
+    constexpr static ::zipper::index_type compile_rows = PosType::extents_type::static_extent(0);
+    constexpr static ::zipper::index_type compile_cols = SimplexType::extents_type::static_extent(1);
+    ::zipper::Matrix<value_type, compile_rows, compile_cols> C(V.extent(0), S.extent(1));
 
-    for (zipper::index_type j = 0; j < S.extent(1); ++j) {
+    for (::zipper::index_type j = 0; j < S.extent(1); ++j) {
         auto s = S.col(j);
         auto c = C.col(j);
         c = simplex::circumcenter(V(::zipper::full_extent_t{}, s));

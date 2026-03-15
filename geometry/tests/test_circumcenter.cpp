@@ -4,6 +4,7 @@
 #include <zipper/utils/format.hpp>
 #include <zipper/expression/nullary/Random.hpp>
 #include <zipper/utils/mean_coeff.hpp>
+#include <balsa/zipper/types.hpp>
 #include <balsa/geometry/simplex/circumcenter.hpp>
 
 using namespace Catch;

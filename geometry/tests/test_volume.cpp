@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include <balsa/geometry/simplex/volume.hpp>
+#include <balsa/utils/factorial.hpp>
 #include <balsa/zipper/types.hpp>
 #include <zipper/expression/nullary/Constant.hpp>
 using namespace Catch;

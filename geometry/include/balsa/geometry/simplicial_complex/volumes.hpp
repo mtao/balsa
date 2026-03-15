@@ -1,6 +1,7 @@
 #if !defined(BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_VOLUMES_HPP)
 #define BALSA_GEOMETRY_SIMPLICIAL_COMPLEX_VOLUMES_HPP
 #include "balsa/geometry/simplex/volume.hpp"
+#include <zipper/Vector.hpp>
 
 namespace balsa::geometry::simplicial_complex {
 
@@ -20,10 +21,10 @@ auto volumes(const PosType &V, const SimplexType &S) {
 
     using value_type = typename PosType::value_type;
 
-    constexpr static zipper::index_type compile_cols = SimplexType::extents_type::static_extent(1);
-    balsa::zipper::Vector<value_type, compile_cols> C(S.extent(1));
+    constexpr static ::zipper::index_type compile_cols = SimplexType::extents_type::static_extent(1);
+    ::zipper::Vector<value_type, compile_cols> C(S.extent(1));
 
-    for (zipper::index_type j = 0; j < S.extent(1); ++j) {
+    for (::zipper::index_type j = 0; j < S.extent(1); ++j) {
         auto s = S.col(j);
         C(j) = simplex::volume(V(::zipper::full_extent_t{}, s));
     }
