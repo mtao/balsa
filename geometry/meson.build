@@ -46,16 +46,16 @@ endif
 
 
 
-# todo: why is this still here?
-geometry_headers = [
-  'include/balsa/geometry/mesh/halfedge.hpp', 
-  'include/balsa/geometry/mesh/halfedge_fv_map.hpp', 
-  'include/balsa/geometry/mesh/read_obj.hpp', 
-  'include/balsa/geometry/mesh/boundary_matrix.h', 
-  'include/balsa/geometry/mesh/boundary_facets.h'
-]
+# Removed stale geometry_headers list — it referenced files in a mesh/
+# directory that no longer exists and was never passed to any Meson function.
+# If a mesh/ module is added in the future, recreate this list then.
 
 geometry_required_deps += core_dep
+
+if get_option('quiver')
+  geometry_required_deps += quiver_dep
+endif
+
 include_dir = [include_directories('include')]
 
 geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)

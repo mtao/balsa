@@ -13,3 +13,4 @@ option('perfetto', type : 'boolean', value : false, description : 'Use perfetto'
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
 option('glfw', type : 'boolean', value : true, description : 'Use glfw')
 option('qt', type : 'boolean', value : true, description : 'Use qt')
+option('quiver', type : 'boolean', value : false, description : 'Use quiver simplicial complex mesh library')

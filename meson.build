@@ -80,6 +80,12 @@ endif
 
 
 subdir('core')
+
+if get_option('quiver')
+  quiver_proj = subproject('quiver', default_options: ['testing=false', 'tools=false', 'examples=false'])
+  quiver_dep = quiver_proj.get_variable('quiver_dep')
+endif
+
 subdir('geometry')
 
 if get_option('visualization')

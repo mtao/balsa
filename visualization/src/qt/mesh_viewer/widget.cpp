@@ -20,7 +20,7 @@ namespace {
         source_path = std::filesystem::absolute(source_path);
         std::filesystem::path src = source_path.parent_path() / name;
         std::ifstream ifs(src);
-        std::string file_lines = fmt::format("{}",fmt::join(ranges::getlines(ifs),"\n")) ;
+        std::string file_lines = fmt::format("{}", fmt::join(ranges::getlines(ifs), "\n"));
         return file_lines;
     }
     static const std::string vertexShaderSource = get_source("shaders/phong.vert");
@@ -34,7 +34,6 @@ void Widget::update_mvp() {
     m_program->bind();
     m_mvp_uniform = m_program->uniformLocation("MVP");
 
-    Q_ASSERT(m_mvp_uniform != -1);
     Q_ASSERT(m_mvp_uniform != -1);
     QMatrix4x4 MVP = m_perspective * m_view * m_model;
     // qDebug() << MVP;
@@ -137,7 +136,6 @@ void Widget::paintGL() {
     auto &glf = functions();
 
 
-    std::cout << "Hi" << std::endl;
     glf.glClearColor(0.0, 0.0, 0.0, 1.0);
 
     glf.glEnable(GL_DEPTH_TEST);
@@ -240,7 +238,7 @@ void Widget::dragEnterEvent(QDragEnterEvent *event) {
 
 void Widget::dragLeaveEvent(QDragLeaveEvent *event) {
     QOpenGLWidget::dragLeaveEvent(event);
-    qDebug() << "dragEnterEvent()";
+    qDebug() << "dragLeaveEvent()";
 }
 void Widget::dragMoveEvent(QDragMoveEvent *event) {
     QOpenGLWidget::dragMoveEvent(event);

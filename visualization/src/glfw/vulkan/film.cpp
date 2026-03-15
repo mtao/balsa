@@ -30,7 +30,7 @@ vk::Extent2D Film::choose_swapchain_extent() const {
         int h, w;
         glfwGetFramebufferSize(_window, &w, &h);
         cur_extent.width =
-          std::clamp<uint32_t>(w, capabilities.minImageExtent.width, capabilities.maxImageExtent.height);
+          std::clamp<uint32_t>(w, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         cur_extent.height =
           std::clamp<uint32_t>(h, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
     }

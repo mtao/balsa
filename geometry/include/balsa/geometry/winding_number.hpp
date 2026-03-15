@@ -1,12 +1,12 @@
 #if !defined(BALSA_GEOMETRY_WINDING_NUMBER_HPP)
 #define BALSA_GEOMETRY_WINDING_NUMBER_HPP
-#include <iostream>
+#include <map>
 #include <numbers>
 
 #include "balsa/eigen/types.hpp"
 #include "balsa/eigen/shape_checks.hpp"
 #include "balsa/geometry/get_angle.hpp"
-//#define USE_DET_COTAN
+
 namespace balsa::geometry {
 namespace internal::winding_number {
     // angle formed between A - P to B - P
@@ -16,26 +16,12 @@ namespace internal::winding_number {
       const BDerived &B,
       const PDerived &P) {
         using S = typename ADerived::Scalar;
-#ifdef USE_DET_COTAN
-        auto mytan = [](auto &&a, auto &&b) -> S {
-            return (a.x() * b.y() - a.y() * b.x()) / (a.dot(b));
-        };
-#endif
         auto a = (A - P).eval();
         auto b = (B - P).eval();
 
-#ifdef USE_DET_COTAN
-        if (std::abs(a.dot(b)) < 1e-5) {
-            continue;
-        }
-        S ang = mytan(a, b);
-
-#else
         S aa = std::atan2(a.y(), a.x());
         S ba = std::atan2(b.y(), b.x());
-        S ang = ba - aa;
-#endif
-        return ang;
+        return get_symmetric_clamped_angle(ba - aa);
     }
 
 
@@ -97,12 +83,6 @@ bool interior_winding_number(const VDerived &V,
                              const PDerived &p) {
     return internal::winding_number::interior_winding_number_iterator(V, std::begin(C), std::end(C), p);
 }
-//template<eigen::concepts::Vec2Compatible PDerived, eigen::concepts::Vec2Compatible VDerived>
-//bool interior_winding_number_iterator(const VDerived &V,
-//                                      const std::initializer_list<int> &C,
-//                                      const Eigen::MatrixBase<PDerived> &p) {
-//    return internal::winding_number::interior_winding_number(V, std::begin(C), std::end(C), p);
-//}
 
 template<eigen::concepts::Vec2Compatible PDerived, eigen::concepts::Vec2Compatible VDerived, eigen::concepts::Vec2Compatible EDerived>
 auto mesh_winding_number(const VDerived &V,
@@ -151,7 +131,6 @@ double mesh_winding_number(const VDerived &V,
         auto b = V.col(bi);
 
         value += internal::winding_number::three_point_angle(a, b, p);
-        // std::cout << "{" << value << "}";
     }
     value *= .5 * std::numbers::inv_pi_v<S>;
     return value;

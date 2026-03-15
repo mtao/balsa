@@ -27,6 +27,7 @@ class Film : public visualization::vulkan::Film {
     vk::ImageView depth_stencil_image_view() const override;
 
 
+    vk::Instance instance() const override;
     vk::Device device() const override;
 
     void set_physical_device_index(int index) override;

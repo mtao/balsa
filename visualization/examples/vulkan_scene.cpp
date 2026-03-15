@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <balsa/visualization/shaders/flat.hpp>
 #include "vulkan_scene.hpp"
+#include <imgui.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <colormap/colormap.h>
@@ -29,10 +30,20 @@ std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
 }
 }// namespace balsa::visualization::shaders
 
-HelloTriangleScene::HelloTriangleScene() {}
-// HelloTriangleScene::HelloTriangleScene(balsa::visualization::vulkan::Film &film)
-HelloTriangleScene::~HelloTriangleScene() {
+// ============================================================
+// BasicImGuiScene — triangle + ImGui overlay
+// ============================================================
+
+BasicImGuiScene::BasicImGuiScene() {}
+
+BasicImGuiScene::~BasicImGuiScene() {
+    // Shut down ImGui explicitly before destroying our pipeline.
+    // (ImGui owns its own internal pipeline, but good hygiene is to tear
+    // it down first while the device is definitely still valid.)
+    _imgui.shutdown();
+
     if (device) {
+        device.waitIdle();
         if (pipeline) {
             device.destroyPipeline(pipeline);
         }
@@ -41,20 +52,251 @@ HelloTriangleScene::~HelloTriangleScene() {
         }
     }
 }
-    void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film& film)
-{
+
+void BasicImGuiScene::init_imgui(balsa::visualization::vulkan::Film &film,
+                                 GLFWwindow *glfw_window) {
+    _imgui.init(film, glfw_window);
+}
+
+void BasicImGuiScene::initialize(balsa::visualization::vulkan::Film &film) {
     if (!bool(device)) {
         device = film.device();
     }
     if (!bool(pipeline)) {
         create_graphics_pipeline(film);
     }
-
-
 }
 
-void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film& film) 
-{
+void BasicImGuiScene::begin_render_pass(balsa::visualization::vulkan::Film &film) {
+    initialize(film);
+    static float value = 0.0;
+    value += 0.0001f;
+    if (value > 1.0f)
+        value = 0.0f;
+    auto col = colormap::transform::LavaWaves().getColor(value);
+    set_clear_color(float(col.r), float(col.g), float(col.b));
+    SceneBase::begin_render_pass(film);
+}
+
+void BasicImGuiScene::draw(balsa::visualization::vulkan::Film &film) {
+    assert(film.device() == device);
+
+    auto cb = film.current_command_buffer();
+    cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+
+    auto extent = film.swapchain_image_size();
+
+    vk::Viewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(extent.x);
+    viewport.height = static_cast<float>(extent.y);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    cb.setViewport(0, { viewport });
+
+    vk::Rect2D scissor{};
+    scissor.offset = vk::Offset2D{ 0, 0 };
+    scissor.extent = vk::Extent2D{ extent.x, extent.y };
+    cb.setScissor(0, { scissor });
+
+    cb.draw(3, 1, 0, 0);
+
+    // --- ImGui overlay (only if initialized) ---
+    if (_imgui.is_initialized()) {
+        _imgui.new_frame();
+
+        if (_show_demo_window) {
+            ImGui::ShowDemoWindow(&_show_demo_window);
+        }
+
+        _imgui.render(film);
+    }
+}
+
+void BasicImGuiScene::create_graphics_pipeline(balsa::visualization::vulkan::Film &film) {
+    spdlog::info("BasicImGuiScene: starting to build pipeline");
+    balsa::visualization::shaders::TriangleShader<balsa::scene_graph::embedding_traits2D> fs;
+    auto vert_spv = fs.vert_spirv();
+    auto frag_spv = fs.frag_spirv();
+    auto create_shader_module =
+      [&](const std::vector<uint32_t> &spv) -> vk::ShaderModule {
+        vk::ShaderModuleCreateInfo ci;
+        ci.setCodeSize(sizeof(uint32_t) * spv.size());
+        ci.setPCode(spv.data());
+        return device.createShaderModule(ci);
+    };
+
+    vk::ShaderModule vert_shader_module = create_shader_module(vert_spv);
+    vk::ShaderModule frag_shader_module = create_shader_module(frag_spv);
+    vk::PipelineShaderStageCreateInfo shader_stages[2];
+
+    const std::string name = "main";
+    {
+        auto &vert_stage = shader_stages[0];
+        vert_stage.setStage(vk::ShaderStageFlagBits::eVertex);
+        vert_stage.setModule(vert_shader_module);
+        vert_stage.setPName(name.c_str());
+
+        auto &frag_stage = shader_stages[1];
+        frag_stage.setStage(vk::ShaderStageFlagBits::eFragment);
+        frag_stage.setModule(frag_shader_module);
+        frag_stage.setPName(name.c_str());
+    }
+
+    {
+        vk::PipelineLayoutCreateInfo ci;
+        ci.setSetLayoutCount(0);
+        ci.setPushConstantRangeCount(0);
+        pipeline_layout = device.createPipelineLayout(ci);
+    }
+
+    vk::PipelineVertexInputStateCreateInfo vertex_input;
+    {
+        auto &ci = vertex_input;
+        ci.setVertexBindingDescriptionCount(0);
+        ci.setVertexBindingDescriptions(nullptr);
+        ci.setVertexAttributeDescriptionCount(0);
+        ci.setVertexAttributeDescriptions(nullptr);
+    }
+
+    vk::PipelineInputAssemblyStateCreateInfo input_assembly;
+    {
+        auto &ci = input_assembly;
+        ci.setTopology(vk::PrimitiveTopology::eTriangleList);
+        ci.setPrimitiveRestartEnable(VK_FALSE);
+    }
+
+    auto ssize = film.swapchain_image_size();
+    vk::Extent2D swapchain_extent(ssize.x, ssize.y);
+    vk::Rect2D scissor;
+    {
+        scissor.setOffset({ 0, 0 });
+        scissor.setExtent(swapchain_extent);
+    }
+
+    vk::Viewport viewport;
+    {
+        viewport.setX(0.0f);
+        viewport.setY(0.0f);
+        viewport.setWidth(swapchain_extent.width);
+        viewport.setHeight(swapchain_extent.height);
+        viewport.setMinDepth(0.0f);
+        viewport.setMaxDepth(1.0f);
+    }
+
+    vk::PipelineViewportStateCreateInfo viewport_state;
+    {
+        auto &ci = viewport_state;
+        ci.setViewportCount(1);
+        ci.setPViewports(&viewport);
+        ci.setScissorCount(1);
+        ci.setPScissors(&scissor);
+    }
+
+    vk::PipelineRasterizationStateCreateInfo rasterization;
+    {
+        auto &ci = rasterization;
+        ci.setDepthClampEnable(VK_FALSE);
+        ci.setRasterizerDiscardEnable(VK_FALSE);
+        ci.setLineWidth(1.0f);
+        ci.setPolygonMode(vk::PolygonMode::eFill);
+        ci.setCullMode(vk::CullModeFlagBits::eBack);
+        ci.setFrontFace(vk::FrontFace::eClockwise);
+        ci.setDepthBiasEnable(VK_FALSE);
+    }
+
+    vk::PipelineMultisampleStateCreateInfo multisampling;
+    {
+        auto &ci = multisampling;
+        ci.setSampleShadingEnable(VK_FALSE);
+        ci.setRasterizationSamples(film.sample_count());
+        ci.setMinSampleShading(1.0f);
+    }
+
+    vk::PipelineColorBlendAttachmentState color_blend_attachment;
+    {
+        auto &s = color_blend_attachment;
+        s.setColorWriteMask(
+          vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+        s.setBlendEnable(VK_FALSE);
+    }
+
+    vk::PipelineColorBlendStateCreateInfo color_blend;
+    {
+        auto &ci = color_blend;
+        ci.setLogicOpEnable(VK_FALSE);
+        ci.setAttachmentCount(1);
+        ci.setPAttachments(&color_blend_attachment);
+    }
+
+    std::vector<vk::DynamicState> dynamic_states = {
+        vk::DynamicState::eViewport, vk::DynamicState::eScissor
+    };
+
+    vk::PipelineDynamicStateCreateInfo dynamic_state;
+    {
+        dynamic_state.setDynamicStateCount(dynamic_states.size());
+        dynamic_state.setPDynamicStates(dynamic_states.data());
+    }
+
+    {
+        vk::GraphicsPipelineCreateInfo pipeline_info;
+        auto &ci = pipeline_info;
+        ci.setStageCount(2);
+        ci.setPStages(shader_stages);
+        ci.setPVertexInputState(&vertex_input);
+        ci.setPInputAssemblyState(&input_assembly);
+        ci.setPViewportState(&viewport_state);
+        ci.setPRasterizationState(&rasterization);
+        ci.setPMultisampleState(&multisampling);
+        ci.setPColorBlendState(&color_blend);
+        ci.setPDynamicState(&dynamic_state);
+        ci.setLayout(pipeline_layout);
+        ci.setRenderPass(film.default_render_pass());
+        ci.setSubpass(0);
+        ci.setBasePipelineHandle(VK_NULL_HANDLE);
+
+        auto res = device.createGraphicsPipeline(VK_NULL_HANDLE, pipeline_info);
+        if (res.result == vk::Result::eSuccess) {
+            pipeline = res.value;
+        } else {
+            spdlog::error("BasicImGuiScene: failed to create graphics pipeline");
+        }
+    }
+
+    device.destroyShaderModule(vert_shader_module);
+    device.destroyShaderModule(frag_shader_module);
+    spdlog::info("BasicImGuiScene: finished building pipeline");
+}
+
+// ============================================================
+// HelloTriangleScene (unchanged — kept for reference / non-ImGui use)
+// ============================================================
+
+HelloTriangleScene::HelloTriangleScene() {}
+// HelloTriangleScene::HelloTriangleScene(balsa::visualization::vulkan::Film &film)
+HelloTriangleScene::~HelloTriangleScene() {
+    if (device) {
+        device.waitIdle();
+        if (pipeline) {
+            device.destroyPipeline(pipeline);
+        }
+        if (pipeline_layout) {
+            device.destroyPipelineLayout(pipeline_layout);
+        }
+    }
+}
+void HelloTriangleScene::initialize(balsa::visualization::vulkan::Film &film) {
+    if (!bool(device)) {
+        device = film.device();
+    }
+    if (!bool(pipeline)) {
+        create_graphics_pipeline(film);
+    }
+}
+
+void HelloTriangleScene::begin_render_pass(balsa::visualization::vulkan::Film &film) {
     initialize(film);
     static float value = 0.0;
     value += 0.0001f;
@@ -201,7 +443,7 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     {
         auto &ci = multisampling;
         ci.setSampleShadingEnable(VK_FALSE);
-        ci.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+        ci.setRasterizationSamples(film.sample_count());
         ci.setMinSampleShading(1.0f);
         ci.setPSampleMask(nullptr);
         ci.setAlphaToCoverageEnable(VK_FALSE);
@@ -233,7 +475,7 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
     }
 
     std::vector<vk::DynamicState> dynamic_states = {
-        vk::DynamicState::eViewport, vk::DynamicState::eLineWidth
+        vk::DynamicState::eViewport, vk::DynamicState::eScissor
     };
 
     vk::PipelineDynamicStateCreateInfo dynamic_state;

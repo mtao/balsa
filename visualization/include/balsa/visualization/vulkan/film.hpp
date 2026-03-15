@@ -27,6 +27,7 @@ class Film {
     virtual vk::ImageView depth_stencil_image_view() const = 0;
 
 
+    virtual vk::Instance instance() const = 0;
     virtual vk::Device device() const = 0;
 
     virtual void set_physical_device_index(int index) = 0;
@@ -48,6 +49,9 @@ class Film {
     virtual void set_sample_count(vk::SampleCountFlagBits) = 0;
     virtual vk::SampleCountFlagBits sample_count() const = 0;
     virtual vk::SampleCountFlags supported_sample_counts() const = 0;
+
+    virtual void set_depth_stencil_format(vk::Format) {}
+    virtual bool has_depth_stencil() const { return depth_stencil_format() != vk::Format::eUndefined; }
 
 
     virtual uint32_t swapchain_image_count() const = 0;

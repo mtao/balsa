@@ -70,11 +70,11 @@ namespace detail {
 
     template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
     auto volume_signed(const SimplexVertices &V) -> SimplexVertices::value_type {
-        spdlog::info("Volume signed");
+        spdlog::trace("Volume signed");
 
-        //auto m = V.rightCols(V.cols() - 1).eval();
-        //m -= V.col(0).repeat_right();
-        //auto m = (V.rightCols(V.cols() - 1) - V.col(0).repeat_right()).eval();
+        // auto m = V.rightCols(V.cols() - 1).eval();
+        // m -= V.col(0).repeat_right();
+        // auto m = (V.rightCols(V.cols() - 1) - V.col(0).repeat_right()).eval();
         auto m = V.rightCols(V.cols() - 1).eval();
         for (zipper::index_type j = 0; j < m.cols(); ++j) {
             auto v = m.col(j);
@@ -98,7 +98,7 @@ namespace detail {
 
     template<::zipper::concepts::MatrixBaseDerived SimplexVertices>
     auto volume_unsigned(const SimplexVertices &V) -> typename SimplexVertices::value_type {
-        spdlog::info("Volume unsigned");
+        spdlog::trace("Volume unsigned");
         auto m = V.rightCols(V.cols() - 1).eval();
         for (zipper::index_type j = 0; j < m.cols(); ++j) {
             auto v = m.col(j);
@@ -118,7 +118,7 @@ namespace detail {
 
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto volume_signed(const MatType &V) -> typename MatType::Scalar {
-    constexpr static int rows = eigen::concepts::detail::compile_col_size<MatType>;
+    constexpr static int rows = eigen::concepts::detail::compile_row_size<MatType>;
     constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
     if constexpr (eigen::concepts::RowColStaticCompatible<MatType>) {
         static_assert(rows + 1 == cols, "volume_signed expected a N,N+1 matrix");
@@ -137,7 +137,7 @@ auto volume_unsigned(const MatType &V) -> typename MatType::Scalar {
 
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto volume(const MatType &V) -> typename MatType::Scalar {
-    constexpr static int rows = eigen::concepts::detail::compile_col_size<MatType>;
+    constexpr static int rows = eigen::concepts::detail::compile_row_size<MatType>;
     constexpr static int cols = eigen::concepts::detail::compile_col_size<MatType>;
     if constexpr (eigen::concepts::RowColStaticCompatible<MatType>) {
         if constexpr (rows + 1 == cols) {

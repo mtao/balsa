@@ -3,7 +3,6 @@
 
 #include <Eigen/Geometry>
 #include "../abstract_feature.hpp"
-#include <iostream>
 #include "../embedding_traits.hpp"
 
 namespace balsa::scene_graph::features {
@@ -29,7 +28,6 @@ auto BoundingBoxNode<ETraits>::bounding_box() const -> bounding_box_type {
     bounding_box_type bbox;
     for (auto &&child : _children) {
         auto bb = child->bounding_box();
-        std::cout << bb.min().transpose() << " => " << bb.max().transpose() << std::endl;
         bbox.extend(bb);
     }
     return bbox;
@@ -37,7 +35,6 @@ auto BoundingBoxNode<ETraits>::bounding_box() const -> bounding_box_type {
 
 template<concepts::embedding_traits ETraits>
 void BoundingBoxNode<ETraits>::add_child(const BoundingBoxNode *n) {
-    std::cout << "Adding bounding box child!" << std::endl;
     _children.emplace_back(n);
 }
 

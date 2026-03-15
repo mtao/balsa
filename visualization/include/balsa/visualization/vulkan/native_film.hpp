@@ -3,6 +3,7 @@
 
 #include <vulkan/vulkan_raii.hpp>
 #include <set>
+#include <optional>
 #include "balsa/visualization/vulkan/film.hpp"
 #include "device_functions.hpp"
 
@@ -11,8 +12,8 @@ namespace balsa::visualization::vulkan {
 class NativeFilm : public Film {
   public:
     NativeFilm(const std::vector<std::string> &device_extensions = {}, const std::vector<std::string> &instance_extensions = {}, const std::vector<std::string> &validation_layers = {});
-    NativeFilm(NativeFilm&&) = default;
-    NativeFilm& operator=(NativeFilm&&) = default;
+    NativeFilm(NativeFilm &&) = default;
+    NativeFilm &operator=(NativeFilm &&) = default;
     void set_device_extensions(const std::vector<std::string> &device_extensions);
     void set_instance_extensions(const std::vector<std::string> &device_extensions);
     void set_validation_layers(const std::vector<std::string> &validation_layers);
@@ -33,6 +34,7 @@ class NativeFilm : public Film {
     vk::Format depth_stencil_format() const override;
     vk::Image depth_stencil_image() const override;
     vk::ImageView depth_stencil_image_view() const override;
+    void set_depth_stencil_format(vk::Format format) override;
 
 
     vk::Device device() const override;
@@ -69,7 +71,7 @@ class NativeFilm : public Film {
     const vk::Extent2D &swapchain_extent() const;
     const vk::SurfaceFormatKHR surface_format() const;
 
-    vk::Instance instance() const;
+    vk::Instance instance() const override;
     const vk::raii::Instance &instance_raii() const;
 
     void pre_draw_hook() override;
@@ -157,6 +159,7 @@ class NativeFilm : public Film {
 
     virtual void pick_physical_device();
     virtual int score_physical_devices(const vk::PhysicalDevice &device) const;
+    std::optional<int> _requested_physical_device_index;
     vk::raii::PhysicalDevice _physical_device_raii = nullptr;
 
     void create_device();
@@ -173,10 +176,12 @@ class NativeFilm : public Film {
     // choose_swapchain_extent()
     uint32_t choose_swapchain_image_count() const;
     void create_swapchain();
+    void recreate_swapchain();
     vk::Extent2D _swapchain_extent;
     vk::SurfaceFormatKHR _surface_format;
     vk::raii::SwapchainKHR _swapchain_raii = nullptr;
     size_t _swapchain_count = 5;
+    bool _swapchain_needs_recreation = false;
 
     void create_graphics_command_pool();
     vk::raii::CommandPool _graphics_command_pool_raii = nullptr;
@@ -195,6 +200,20 @@ class NativeFilm : public Film {
     void create_render_pass();
     vk::raii::RenderPass _default_render_pass_raii = nullptr;
 
+    vk::Format _depth_stencil_format = vk::Format::eUndefined;
+    void create_depth_stencil_resources();
+    void destroy_depth_stencil_resources();
+    vk::raii::Image _depth_image_raii = nullptr;
+    vk::raii::DeviceMemory _depth_memory_raii = nullptr;
+    vk::raii::ImageView _depth_image_view_raii = nullptr;
+
+    vk::SampleCountFlagBits _sample_count = vk::SampleCountFlagBits::e1;
+    void create_msaa_color_resources();
+    void destroy_msaa_color_resources();
+    vk::raii::Image _msaa_color_image_raii = nullptr;
+    vk::raii::DeviceMemory _msaa_color_memory_raii = nullptr;
+    vk::raii::ImageView _msaa_color_image_view_raii = nullptr;
+
   public:
     void set_swapchain_index(uint32_t index) { _current_image_index = index; }
     const ImageResources &image_resources() const { return _image_resources[_current_image_index]; }
@@ -204,4 +223,3 @@ class NativeFilm : public Film {
 };
 }// namespace balsa::visualization::vulkan
 #endif
-

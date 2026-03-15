@@ -5,6 +5,7 @@
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/transform.hpp>
 #include <range/v3/range/conversion.hpp>
+#include <array>
 #include <map>
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -85,11 +86,12 @@ void NativeFilm::initialize() {
     pick_physical_device();
     create_device();
     create_swapchain();
+    create_depth_stencil_resources();
+    create_msaa_color_resources();
     create_render_pass();
     create_graphics_command_pool();
     create_image_resources();
     create_frame_resources();
-    create_render_pass();
 }
 
 vk::Instance NativeFilm::instance() const {
@@ -372,6 +374,25 @@ void NativeFilm::pick_physical_device() {
     if (devices.size() == 0) {
         throw std::runtime_error("No GPU with vulkan support");
     }
+
+    // If a specific device index was requested, use it directly
+    if (_requested_physical_device_index.has_value()) {
+        int idx = *_requested_physical_device_index;
+        if (idx < 0 || static_cast<size_t>(idx) >= devices.size()) {
+            throw std::runtime_error(
+              fmt::format("Requested physical device index {} is out of range (0-{})",
+                          idx,
+                          devices.size() - 1));
+        }
+        auto properties = devices[idx].getProperties();
+        spdlog::debug("Using requested physical device {}: Vendor={} type={}",
+                      idx,
+                      to_string(vk::VendorId(properties.vendorID)),
+                      to_string(properties.deviceType));
+        _physical_device_raii = std::move(devices[idx]);
+        return;
+    }
+
     std::multimap<int, vk::PhysicalDevice> candidates;
     for (auto &&device : devices) {
         int score = score_physical_devices(*device);
@@ -471,13 +492,16 @@ vk::RenderPass NativeFilm::default_render_pass() const {
     return *_default_render_pass_raii;
 }
 vk::Format NativeFilm::depth_stencil_format() const {
-    return vk::Format{};// TODO
+    return _depth_stencil_format;
 }
 vk::Image NativeFilm::depth_stencil_image() const {
-    return nullptr;// TODO:
+    return *_depth_image_raii;
 }
 vk::ImageView NativeFilm::depth_stencil_image_view() const {
-    return nullptr;// TODO
+    return *_depth_image_view_raii;
+}
+void NativeFilm::set_depth_stencil_format(vk::Format format) {
+    _depth_stencil_format = format;
 }
 vk::Device NativeFilm::device() const {
     return *_device_raii;
@@ -488,8 +512,8 @@ const vk::raii::Device &NativeFilm::device_raii() const {
 vk::SurfaceKHR NativeFilm::surface() const {
     return *_surface_raii;
 }
-void NativeFilm::set_physical_device_index(int) {
-    // TODO
+void NativeFilm::set_physical_device_index(int index) {
+    _requested_physical_device_index = index;
 }
 vk::PhysicalDevice NativeFilm::physical_device() const {
     return *_physical_device_raii;
@@ -510,7 +534,22 @@ uint32_t NativeFilm::present_queue_family_index() const {
     return _present_queue_family_index;
 }
 uint32_t NativeFilm::host_visible_memory_index() const {
-    return 0;// TODO
+    auto mem_props = _physical_device_raii.getMemoryProperties();
+    // Prefer host-visible + host-coherent memory
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        auto flags = mem_props.memoryTypes[i].propertyFlags;
+        if ((flags & vk::MemoryPropertyFlagBits::eHostVisible) && (flags & vk::MemoryPropertyFlagBits::eHostCoherent)) {
+            return i;
+        }
+    }
+    // Fall back to any host-visible memory
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        auto flags = mem_props.memoryTypes[i].propertyFlags;
+        if (flags & vk::MemoryPropertyFlagBits::eHostVisible) {
+            return i;
+        }
+    }
+    throw std::runtime_error("No host-visible memory type found on physical device");
 }
 vk::Queue NativeFilm::graphics_queue() const {
     return *_graphics_queue_raii;
@@ -519,19 +558,16 @@ vk::Queue NativeFilm::present_queue() const {
     return *_present_queue_raii;
 }
 vk::Image NativeFilm::msaa_color_image(int) const {
-    return nullptr;// TODO
+    return *_msaa_color_image_raii;
 }
 vk::ImageView NativeFilm::msaa_color_image_view(int) const {
-    return nullptr;// TODO
+    return *_msaa_color_image_view_raii;
 }
-void NativeFilm::set_sample_count(vk::SampleCountFlagBits) {
-
-    // TODO
+void NativeFilm::set_sample_count(vk::SampleCountFlagBits count) {
+    _sample_count = count;
 }
 vk::SampleCountFlagBits NativeFilm::sample_count() const {
-
-    // TODO
-    return vk::SampleCountFlagBits::e1;
+    return _sample_count;
 }
 vk::SampleCountFlags NativeFilm::supported_sample_counts() const {
 
@@ -593,9 +629,11 @@ void NativeFilm::create_image_resources() {
     img_view_create_info.subresourceRange.setBaseArrayLayer(0);
     img_view_create_info.subresourceRange.setLayerCount(1);
 
+    const bool use_depth = _depth_stencil_format != vk::Format::eUndefined;
+    const bool use_msaa = _sample_count != vk::SampleCountFlagBits::e1;
+
     vk::FramebufferCreateInfo framebuffer_ci;
     framebuffer_ci.setRenderPass(*_default_render_pass_raii);
-    framebuffer_ci.setAttachmentCount(1);
     framebuffer_ci.setWidth(_swapchain_extent.width);
     framebuffer_ci.setHeight(_swapchain_extent.height);
     framebuffer_ci.setLayers(1);
@@ -611,7 +649,25 @@ void NativeFilm::create_image_resources() {
         img_view_create_info.setImage(res.image);
         res.image_view_raii = _device_raii.createImageView(img_view_create_info);
         res.command_fence_raii = _device_raii.createFence(fci);
-        framebuffer_ci.setPAttachments(&*res.image_view_raii);
+
+        // Build framebuffer attachments matching the render pass layout:
+        //   [0] color    — MSAA image (if MSAA) or swapchain image (if no MSAA)
+        //   [1] depth    — depth/stencil image (if enabled)
+        //   [N] resolve  — swapchain image (only when MSAA, receives resolved result)
+        std::vector<vk::ImageView> fb_attachments;
+        if (use_msaa) {
+            fb_attachments.push_back(*_msaa_color_image_view_raii);
+        } else {
+            fb_attachments.push_back(*res.image_view_raii);
+        }
+        if (use_depth) {
+            fb_attachments.push_back(*_depth_image_view_raii);
+        }
+        if (use_msaa) {
+            // Resolve target: the single-sample swapchain image
+            fb_attachments.push_back(*res.image_view_raii);
+        }
+        framebuffer_ci.setAttachments(fb_attachments);
         res.framebuffer_raii = _device_raii.createFramebuffer(framebuffer_ci);
     }
 }
@@ -636,7 +692,7 @@ uint32_t NativeFilm::choose_swapchain_image_count() const {
     if (capabilities.maxImageCount != 0) {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
-    spdlog::error("Desired swapchain image count: {}", image_count);
+    spdlog::debug("Desired swapchain image count: {}", image_count);
     return image_count;
 }
 
@@ -685,7 +741,7 @@ void NativeFilm::create_swapchain() {
 
     create_info.setPQueueFamilyIndices(queue_indices.data());
     create_info.setQueueFamilyIndexCount(queue_indices.size());
-    if (queue_indices[0] != queue_indices[1]) {
+    if (_graphics_queue_family_index != _present_queue_family_index) {
         create_info.setImageSharingMode(vk::SharingMode::eConcurrent);
     } else {
         create_info.setImageSharingMode(vk::SharingMode::eExclusive);
@@ -695,36 +751,141 @@ void NativeFilm::create_swapchain() {
 
     create_info.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
 
-    create_info.setOldSwapchain(VK_NULL_HANDLE);
+    // Pass the old swapchain for a smoother handoff (if one exists)
+    create_info.setOldSwapchain(*_swapchain_raii);
     _swapchain_raii = _device_raii.createSwapchainKHR(create_info);
 }
 
+void NativeFilm::recreate_swapchain() {
+    // Wait for all GPU work to complete before destroying resources
+    _device_raii.waitIdle();
+
+    // Query the new extent before tearing anything down
+    vk::Extent2D new_extent = choose_swapchain_extent();
+
+    // Handle minimized window (0x0 extent) — nothing to do, the next
+    // frame will retry once the window is un-minimized
+    if (new_extent.width == 0 || new_extent.height == 0) {
+        spdlog::debug("Swapchain recreation skipped: window is minimized ({}x{})",
+                      new_extent.width,
+                      new_extent.height);
+        _swapchain_needs_recreation = true;
+        return;
+    }
+
+    spdlog::debug("Recreating swapchain: {}x{} -> {}x{}",
+                  _swapchain_extent.width,
+                  _swapchain_extent.height,
+                  new_extent.width,
+                  new_extent.height);
+
+    // Destroy in reverse creation order (image_resources, render pass,
+    // MSAA color, depth/stencil, but NOT swapchain yet — we pass it as oldSwapchain)
+    _image_resources.clear();
+    _default_render_pass_raii = nullptr;
+    destroy_msaa_color_resources();
+    destroy_depth_stencil_resources();
+
+    // Recreate in forward order — create_swapchain() uses the old
+    // swapchain handle internally before replacing it
+    create_swapchain();
+    create_depth_stencil_resources();
+    create_msaa_color_resources();
+    create_render_pass();
+    create_image_resources();
+
+    // Reset frame state so the next acquire starts clean
+    _current_image_index = 0;
+    _current_frame_index = 0;
+    for (auto &frame : _frame_resources) {
+        frame.image_acquired = false;
+    }
+
+    _swapchain_needs_recreation = false;
+    spdlog::debug("Swapchain recreation complete: {}x{}",
+                  _swapchain_extent.width,
+                  _swapchain_extent.height);
+}
 
 void NativeFilm::create_render_pass() {
+    const bool use_msaa = _sample_count != vk::SampleCountFlagBits::e1;
+    const bool use_depth = _depth_stencil_format != vk::Format::eUndefined;
+
+    std::vector<vk::AttachmentDescription> attachments;
+
+    // Attachment 0: Color (MSAA image when multisampled, swapchain image otherwise)
     vk::AttachmentDescription color_attachment;
     color_attachment.setFormat(_surface_format.format);
-    color_attachment.setSamples(vk::SampleCountFlagBits::e1);
-
+    color_attachment.setSamples(_sample_count);
     color_attachment.setLoadOp(vk::AttachmentLoadOp::eClear);
-    color_attachment.setStoreOp(vk::AttachmentStoreOp::eStore);
-
     color_attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
     color_attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
     color_attachment.setInitialLayout(vk::ImageLayout::eUndefined);
-    color_attachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+    if (use_msaa) {
+        // MSAA color image: resolved result goes to the resolve attachment,
+        // so we don't need to store the multisample data
+        color_attachment.setStoreOp(vk::AttachmentStoreOp::eDontCare);
+        color_attachment.setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+    } else {
+        color_attachment.setStoreOp(vk::AttachmentStoreOp::eStore);
+        color_attachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+    }
+    attachments.push_back(color_attachment);
 
-    vk::AttachmentReference color_attachment_ref;
-    color_attachment_ref.setAttachment(0);
-    color_attachment_ref.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+    vk::AttachmentReference color_ref;
+    color_ref.setAttachment(0);
+    color_ref.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+    // Depth/stencil attachment (if enabled) — uses same sample count as color
+    vk::AttachmentReference depth_ref;
+    if (use_depth) {
+        vk::AttachmentDescription depth_attachment;
+        depth_attachment.setFormat(_depth_stencil_format);
+        depth_attachment.setSamples(_sample_count);
+        depth_attachment.setLoadOp(vk::AttachmentLoadOp::eClear);
+        depth_attachment.setStoreOp(vk::AttachmentStoreOp::eDontCare);
+        depth_attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+        depth_attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+        depth_attachment.setInitialLayout(vk::ImageLayout::eUndefined);
+        depth_attachment.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+        depth_ref.setAttachment(static_cast<uint32_t>(attachments.size()));
+        depth_ref.setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+        attachments.push_back(depth_attachment);
+    }
+
+    // Resolve attachment (only when MSAA) — the single-sample swapchain image
+    // that receives the resolved multisample result
+    vk::AttachmentReference resolve_ref;
+    if (use_msaa) {
+        vk::AttachmentDescription resolve_attachment;
+        resolve_attachment.setFormat(_surface_format.format);
+        resolve_attachment.setSamples(vk::SampleCountFlagBits::e1);
+        resolve_attachment.setLoadOp(vk::AttachmentLoadOp::eDontCare);
+        resolve_attachment.setStoreOp(vk::AttachmentStoreOp::eStore);
+        resolve_attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+        resolve_attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+        resolve_attachment.setInitialLayout(vk::ImageLayout::eUndefined);
+        resolve_attachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+        resolve_ref.setAttachment(static_cast<uint32_t>(attachments.size()));
+        resolve_ref.setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+        attachments.push_back(resolve_attachment);
+    }
 
     vk::SubpassDescription subpass;
     subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
     subpass.setColorAttachmentCount(1);
-    subpass.setPColorAttachments(&color_attachment_ref);
+    subpass.setPColorAttachments(&color_ref);
+    if (use_depth) {
+        subpass.setPDepthStencilAttachment(&depth_ref);
+    }
+    if (use_msaa) {
+        subpass.setPResolveAttachments(&resolve_ref);
+    }
 
     vk::RenderPassCreateInfo create_info;
-    create_info.setAttachmentCount(1);
-    create_info.setPAttachments(&color_attachment);
+    create_info.setAttachments(attachments);
     create_info.setSubpassCount(1);
     create_info.setPSubpasses(&subpass);
 
@@ -737,9 +898,210 @@ void NativeFilm::create_render_pass() {
     dep.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
     dep.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
 
+    if (use_depth) {
+        dep.setSrcStageMask(dep.srcStageMask | vk::PipelineStageFlagBits::eEarlyFragmentTests);
+        dep.setDstStageMask(dep.dstStageMask | vk::PipelineStageFlagBits::eEarlyFragmentTests);
+        dep.setDstAccessMask(dep.dstAccessMask | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+    }
+
     create_info.setDependencies(dep);
     _default_render_pass_raii = _device_raii.createRenderPass(create_info);
 }
+void NativeFilm::create_depth_stencil_resources() {
+    if (_depth_stencil_format == vk::Format::eUndefined) {
+        return;
+    }
+
+    // Create depth image
+    vk::ImageCreateInfo image_ci;
+    image_ci.setImageType(vk::ImageType::e2D);
+    image_ci.setFormat(_depth_stencil_format);
+    image_ci.setExtent(vk::Extent3D(_swapchain_extent.width, _swapchain_extent.height, 1));
+    image_ci.setMipLevels(1);
+    image_ci.setArrayLayers(1);
+    image_ci.setSamples(sample_count());
+    image_ci.setTiling(vk::ImageTiling::eOptimal);
+    image_ci.setUsage(vk::ImageUsageFlagBits::eDepthStencilAttachment);
+    image_ci.setInitialLayout(vk::ImageLayout::eUndefined);
+
+    // Match the swapchain's sharing mode
+    if (_graphics_queue_family_index != _present_queue_family_index) {
+        std::array<uint32_t, 2> queue_indices = { _graphics_queue_family_index, _present_queue_family_index };
+        image_ci.setSharingMode(vk::SharingMode::eConcurrent);
+        image_ci.setQueueFamilyIndices(queue_indices);
+    } else {
+        image_ci.setSharingMode(vk::SharingMode::eExclusive);
+    }
+
+    _depth_image_raii = _device_raii.createImage(image_ci);
+
+    // Allocate device-local memory for the depth image
+    auto mem_reqs = _depth_image_raii.getMemoryRequirements();
+    auto mem_props = _physical_device_raii.getMemoryProperties();
+
+    uint32_t memory_type_index = UINT32_MAX;
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        if ((mem_reqs.memoryTypeBits & (1u << i)) && (mem_props.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal)) {
+            memory_type_index = i;
+            break;
+        }
+    }
+    if (memory_type_index == UINT32_MAX) {
+        // Fall back to any compatible memory type
+        for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+            if (mem_reqs.memoryTypeBits & (1u << i)) {
+                memory_type_index = i;
+                break;
+            }
+        }
+    }
+    if (memory_type_index == UINT32_MAX) {
+        throw std::runtime_error("Failed to find suitable memory type for depth image");
+    }
+
+    vk::MemoryAllocateInfo alloc_info;
+    alloc_info.setAllocationSize(mem_reqs.size);
+    alloc_info.setMemoryTypeIndex(memory_type_index);
+    _depth_memory_raii = _device_raii.allocateMemory(alloc_info);
+
+    _depth_image_raii.bindMemory(*_depth_memory_raii, 0);
+
+    // Create depth image view
+    vk::ImageViewCreateInfo view_ci;
+    view_ci.setImage(*_depth_image_raii);
+    view_ci.setViewType(vk::ImageViewType::e2D);
+    view_ci.setFormat(_depth_stencil_format);
+
+    // Determine aspect mask based on format
+    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eDepth;
+    if (_depth_stencil_format == vk::Format::eD16UnormS8Uint || _depth_stencil_format == vk::Format::eD24UnormS8Uint || _depth_stencil_format == vk::Format::eD32SfloatS8Uint) {
+        aspect |= vk::ImageAspectFlagBits::eStencil;
+    }
+    view_ci.subresourceRange.setAspectMask(aspect);
+    view_ci.subresourceRange.setBaseMipLevel(0);
+    view_ci.subresourceRange.setLevelCount(1);
+    view_ci.subresourceRange.setBaseArrayLayer(0);
+    view_ci.subresourceRange.setLayerCount(1);
+
+    _depth_image_view_raii = _device_raii.createImageView(view_ci);
+
+    spdlog::debug("Created depth/stencil resources with format {}",
+                  vk::to_string(_depth_stencil_format));
+}
+
+void NativeFilm::destroy_depth_stencil_resources() {
+    _depth_image_view_raii = nullptr;
+    _depth_memory_raii = nullptr;
+    _depth_image_raii = nullptr;
+}
+
+void NativeFilm::create_msaa_color_resources() {
+    if (_sample_count == vk::SampleCountFlagBits::e1) {
+        return;
+    }
+
+    // Create the multisample color image — same dimensions and format as
+    // the swapchain, but with the requested sample count
+    vk::ImageCreateInfo image_ci;
+    image_ci.setImageType(vk::ImageType::e2D);
+    image_ci.setFormat(_surface_format.format);
+    image_ci.setExtent(vk::Extent3D(_swapchain_extent.width, _swapchain_extent.height, 1));
+    image_ci.setMipLevels(1);
+    image_ci.setArrayLayers(1);
+    image_ci.setSamples(_sample_count);
+    image_ci.setTiling(vk::ImageTiling::eOptimal);
+    // eTransientAttachment tells the driver the contents are only needed
+    // within a single render pass — on tile-based GPUs the multisample
+    // data may stay entirely in on-chip memory
+    image_ci.setUsage(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment);
+    image_ci.setInitialLayout(vk::ImageLayout::eUndefined);
+
+    // Match the swapchain's sharing mode
+    if (_graphics_queue_family_index != _present_queue_family_index) {
+        std::array<uint32_t, 2> queue_indices = { _graphics_queue_family_index, _present_queue_family_index };
+        image_ci.setSharingMode(vk::SharingMode::eConcurrent);
+        image_ci.setQueueFamilyIndices(queue_indices);
+    } else {
+        image_ci.setSharingMode(vk::SharingMode::eExclusive);
+    }
+
+    _msaa_color_image_raii = _device_raii.createImage(image_ci);
+
+    // Allocate memory — prefer lazily-allocated (pairs with eTransientAttachment),
+    // fall back to device-local, then any compatible type
+    auto mem_reqs = _msaa_color_image_raii.getMemoryRequirements();
+    auto mem_props = _physical_device_raii.getMemoryProperties();
+
+    uint32_t memory_type_index = UINT32_MAX;
+
+    // First pass: lazily-allocated + device-local (ideal for tile-based GPUs)
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+        if (!(mem_reqs.memoryTypeBits & (1u << i))) continue;
+        auto flags = mem_props.memoryTypes[i].propertyFlags;
+        if ((flags & vk::MemoryPropertyFlagBits::eLazilyAllocated) && (flags & vk::MemoryPropertyFlagBits::eDeviceLocal)) {
+            memory_type_index = i;
+            break;
+        }
+    }
+    // Second pass: device-local
+    if (memory_type_index == UINT32_MAX) {
+        for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+            if (!(mem_reqs.memoryTypeBits & (1u << i))) continue;
+            if (mem_props.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) {
+                memory_type_index = i;
+                break;
+            }
+        }
+    }
+    // Third pass: any compatible type
+    if (memory_type_index == UINT32_MAX) {
+        for (uint32_t i = 0; i < mem_props.memoryTypeCount; ++i) {
+            if (mem_reqs.memoryTypeBits & (1u << i)) {
+                memory_type_index = i;
+                break;
+            }
+        }
+    }
+    if (memory_type_index == UINT32_MAX) {
+        throw std::runtime_error("Failed to find suitable memory type for MSAA color image");
+    }
+
+    vk::MemoryAllocateInfo alloc_info;
+    alloc_info.setAllocationSize(mem_reqs.size);
+    alloc_info.setMemoryTypeIndex(memory_type_index);
+    _msaa_color_memory_raii = _device_raii.allocateMemory(alloc_info);
+
+    _msaa_color_image_raii.bindMemory(*_msaa_color_memory_raii, 0);
+
+    // Create the image view
+    vk::ImageViewCreateInfo view_ci;
+    view_ci.setImage(*_msaa_color_image_raii);
+    view_ci.setViewType(vk::ImageViewType::e2D);
+    view_ci.setFormat(_surface_format.format);
+    view_ci.setComponents(vk::ComponentMapping{
+      vk::ComponentSwizzle::eIdentity,
+      vk::ComponentSwizzle::eIdentity,
+      vk::ComponentSwizzle::eIdentity,
+      vk::ComponentSwizzle::eIdentity,
+    });
+    view_ci.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+    view_ci.subresourceRange.setBaseMipLevel(0);
+    view_ci.subresourceRange.setLevelCount(1);
+    view_ci.subresourceRange.setBaseArrayLayer(0);
+    view_ci.subresourceRange.setLayerCount(1);
+
+    _msaa_color_image_view_raii = _device_raii.createImageView(view_ci);
+
+    spdlog::debug("Created MSAA color resources with {}x samples",
+                  static_cast<uint32_t>(_sample_count));
+}
+
+void NativeFilm::destroy_msaa_color_resources() {
+    _msaa_color_image_view_raii = nullptr;
+    _msaa_color_memory_raii = nullptr;
+    _msaa_color_image_raii = nullptr;
+}
+
 void NativeFilm::create_graphics_command_pool() {
 
     vk::CommandPoolCreateInfo ci;
@@ -750,9 +1112,20 @@ void NativeFilm::create_graphics_command_pool() {
 
 
 void NativeFilm::pre_draw_hook() {
-    
+
 
     auto device = this->device();
+
+    // Handle deferred swapchain recreation (flagged by post_draw_hook)
+    if (_swapchain_needs_recreation) {
+        recreate_swapchain();
+        // If recreate_swapchain() couldn't proceed (e.g. minimized),
+        // the flag remains set and we skip this frame
+        if (_swapchain_needs_recreation) {
+            return;
+        }
+    }
+
     auto &frame = _frame_resources[_current_frame_index];
     spdlog::trace("pre_draw: using frame {}/{}", _current_frame_index, _frame_resources.size());
 
@@ -777,7 +1150,10 @@ void NativeFilm::pre_draw_hook() {
             frame.image_semaphore_waitable = true;
             frame.image_acquired = true;
         } else if (res.result == vk::Result::eErrorOutOfDateKHR) {
-            // recreate swapchains
+            // Swapchain is out of date — recreate and retry acquiring
+            spdlog::debug("Swapchain out of date during acquire, recreating");
+            recreate_swapchain();
+            return;
         } else {// TODO if device is lost or some other issue occurs
             spdlog::error("Failed to acquire image");
         }
@@ -919,7 +1295,10 @@ void NativeFilm::post_draw_hook() {
     spdlog::trace("post_draw: calling present");
     vk::Result result =
       _present_queue_raii.presentKHR(present);
-    if (result != vk::Result::eSuccess) {
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
+        spdlog::debug("Swapchain out of date/suboptimal during present, flagging recreation");
+        _swapchain_needs_recreation = true;
+    } else if (result != vk::Result::eSuccess) {
         spdlog::error("Failed to present");
     }
     frame.image_acquired = false;

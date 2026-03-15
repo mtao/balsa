@@ -96,6 +96,8 @@ class Balsa(ConanFile):
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
             self.options["qt"].with_vulkan = True
+        if self.options.imgui:
+            self.options["imgui"].shared = True
              
     def generate(self):
         meson = MesonToolchain(self)                   

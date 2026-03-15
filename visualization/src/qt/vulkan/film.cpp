@@ -1,5 +1,6 @@
 #include "balsa/visualization/qt/vulkan/film.hpp"
 #include <QVulkanWindow>
+#include <QVulkanInstance>
 #include <spdlog/spdlog.h>
 #include <vulkan/vulkan_enums.hpp>
 namespace balsa::visualization::qt::vulkan {
@@ -32,6 +33,8 @@ vk::ImageView Film::depth_stencil_image_view() const { return _window.depthStenc
 
 
 vk::Device Film::device() const { return _window.device(); }
+
+vk::Instance Film::instance() const { return _window.vulkanInstance()->vkInstance(); }
 
 void Film::set_physical_device_index(int index) { _window.setPhysicalDeviceIndex(index); }
 vk::PhysicalDevice Film::physical_device() const { return _window.physicalDevice(); }

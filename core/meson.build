@@ -15,6 +15,7 @@ filesystem_headers = [
 core_sources = [
   'src/logging/stopwatch.cpp',
   'src/logging/json_sink.cpp', 
+  'src/types/get_type_name.cpp',
  ] + filesystem_sources
 
 core_headers = [

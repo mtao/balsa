@@ -1,45 +1,36 @@
-#include <span>
 #include <spdlog/spdlog.h>
 #include <iostream>
 #include <GLFW/glfw3.h>
 #include "vulkan_scene.hpp"
-#include <balsa/visualization/glfw//vulkan//film.hpp>
-#include <balsa/visualization/glfw//vulkan//window.hpp>
-
+#include <balsa/visualization/glfw/vulkan/window.hpp>
 
 using namespace balsa::visualization;
 
-
-
 int main(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+
     glfwInit();
 
-    std::vector<std::string> validation_layers = {
-        "VK_LAYER_KHRONOS_validation",
-        "VK_LAYER_LUNARG_parameter_validation",
-        "VK_LAYER_LUNARG_core_validation",
-    };
-    //! [0]
-
-    int retvalue = 0;
     try {
-        balsa::visualization::glfw::vulkan::Window window("Hello");
+        glfw::vulkan::Window window("Hello Triangle + ImGui (GLFW)");
 
-        auto scene = std::make_shared<HelloTriangleScene>();
+        auto scene = std::make_shared<BasicImGuiScene>();
+
+        // Initialize ImGui while we have access to both Film and GLFWwindow.
+        // Film is already initialized (render pass exists) at this point.
+        scene->init_imgui(window.film(), window.glfw_window());
 
         window.set_scene(scene);
 
-        retvalue = window.exec();
-
+        return window.exec();
 
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;
+        glfwTerminate();
         return EXIT_FAILURE;
     }
+
     glfwTerminate();
-
-    // fs.make_shader();
-    //! [1]
-
-    return retvalue;
+    return 0;
 }
