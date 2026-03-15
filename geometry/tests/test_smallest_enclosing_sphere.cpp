@@ -155,8 +155,6 @@ std::array<balsa::zipper::ColVectors<double, D>, 2>
             v = v * outer_radii(j);
             v = v + C;
         }
-        fmt::print("{}\n{}\n", inside, outside);
-
         REQUIRE(valid_circle_rad2(std::make_tuple(C, inside_r * inside_r), inside));
         REQUIRE_FALSE(valid_circle_rad2(std::make_tuple(C, inside_r * inside_r), outside));
         return { { inside, outside } };
@@ -170,7 +168,6 @@ std::array<balsa::zipper::ColVectors<double, D>, 2>
 TEST_CASE("sphere_sampling_test", "[testing_internal]") {
 
     auto check = [](const auto &pts, const auto &C, double min, double max) {
-        // auto V = (pts.colwise() - C).colwise().norm().eval();
         auto m = pts;
         for (index_type j = 0; j < m.cols(); ++j) {
             auto v = m.col(j);
@@ -255,16 +252,10 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
 
     auto test = []<int N>(std::integral_constant<int, N>) {
         balsa::zipper::ColVectors<float, N> V(N, N + 5);
-        // balsa::zipper::ColVectors<float, N> V(N, 10 * N);
         V = ::zipper::expression::nullary::uniform_random<double>(V.extents());
 
 
         auto circle = balsa::geometry::point_cloud::smallest_enclosing_sphere_welzl(V);
-        auto bf_circle = brute_force_smallest_circle(V);
-        // circle = brute_force_smallest_circle(V);
-
-
-        // circle = bf_circle;
 
         auto C = circle.template head<N>();
         auto r = circle(N);
