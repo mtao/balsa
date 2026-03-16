@@ -3,6 +3,7 @@
 
 #include "balsa/geometry/simplex/point_in_circumcircle.hpp"
 #include "balsa/zipper/types.hpp"
+#include <zipper/utils/extents/extent_arithmetic.hpp>
 #include <array>
 #include <random>
 #include <algorithm>

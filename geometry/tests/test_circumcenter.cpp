@@ -32,12 +32,11 @@ TEST_CASE("circumcenter", "[simplex]") {
         for (zipper::index_type j = 0; j < R.size(); ++j) {
             CHECK(R(j) == Approx(radius));
         }
-        balsa::zipper::Vector<double, N> CSPD = balsa::geometry::simplex::circumcenter_spd(V);
-        balsa::zipper::Vector<double, N> CSPSD = balsa::geometry::simplex::circumcenter_spsd(V);
+        // circumcenter_spd/circumcenter_spsd removed — quiver now uses a unified solver
+        balsa::zipper::Vector<double, N> C2 = balsa::geometry::simplex::circumcenter(V);
 
         for (int j = 0; j < N; ++j) {
-            CHECK(CSPD(j) == Approx(C(j)));
-            CHECK(CSPSD(j) == Approx(C(j)));
+            CHECK(C2(j) == Approx(C(j)));
         }
     };
 

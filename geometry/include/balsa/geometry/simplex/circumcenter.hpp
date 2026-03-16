@@ -5,23 +5,16 @@
 //
 // The zipper-concept implementations live in quiver::simplex and are
 // re-exported here for backward compatibility.
+//
+// Note: the old circumcenter_spd() and circumcenter_spsd() functions
+// have been removed.  Quiver now provides a single unified
+// circumcenter() that handles both SPD and SPSD cases internally.
 
 #include <quiver/simplex/circumcenter.hpp>
 
 namespace balsa::geometry::simplex {
 
 // ── Zipper overloads (delegate to quiver) ──────────────────────────────
-
-template<::zipper::concepts::Matrix MatType>
-    requires(MatType::extents_traits::is_dynamic || MatType::extents_type::static_extent(0) + 1 == MatType::extents_type::static_extent(1))
-auto circumcenter_spd(const MatType &V) {
-    return ::quiver::simplex::circumcenter_spd(V);
-}
-
-template<::zipper::concepts::Matrix MatType>
-auto circumcenter_spsd(const MatType &V) {
-    return ::quiver::simplex::circumcenter_spsd(V);
-}
 
 template<::zipper::concepts::Matrix MatType>
 auto circumcenter(const MatType &V) {

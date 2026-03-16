@@ -19,7 +19,6 @@ namespace balsa::geometry::simplex {
 // ── Zipper overloads (delegate to quiver) ──────────────────────────────
 
 template<::zipper::concepts::Matrix MatType>
-    requires(MatType::extents_traits::is_dynamic || MatType::extents_type::static_extent(0) + 1 == MatType::extents_type::static_extent(1))
 auto volume_signed(const MatType &V) -> typename MatType::value_type {
     return ::quiver::simplex::volume_signed(V);
 }
@@ -29,9 +28,15 @@ auto volume_unsigned(const MatType &V) -> typename MatType::value_type {
     return ::quiver::simplex::volume_unsigned(V);
 }
 
+/// Convenience wrapper: signed when D+1 == cols (full-rank simplex),
+/// unsigned otherwise.  Quiver has no direct equivalent.
 template<::zipper::concepts::Matrix MatType>
 auto volume(const MatType &V) -> typename MatType::value_type {
-    return ::quiver::simplex::volume(V);
+    if (V.extent(0) + 1 == V.extent(1)) {
+        return ::quiver::simplex::volume_signed(V);
+    } else {
+        return ::quiver::simplex::volume_unsigned(V);
+    }
 }
 
 // ── Eigen overloads (convert to zipper, then delegate) ─────────────────
@@ -48,7 +53,12 @@ auto volume_unsigned(const MatType &V) -> typename MatType::Scalar {
 
 template<eigen::concepts::MatrixBaseDerived MatType>
 auto volume(const MatType &V) -> typename MatType::Scalar {
-    return ::quiver::simplex::volume(eigen::as_zipper(V));
+    auto Z = eigen::as_zipper(V);
+    if (Z.extent(0) + 1 == Z.extent(1)) {
+        return ::quiver::simplex::volume_signed(Z);
+    } else {
+        return ::quiver::simplex::volume_unsigned(Z);
+    }
 }
 
 }// namespace balsa::geometry::simplex
