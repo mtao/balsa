@@ -41,6 +41,11 @@ class Film {
     virtual uint32_t host_visible_memory_index() const = 0;
     virtual vk::Queue graphics_queue() const = 0;
 
+    // Find a memory type index that satisfies both the type_filter bitmask
+    // (from VkMemoryRequirements::memoryTypeBits) and the desired property flags.
+    // Throws std::runtime_error if no suitable memory type is found.
+    uint32_t find_memory_type(uint32_t type_filter, vk::MemoryPropertyFlags properties) const;
+
 
     virtual vk::Image msaa_color_image(int index) const = 0;
     virtual vk::ImageView msaa_color_image_view(int index) const = 0;

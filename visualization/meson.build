@@ -46,6 +46,12 @@ visualization_private_deps = []
 visualization_sources = [
   'src/vulkan/film.cpp',
   'src/vulkan/scene_base.cpp',
+  'src/vulkan/pipeline.cpp',
+  'src/vulkan/vulkan_buffer.cpp',
+  'src/vulkan/mesh_buffers.cpp',
+  'src/vulkan/mesh_pipeline.cpp',
+  'src/vulkan/mesh_drawable.cpp',
+  'src/vulkan/mesh_scene.cpp',
   'src/shaders/abstract_shader.cpp',
   'src/vulkan/native_film.cpp',
   'src/vulkan/window.cpp',
@@ -60,11 +66,13 @@ if get_option('qt')
     'src/qt/vulkan/window.cpp',
     'src/qt/mesh_viewer/main_window.cpp',
     'src/qt/mesh_viewer/widget.cpp',
+    'src/qt/mesh_controls_widget.cpp',
     ]
 
   visualization_moc_headers = [
     'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
     'include/balsa/visualization/qt/mesh_viewer/widget.hpp',
+    'include/balsa/visualization/qt/mesh_controls_widget.hpp',
     ]
 
   visualization_qt_mocced = qt.compile_moc(
@@ -97,6 +105,7 @@ endif
 if get_option('imgui')
   visualization_public_deps += imgui_dep
   visualization_sources += 'src/vulkan/imgui_integration.cpp'
+  visualization_sources += 'src/vulkan/imgui/mesh_controls_panel.cpp'
   visualization_sources += imgui_backend_sources
 endif
 

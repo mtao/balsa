@@ -4,5 +4,7 @@
     <file>flat.frag</file>
     <file>triangle.vert</file>
     <file>triangle.frag</file>
+    <file>mesh.vert</file>
+    <file>mesh.frag</file>
 </qresource>
 </RCC>

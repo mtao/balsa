@@ -43,6 +43,10 @@ if get_option('qt')
   qt_dep = dependency('qt6', modules: qt_required_modules)
 endif
 
+if get_option('quiver')
+  add_project_arguments('-DBALSA_HAS_QUIVER=1', language: 'cpp')
+endif
+
 subdir('core')
 
 if get_option('quiver')

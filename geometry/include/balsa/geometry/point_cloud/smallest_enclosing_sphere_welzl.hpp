@@ -3,6 +3,7 @@
 
 #include "balsa/geometry/simplex/point_in_circumcircle.hpp"
 #include "balsa/zipper/types.hpp"
+#include <zipper/expression/nullary/Constant.hpp>
 #include <zipper/utils/extents/extent_arithmetic.hpp>
 #include <array>
 #include <random>
@@ -67,7 +68,7 @@ namespace detail {
         // either we have gotten to the end of the extents or the linked list length is the right size for checking diameter
         if (start_index == V.cols() || (R != nullptr && R->size() == Dim + 1)) {
             if (R == nullptr) {// we're at the end but haven't found any points. zero it is
-                return RetType(::zipper::expression::nullary::Constant<value_type>(value_type(0)));
+                return RetType(::zipper::expression::nullary::Constant(value_type(0)));
             } else {
                 // TODO: has to handle more degenerate cases
                 size_t size = R->size();

@@ -49,9 +49,11 @@ class Window {
     virtual void pre_draw_hook();
     virtual void post_draw_hook();
 
-    // Dispatch helpers — subclasses call these to forward events to the InputHandler.
-    void dispatch_mouse(const MouseEvent &e);
-    void dispatch_key(const KeyEvent &e);
+    // Dispatch helpers — subclasses call these to forward events to the
+    // InputHandler.  Virtual so that subclasses (e.g. an ImGui-aware
+    // window) can intercept events before they reach the handler.
+    virtual void dispatch_mouse(const MouseEvent &e);
+    virtual void dispatch_key(const KeyEvent &e);
     void dispatch_resize(const WindowResizeEvent &e);
 
   private:

@@ -95,7 +95,6 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
 
     // --- Populate ImGui Vulkan init info ---
     ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.ApiVersion = VK_API_VERSION_1_0;
     init_info.Instance = static_cast<VkInstance>(film.instance());
     init_info.PhysicalDevice = static_cast<VkPhysicalDevice>(film.physical_device());
     init_info.Device = _device;
@@ -112,13 +111,24 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
         }
     };
 
+#if IMGUI_VERSION_NUM >= 19200
     // ImGui 1.92+: RenderPass, Subpass, MSAASamples moved into PipelineInfoMain
+    init_info.ApiVersion = VK_API_VERSION_1_0;
     init_info.PipelineInfoMain.RenderPass = static_cast<VkRenderPass>(film.default_render_pass());
     init_info.PipelineInfoMain.Subpass = 0;
     init_info.PipelineInfoMain.MSAASamples = static_cast<VkSampleCountFlagBits>(film.sample_count());
+#else
+    // ImGui < 1.92: these fields live directly on the init struct
+    init_info.Subpass = 0;
+    init_info.MSAASamples = static_cast<VkSampleCountFlagBits>(film.sample_count());
+#endif
 
     // --- Init Vulkan rendering backend ---
+#if IMGUI_VERSION_NUM >= 19200
     if (!ImGui_ImplVulkan_Init(&init_info)) {
+#else
+    if (!ImGui_ImplVulkan_Init(&init_info, static_cast<VkRenderPass>(film.default_render_pass()))) {
+#endif
         vkDestroyDescriptorPool(_device, _descriptor_pool, nullptr);
         _descriptor_pool = VK_NULL_HANDLE;
         ImGui::DestroyContext(_context);
@@ -133,8 +143,44 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
         _has_glfw_backend = true;
     }
 
+#if IMGUI_VERSION_NUM >= 19200
     // ImGui 1.92+: font texture upload is handled automatically by the backend
     // via ImGuiBackendFlags_RendererHasTextures — no manual upload_fonts() needed.
+#else
+    // ImGui < 1.92: manually upload font textures via a one-shot command buffer.
+    {
+        VkCommandPool cmd_pool = static_cast<VkCommandPool>(film.graphics_command_pool());
+        VkCommandBufferAllocateInfo alloc_info = {};
+        alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        alloc_info.commandPool = cmd_pool;
+        alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        alloc_info.commandBufferCount = 1;
+
+        VkCommandBuffer cmd;
+        vkAllocateCommandBuffers(_device, &alloc_info, &cmd);
+
+        VkCommandBufferBeginInfo begin_info = {};
+        begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd, &begin_info);
+
+        ImGui_ImplVulkan_CreateFontsTexture(cmd);
+
+        vkEndCommandBuffer(cmd);
+
+        VkSubmitInfo submit_info = {};
+        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit_info.commandBufferCount = 1;
+        submit_info.pCommandBuffers = &cmd;
+
+        VkQueue queue = static_cast<VkQueue>(film.graphics_queue());
+        vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
+        vkQueueWaitIdle(queue);
+
+        vkFreeCommandBuffers(_device, cmd_pool, 1, &cmd);
+        ImGui_ImplVulkan_DestroyFontUploadObjects();
+    }
+#endif
 
     spdlog::debug("ImGuiIntegration initialized (GLFW backend: {})", _has_glfw_backend);
 }

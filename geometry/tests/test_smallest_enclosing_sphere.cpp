@@ -184,7 +184,7 @@ TEST_CASE("sphere_sampling_test", "[testing_internal]") {
 
     auto make_check = []<int N>(std::integral_constant<int, N>, const auto &check, double inner, double outer) {
         balsa::zipper::Vector<double, N> center;
-        center = ::zipper::expression::nullary::Constant<double>(0);
+        center = ::zipper::expression::nullary::Constant(0.0);
         {
             auto [inside, outside] = make_inside_outside_points(100, center, inner, outer);
             check(inside, center, 0, inner);
