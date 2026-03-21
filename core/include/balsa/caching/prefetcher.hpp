@@ -3,7 +3,7 @@
 
 #include <list>
 #include <vector>
-#include <range/v3/view/enumerate.hpp>
+#include <ranges>
 #include <future>
 
 #include <memory>
@@ -61,7 +61,7 @@ class Prefetcher {
 template<typename ObjectType>
 auto Prefetcher<ObjectType>::load(const std::filesystem::path &path) -> ObjPtr {
 
-    for (auto &&[index, node] : ranges::views::enumerate(_cache)) {
+    for (auto &&[index, node] : std::views::enumerate(_cache)) {
         if (node.path == path) {
             return load(index);
         }

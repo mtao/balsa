@@ -13,9 +13,7 @@ eigen_dep  = dependency('eigen3', version: '>=3.4.0')
 zipper_proj = subproject('zipper', default_options: {'testing': false})
 zipper_dep = zipper_proj.get_variable('zipper_dep')
 
-range_v3_dep = dependency('range-v3')
-
-core_required_deps = [spdlog_dep, eigen_dep, range_v3_dep, fmt_dep, zipper_dep]
+core_required_deps = [spdlog_dep, eigen_dep, fmt_dep, zipper_dep]
 
 # ── Optional dependencies (system only -- enable via Conan or system packages) ──
 if get_option('protobuf')

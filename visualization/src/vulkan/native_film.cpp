@@ -2,9 +2,7 @@
 #include <spdlog/spdlog.h>
 #include <fmt/ranges.h>
 
-#include <range/v3/view/enumerate.hpp>
-#include <range/v3/view/transform.hpp>
-#include <range/v3/range/conversion.hpp>
+#include <ranges>
 #include <array>
 #include <map>
 #include <vulkan/vulkan.hpp>
@@ -13,13 +11,13 @@
 namespace {
 
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-  debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                VkDebugUtilsMessageTypeFlagsEXT messageType,
-                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+static VKAPI_ATTR vk::Bool32 VKAPI_CALL
+  debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                vk::DebugUtilsMessageTypeFlagsEXT messageType,
+                const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
                 void * /*pUserData*/) {
     spdlog::level::level_enum slevel = spdlog::level::debug;
-    switch (vk::DebugUtilsMessageSeverityFlagBitsEXT(messageSeverity)) {
+    switch (messageSeverity) {
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
         slevel = spdlog::level::debug;
         break;
@@ -32,6 +30,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eError:
         slevel = spdlog::level::err;
         break;
+    default:
+        break;
     }
     std::shared_ptr<spdlog::logger> logger = spdlog::get("balsa.vulkan");
     if (!bool(logger)) {
@@ -39,22 +39,17 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
     }
 
     std::string_view type;
-    switch (vk::DebugUtilsMessageTypeFlagBitsEXT(messageType)) {
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral:
-        type = "General";
-        break;
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance:
-        type = "Performance";
-        break;
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation:
+    if (messageType & vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation) {
         type = "Validation";
-        break;
-    case vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding:
+    } else if (messageType & vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance) {
+        type = "Performance";
+    } else if (messageType & vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding) {
         type = "DeviceAddressBinding";
-        break;
+    } else {
+        type = "General";
     }
     logger->log(slevel, "Vk{}: {}", type, pCallbackData->pMessage);
-    return VK_FALSE;
+    return vk::False;
 }
 }// namespace
 
@@ -221,18 +216,16 @@ void NativeFilm::create_device() {
         // for (auto &&extension : extension_names) {
         //     spdlog::trace("Require extension {}", extension);
         // }
-        ext_cnames = extension_names | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+        ext_cnames = extension_names | std::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | std::ranges::to<std::vector>();
         create_info.setEnabledExtensionCount(ext_cnames.size());
         create_info.setPpEnabledExtensionNames(ext_cnames.data());
     }
 
 
     create_info.setPEnabledFeatures(&dev_features);
-    std::vector<const char *> names = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
-    if (enable_validation_layers) {
-        create_info.setEnabledLayerCount(names.size());
-        create_info.setPpEnabledLayerNames(names.data());
-    }
+    // Note: Device-level validation layers are deprecated in Vulkan and these
+    // setters are no-ops in modern Vulkan HPP. Validation layers are now
+    // configured at instance level only, so we omit them here.
 
     _device_raii = _physical_device_raii.createDevice(create_info);
     _graphics_queue_raii = _device_raii.getQueue(_graphics_queue_family_index, 0);
@@ -255,7 +248,7 @@ void NativeFilm::create_instance() {
     app_trace.setApiVersion(VK_API_VERSION_1_2);
 
     vk::InstanceCreateInfo ictrace({}, /*pApplicationInfo=*/&app_trace);
-    std::vector<const char *> layer_cnames = _validation_layers | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+    std::vector<const char *> layer_cnames = _validation_layers | std::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | std::ranges::to<std::vector>();
     {
         ictrace.setEnabledLayerCount(layer_cnames.size());
         ictrace.setPpEnabledLayerNames(layer_cnames.data());
@@ -269,7 +262,7 @@ void NativeFilm::create_instance() {
         // for (auto &&extension : extension_names) {
         //     spdlog::trace("Require extension {}", extension);
         // }
-        ext_cnames = extension_names | ranges::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | ranges::to_vector;
+        ext_cnames = extension_names | std::views::transform([](const std::string &str) -> const char * { return str.c_str(); }) | std::ranges::to<std::vector>();
         ictrace.setEnabledExtensionCount(ext_cnames.size());
         ictrace.setPpEnabledExtensionNames(ext_cnames.data());
     }
@@ -432,7 +425,7 @@ NativeFilm::QueueTargetIndices::QueueTargetIndices(const vk::PhysicalDevice &dev
     std::vector<vk::QueueFamilyProperties> queue_family_properties =
       device.getQueueFamilyProperties();
     for (auto &&[index, properties] :
-         ranges::views::enumerate(queue_family_properties)) {
+         std::views::enumerate(queue_family_properties)) {
         if (properties.queueFlags & vk::QueueFlagBits::eGraphics) {
             graphics_queue.emplace(index);
         }
@@ -642,7 +635,7 @@ void NativeFilm::create_image_resources() {
     vk::FenceCreateInfo fci;
     fci.setFlags(vk::FenceCreateFlagBits::eSignaled);
 
-    for (auto &&[res, buf, buf2, img] : ranges::views::zip(_image_resources, cmd_buffers, pres_cmd_buffers, images)) {
+    for (auto &&[res, buf, buf2, img] : std::views::zip(_image_resources, cmd_buffers, pres_cmd_buffers, images)) {
         res.command_buffer_raii = std::move(buf);
         res.present_command_buffer_raii = std::move(buf2);
         res.image = img;

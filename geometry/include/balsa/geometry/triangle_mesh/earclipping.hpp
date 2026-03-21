@@ -2,12 +2,8 @@
 #define BALSA_GEOMETRY_TRIANGLE_MESH_EARCLIPPING_HPP
 #include <list>
 
-#include <range/v3/view/subrange.hpp>
-#include <range/v3/view/sliding.hpp>
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/view/take_exactly.hpp>
-#include <range/v3/view/cycle.hpp>
-#include <range/v3/range/conversion.hpp>
+#include <algorithm>
+#include <ranges>
 #include "balsa/eigen/stl2eigen.hpp"
 #include <Eigen/Core>
 #include "balsa/geometry/winding_number.hpp"
@@ -33,12 +29,8 @@ std::vector<std::array<IndexType, 3>> earclipping_stl(
     stlF.reserve(size - 2);
     double inner_ang_sum = 0;
     double outer_ang_sum = 0;
-    auto triplets = indices | ranges::views::cycle// pretend range is cyclic
-                    | ranges::views::sliding(3)// take sequences of triplets
-                    | ranges::views::take_exactly(size);// we only want to see each cycle once
-    for (auto &&triplet : triplets) {
-        Face f;
-        ranges::copy(triplet, f.begin());
+    for (size_t i = 0; i < size; ++i) {
+        Face f{ { indices[i], indices[(i + 1) % size], indices[(i + 2) % size] } };
         const auto &[ai, bi, ci] = f;
         auto a = V.col(ai);
         auto b = V.col(bi);

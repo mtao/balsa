@@ -1,7 +1,7 @@
 #include <catch2/catch_all.hpp>
 #include <iostream>
 #include <balsa/eigen/eigen2span.hpp>
-#include <range/v3/view/zip.hpp>
+#include <ranges>
 #include <balsa/eigen/types.hpp>
 TEST_CASE("eigen2span", "[span,eigen]") {
 
@@ -18,11 +18,10 @@ TEST_CASE("eigen2span", "[span,eigen]") {
     REQUIRE(a.size() == 4);
     REQUIRE(b.size() == 4);
 
-    for (const auto &[A, B, a, b, c] : ranges::views::zip(A, B, a, b, c)) {
+    for (const auto &[A, B, a, b, c] : std::views::zip(A, B, a, b, c)) {
         CHECK(A == a);
         CHECK(B == b);
         CHECK(b == a + 4);
         CHECK(c == b);
     }
 }
-

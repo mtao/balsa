@@ -5,8 +5,6 @@
 #include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
 #include <vector>
-#include <range/v3/view/zip.hpp>
-#include <range/v3/view/iota.hpp>
 #include <iostream>
 #include <filesystem>
 
@@ -42,10 +40,10 @@ TEST_CASE("polygon buffer construction", "[mesh_loading]") {
         const auto &b = buf[j];
 
         REQUIRE(size_t(p.size()) == b.size());
-        for(size_t j = 0; j < b.size(); ++j) {
+        for (size_t j = 0; j < b.size(); ++j) {
             CHECK(p(j) == b[j]);
         }
-        //for (auto [a, b] : ranges::views::zip(p.eval(), b)) {
+        // for (auto [a, b] : ranges::views::zip(p.eval(), b)) {
         ////    CHECK(a == b);
         //}
     }
@@ -59,7 +57,7 @@ TEST_CASE("load polynomial obj", "[load_poly_plane_obj]") {
     const auto &pm = m.position;
     REQUIRE(pm.polygons.polygon_count() == 1);
     auto p = pm.polygons.get_polygon(0);
-    //std::cout << p << std::endl;
+    // std::cout << p << std::endl;
     REQUIRE(p.size() == 6);
     CHECK(p(0) == 0);
     CHECK(p(1) == 1);
@@ -70,7 +68,7 @@ TEST_CASE("load polynomial obj", "[load_poly_plane_obj]") {
 
     REQUIRE(pm.curves.curve_count() == 1);
     auto l = pm.curves.get_curve(0);
-    //std::cout << l << std::endl;
+    // std::cout << l << std::endl;
     REQUIRE(l.size() == 6);
     CHECK(l(0) == 0);
     CHECK(l(1) == 1);
@@ -81,7 +79,7 @@ TEST_CASE("load polynomial obj", "[load_poly_plane_obj]") {
 
 
     REQUIRE(m.position.polygons == m2.position.polygons);
-    REQUIRE((m.position.vertices.slice(zipper::static_slice<0,2,1>(),zipper::full_extent_t{}) == m2.position.vertices));
+    REQUIRE((m.position.vertices.slice(zipper::static_slice<0, 2, 1>(), zipper::full_extent_t{}) == m2.position.vertices));
     REQUIRE((m.position.vertices.row(2).as_array() == 0).all());
 }
 

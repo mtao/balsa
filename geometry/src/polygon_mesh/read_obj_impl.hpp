@@ -6,20 +6,13 @@
 #include "balsa/zipper/types.hpp"
 #include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <fstream>
-#include <range/v3/view/take_exactly.hpp>
 #include <optional>
-#include <range/v3/view/split.hpp>
-#include <range/v3/view/stride.hpp>
-#include <range/v3/view/remove_if.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/zip.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/transform.hpp>
-#include <range/v3/view/getlines.hpp>
-#include <range/v3/algorithm/copy.hpp>
+#include <ranges>
+#include <algorithm>
 #include <charconv>
 #include <filesystem>
 #include <iostream>
+#include <string>
 
 namespace balsa::geometry::polygon_mesh {
 
@@ -28,14 +21,14 @@ namespace {
     template<typename T>
     auto read_value(auto &&v) {
         T value;
-        auto s = v | ranges::to<std::string>;
+        auto s = v | std::ranges::to<std::string>();
         std::from_chars(s.data(), s.data() + s.size(), value);
         return value;
     }
     template<typename T>
     auto read_values(auto &&values) {
 
-        return values | ranges::views::transform([](const auto &v) {
+        return values | std::views::transform([](const auto &v) {
                    return read_value<T>(v);
                });
     }
@@ -46,7 +39,6 @@ template<typename Scalar, int8_t D>
 OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
     std::ifstream ifs(filename);
 
-    auto file_lines = ranges::getlines(ifs);
 
     std::vector<std::array<Scalar, D>> v;
     std::vector<std::vector<index_type>> vi;
@@ -67,10 +59,10 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
         std::vector<index_type> t;
         std::array<std::vector<index_type> *, 3> ptrs{ &v, &t, &n };
         for (auto &&tok : data) {
-            auto slashtoks = tok | ranges::views::split('/');
-            auto zip = ranges::views::zip(ptrs, slashtoks);
+            auto slashtoks = tok | std::views::split('/');
+            auto zip = std::views::zip(ptrs, slashtoks);
             for (auto &&[vecptr, str] : zip) {
-                auto s = str | ranges::to<std::string>;
+                auto s = str | std::ranges::to<std::string>();
                 if (!s.empty()) {
                     index_type value = 0;
                     std::from_chars(s.data(), s.data() + s.size(), value);
@@ -81,13 +73,16 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
         return std::make_tuple(v, n, t);
     };
 
-    for (auto &&line : file_lines) {
+    std::string line;
+    while (std::getline(ifs, line)) {
 
-        auto toks = line | ranges::views::split(' ') | ranges::views::remove_if([](const auto &rng) {
-                        return rng.empty();
+        auto toks = line | std::views::split(' ') | std::views::filter([](const auto &rng) {
+                        return !rng.empty();
                     });
-        auto front = toks.front() | ranges::to<std::string>();
-        auto data = toks | ranges::views::drop(1);
+        if (std::ranges::empty(toks)) { continue; }
+        auto front = toks.front() | std::ranges::to<std::string>();
+        if (front[0] == '#') { continue; }
+        auto data = toks | std::views::drop(1);
         size_t size = front.size();
         switch (size) {
         case 1: {
@@ -95,8 +90,8 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
             case 'v':// v
             {
                 auto &back = v.emplace_back();
-                auto dat = read_values<Scalar>(data) | ranges::views::take_exactly(D);
-                ranges::copy(dat, back.begin());
+                auto dat = read_values<Scalar>(data) | std::views::take(D);
+                std::ranges::copy(dat, back.begin());
                 break;
             }
             case 'f':// f
@@ -140,15 +135,15 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
                 case 't':// vt
                 {
                     auto &back = t.emplace_back();
-                    auto dat = read_values<Scalar>(data) | ranges::views::take_exactly(2);
-                    ranges::copy(dat, back.begin());
+                    auto dat = read_values<Scalar>(data) | std::views::take(2);
+                    std::ranges::copy(dat, back.begin());
                     break;
                 }
                 case 'n':// vn
                 {
                     auto &back = n.emplace_back();
-                    auto dat = read_values<Scalar>(data) | ranges::views::take_exactly(D);
-                    ranges::copy(dat, back.begin());
+                    auto dat = read_values<Scalar>(data) | std::views::take(D);
+                    std::ranges::copy(dat, back.begin());
                     break;
                 }
                 default:

@@ -1,8 +1,7 @@
 #include "balsa/visualization/qt/mesh_viewer/widget.hpp"
 #include <ranges>
-#include <fmt/ranges.h>
-#include <range/v3/view/getlines.hpp>
 #include <fstream>
+#include <sstream>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 #include <spdlog/spdlog.h>
@@ -20,8 +19,9 @@ namespace {
         source_path = std::filesystem::absolute(source_path);
         std::filesystem::path src = source_path.parent_path() / name;
         std::ifstream ifs(src);
-        std::string file_lines = fmt::format("{}", fmt::join(ranges::getlines(ifs), "\n"));
-        return file_lines;
+        std::ostringstream oss;
+        oss << ifs.rdbuf();
+        return oss.str();
     }
     static const std::string vertexShaderSource = get_source("shaders/phong.vert");
 
