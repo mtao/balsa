@@ -92,15 +92,15 @@ void BasicImGuiScene::draw(balsa::visualization::vulkan::Film &film) {
     vk::Viewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(extent.x);
-    viewport.height = static_cast<float>(extent.y);
+    viewport.width = static_cast<float>(extent[0]);
+    viewport.height = static_cast<float>(extent[1]);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     cb.setViewport(0, { viewport });
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{ 0, 0 };
-    scissor.extent = vk::Extent2D{ extent.x, extent.y };
+    scissor.extent = vk::Extent2D{ extent[0], extent[1] };
     cb.setScissor(0, { scissor });
 
     cb.draw(3, 1, 0, 0);
@@ -171,7 +171,7 @@ void BasicImGuiScene::create_graphics_pipeline(balsa::visualization::vulkan::Fil
     }
 
     auto ssize = film.swapchain_image_size();
-    vk::Extent2D swapchain_extent(ssize.x, ssize.y);
+    vk::Extent2D swapchain_extent(ssize[0], ssize[1]);
     vk::Rect2D scissor;
     {
         scissor.setOffset({ 0, 0 });
@@ -332,8 +332,8 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)extent.x;
-    viewport.height = (float)extent.y;
+    viewport.width = (float)extent[0];
+    viewport.height = (float)extent[1];
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     cb.setViewport(0, { viewport });
@@ -341,7 +341,7 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{ 0, 0 };
-    scissor.extent = vk::Extent2D{ extent.x, extent.y };
+    scissor.extent = vk::Extent2D{ extent[0], extent[1] };
 
     cb.setScissor(0, { scissor });
 
@@ -408,7 +408,7 @@ void HelloTriangleScene::create_graphics_pipeline(balsa::visualization::vulkan::
         ci.setPrimitiveRestartEnable(VK_FALSE);
     }
     auto ssize = film.swapchain_image_size();
-    vk::Extent2D swapchain_extent(ssize.x, ssize.y);
+    vk::Extent2D swapchain_extent(ssize[0], ssize[1]);
     vk::Rect2D scissor;
     {
         scissor.setOffset({ 0, 0 });

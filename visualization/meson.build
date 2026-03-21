@@ -33,13 +33,11 @@ if get_option('imgui')
   endif
 endif
 
-glm_dep = dependency('glm')
-
 colormap_proj = subproject('colormap_shaders')
 colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep')
 
 # Public deps: propagated to consumers via declare_dependency().
-visualization_public_deps = [vulkan_dep, glm_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
+visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
 # Private deps: used only for building the library (not propagated).
 visualization_private_deps = []
 
@@ -59,7 +57,6 @@ visualization_sources = [
   'src/scene_graph/Camera.cpp',
   'src/scene_graph/MeshData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
-  'src/glm/zipper_compat.cpp',
 ]
 
 if get_option('qt')

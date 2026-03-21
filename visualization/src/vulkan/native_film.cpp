@@ -469,8 +469,8 @@ bool NativeFilm::QueueTargetIndices::meets_requirements(vk::QueueFlags requireme
     return (requirement & active_flags()) == requirement;
 }
 
-glm::uvec2 NativeFilm::swapchain_image_size() const {
-    return glm::uvec2(_swapchain_extent.width, _swapchain_extent.height);
+std::array<uint32_t, 2> NativeFilm::swapchain_image_size() const {
+    return { _swapchain_extent.width, _swapchain_extent.height };
 }
 vk::Format NativeFilm::color_format() const {
     return _surface_format.format;

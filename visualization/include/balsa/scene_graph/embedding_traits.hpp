@@ -1,8 +1,8 @@
 #if !defined(BALSA_SCENE_GRAPH_EMBEDDING_TRAITS_HPP)
 #define BALSA_SCENE_GRAPH_EMBEDDING_TRAITS_HPP
 
-//#include "balsa/types/is_specialization_of.hpp"
-#include <glm/matrix.hpp>
+// #include "balsa/types/is_specialization_of.hpp"
+#include <balsa/zipper/types.hpp>
 
 namespace balsa::scene_graph {
 
@@ -12,11 +12,11 @@ struct embedding_traits {
     using scalar_type = T;
     constexpr static unsigned int embedding_dimension = D;
 
-    using vector_type = glm::vec<D, T>;
+    using vector_type = balsa::zipper::Vector<T, D>;
     // good for matrix-vector multiplication
-    using matrix_type = glm::mat<D, D, T>;
+    using matrix_type = balsa::zipper::Matrix<T, D, D>;
     // good for homogeneous coordinates
-    using transformation_matrix_type = glm::mat<D + 1, D + 1, T>;
+    using transformation_matrix_type = balsa::zipper::Matrix<T, D + 1, D + 1>;
 };
 
 using embedding_traits2F = embedding_traits<2, float>;

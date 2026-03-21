@@ -113,10 +113,10 @@ Film &Window::film() {
     return _film;
 }
 
-glm::uvec2 Window::framebuffer_size() const {
+std::array<uint32_t, 2> Window::framebuffer_size() const {
     int w = 0, h = 0;
     glfwGetFramebufferSize(_glfw_window, &w, &h);
-    return glm::uvec2(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+    return { static_cast<uint32_t>(w), static_cast<uint32_t>(h) };
 }
 
 void Window::set_title(std::string_view title) {

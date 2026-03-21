@@ -59,7 +59,7 @@ class Camera : public AbstractFeature {
     void recompute_perspective();
 
     Projection _projection_type = Projection::Perspective;
-    Mat4f _projection;// initialized to identity via glm_compat
+    Mat4f _projection;// default-initialized (identity)
 
     // Cached perspective parameters.
     float _fov_y = 0.7854f;// ~45 degrees

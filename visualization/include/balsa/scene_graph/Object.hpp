@@ -15,7 +15,7 @@ namespace balsa::scene_graph {
 //
 // The universal scene graph node.  Every node in the scene graph is an
 // Object with:
-//   - A local transform (Mat4f, column-major)
+//   - A local affine transform (AffineTransformf, column-major 4x4)
 //   - A parent pointer and an ordered list of children
 //   - A collection of features (components) attached to it
 //   - A name and a visibility flag
@@ -42,12 +42,12 @@ class Object {
 
     // ── Transform ───────────────────────────────────────────────────
 
-    const Mat4f &local_transform() const { return _local_transform; }
-    void set_local_transform(const Mat4f &t) { _local_transform = t; }
+    const AffineTransformf &local_transform() const { return _local_transform; }
+    void set_local_transform(const AffineTransformf &t) { _local_transform = t; }
 
     // Accumulated world transform: product of all ancestors' local
     // transforms, from root down to (and including) this node.
-    Mat4f world_transform() const;
+    AffineTransformf world_transform() const;
 
     // ── Hierarchy ───────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ class Object {
     bool visible = true;
 
   private:
-    Mat4f _local_transform;// initialized to identity in constructor
+    AffineTransformf _local_transform;// default-constructs to identity
     Object *_parent = nullptr;
     std::vector<std::unique_ptr<Object>> _children;
     std::vector<std::unique_ptr<AbstractFeature>> _features;

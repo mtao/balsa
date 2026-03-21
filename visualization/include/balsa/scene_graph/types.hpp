@@ -3,8 +3,8 @@
 
 // Scene graph type aliases.
 //
-// The scene graph needs column-major matrices to match GLM, Vulkan/GLSL,
-// and GPU memory layout conventions.  Rather than changing the global
+// The scene graph needs column-major matrices to match Vulkan/GLSL and
+// GPU memory layout conventions.  Rather than changing the global
 // balsa::Matrix default, we define explicit column-major aliases here.
 //
 // These types resolve through:
@@ -13,6 +13,7 @@
 //        -> ::zipper::Matrix<float, 4, 4, false>
 
 #include <balsa/zipper/types.hpp>
+#include <zipper/transform/Transform.hpp>
 
 namespace balsa::scene_graph {
 
@@ -22,6 +23,12 @@ namespace balsa::scene_graph {
 
 using Mat4f = balsa::zipper::Matrix<float, 4, 4, /*IsRowMajor=*/false>;
 using Mat3f = balsa::zipper::Matrix<float, 3, 3, /*IsRowMajor=*/false>;
+
+// ── Affine transform ───────────────────────────────────────────────
+// Column-major 4x4 affine transform.  Default-constructs to identity.
+// Use this for Object local/world transforms instead of a raw Mat4f.
+
+using AffineTransformf = ::zipper::transform::AffineTransform<float>;
 
 // ── Vectors ────────────────────────────────────────────────────────
 // Vectors don't have a row/column-major distinction (they're 1D),

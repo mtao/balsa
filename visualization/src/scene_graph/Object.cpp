@@ -2,14 +2,14 @@
 
 #include <algorithm>
 
-#include "balsa/glm/zipper_compat.hpp"
-
 namespace balsa::scene_graph {
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
 Object::Object(std::string name)
-  : name(std::move(name)), _local_transform(glm_compat::identity4f()) {}
+  : name(std::move(name)) {
+    // AffineTransformf default-constructs to identity — nothing to do.
+}
 
 Object::~Object() = default;
 
@@ -51,12 +51,9 @@ Object &Object::operator=(Object &&other) noexcept {
 
 // ── Transform ───────────────────────────────────────────────────────
 
-Mat4f Object::world_transform() const {
+AffineTransformf Object::world_transform() const {
     if (_parent) {
-        // TODO(zipper): native matrix multiply
-        auto parent_glm = glm_compat::as_glm(_parent->world_transform());
-        auto local_glm = glm_compat::as_glm(_local_transform);
-        return glm_compat::as_zipper(parent_glm * local_glm);
+        return _parent->world_transform() * _local_transform;
     }
     return _local_transform;
 }

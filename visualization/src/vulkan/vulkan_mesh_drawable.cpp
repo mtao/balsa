@@ -3,7 +3,7 @@
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/scene_graph/Object.hpp"
-#include "balsa/glm/zipper_compat.hpp"
+#include "balsa/scene_graph/types.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -147,18 +147,27 @@ void VulkanMeshDrawable::update_ubos(const scene_graph::Camera &cam) {
     auto *mesh_data = object().find_feature<scene_graph::MeshData>();
 
     // Model matrix from the scene graph Object's world transform.
-    auto model_zipper = object().world_transform();
-    auto model = glm_compat::as_glm(model_zipper);
-    auto view = glm_compat::as_glm(cam.view_matrix());
-    auto projection = glm_compat::as_glm(cam.projection_matrix());
+    auto model_affine = object().world_transform();
+    auto model = model_affine.to_matrix();
+    auto view = cam.view_matrix();
+    auto projection = cam.projection_matrix();
+
+    // Inverse-transpose of model (for transforming normals).
+    // inverse() dispatches to affine_inverse() for AffineTransform mode.
+    auto model_inv = model_affine.inverse().to_matrix();
+    scene_graph::Mat4f normal_matrix;
+    for (int r = 0; r < 4; ++r) {
+        for (int c = 0; c < 4; ++c) {
+            normal_matrix(r, c) = model_inv(c, r);
+        }
+    }
 
     // TransformUBO
     TransformUBO transform;
     transform.model = model;
     transform.view = view;
     transform.projection = projection;
-    transform.normal_matrix = glm_compat::as_glm(
-      glm_compat::inverse_transpose(model_zipper));
+    transform.normal_matrix = normal_matrix;
     _transform_ubo.upload(&transform, sizeof(TransformUBO));
 
     // MaterialUBO — pack from MeshData's render_state.
@@ -166,31 +175,30 @@ void VulkanMeshDrawable::update_ubos(const scene_graph::Camera &cam) {
                                : MeshRenderState{};
 
     MaterialUBO material;
-    material.uniform_color = glm::vec4(
-      rs.uniform_color[0],
-      rs.uniform_color[1],
-      rs.uniform_color[2],
-      rs.uniform_color[3]);
-    material.light_dir = glm::vec4(
-      rs.light_dir[0],
-      rs.light_dir[1],
-      rs.light_dir[2],
-      rs.ambient_strength);
-    material.specular_params = glm::vec4(
-      rs.specular_strength,
-      rs.specular_strength,
-      rs.specular_strength,
-      rs.shininess);
-    material.scalar_params = glm::vec4(
-      rs.scalar_min,
-      rs.scalar_max,
-      rs.point_size,
-      rs.two_sided ? 1.0f : 0.0f);
-    material.wireframe_color = glm::vec4(
-      rs.wireframe_color[0],
-      rs.wireframe_color[1],
-      rs.wireframe_color[2],
-      rs.wireframe_color[3]);
+    material.uniform_color(0) = rs.uniform_color[0];
+    material.uniform_color(1) = rs.uniform_color[1];
+    material.uniform_color(2) = rs.uniform_color[2];
+    material.uniform_color(3) = rs.uniform_color[3];
+
+    material.light_dir(0) = rs.light_dir[0];
+    material.light_dir(1) = rs.light_dir[1];
+    material.light_dir(2) = rs.light_dir[2];
+    material.light_dir(3) = rs.ambient_strength;
+
+    material.specular_params(0) = rs.specular_strength;
+    material.specular_params(1) = rs.specular_strength;
+    material.specular_params(2) = rs.specular_strength;
+    material.specular_params(3) = rs.shininess;
+
+    material.scalar_params(0) = rs.scalar_min;
+    material.scalar_params(1) = rs.scalar_max;
+    material.scalar_params(2) = rs.point_size;
+    material.scalar_params(3) = rs.two_sided ? 1.0f : 0.0f;
+
+    material.wireframe_color(0) = rs.wireframe_color[0];
+    material.wireframe_color(1) = rs.wireframe_color[1];
+    material.wireframe_color(2) = rs.wireframe_color[2];
+    material.wireframe_color(3) = rs.wireframe_color[3];
     _material_ubo.upload(&material, sizeof(MaterialUBO));
 }
 
@@ -222,15 +230,15 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
     vk::Viewport viewport;
     viewport.setX(0.0f);
     viewport.setY(0.0f);
-    viewport.setWidth(static_cast<float>(extent.x));
-    viewport.setHeight(static_cast<float>(extent.y));
+    viewport.setWidth(static_cast<float>(extent[0]));
+    viewport.setHeight(static_cast<float>(extent[1]));
     viewport.setMinDepth(0.0f);
     viewport.setMaxDepth(1.0f);
     cb.setViewport(0, { viewport });
 
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 });
-    scissor.setExtent({ extent.x, extent.y });
+    scissor.setExtent({ extent[0], extent[1] });
     cb.setScissor(0, { scissor });
 
     // Bind descriptor set (set 0).

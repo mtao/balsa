@@ -145,10 +145,10 @@ Film &Window::film() {
     return *_film;
 }
 
-glm::uvec2 Window::framebuffer_size() const {
+std::array<uint32_t, 2> Window::framebuffer_size() const {
     const QSize sz = QVulkanWindow::size() * QVulkanWindow::devicePixelRatio();
-    return glm::uvec2(static_cast<uint32_t>(sz.width()),
-                      static_cast<uint32_t>(sz.height()));
+    return { static_cast<uint32_t>(sz.width()),
+             static_cast<uint32_t>(sz.height()) };
 }
 
 void Window::set_title(std::string_view title) {

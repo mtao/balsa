@@ -35,7 +35,7 @@ class Window : public QVulkanWindow
     int exec() override;
     void request_close() override;
     Film &film() override;
-    glm::uvec2 framebuffer_size() const override;
+    std::array<uint32_t, 2> framebuffer_size() const override;
     void set_title(std::string_view title) override;
 
   protected:

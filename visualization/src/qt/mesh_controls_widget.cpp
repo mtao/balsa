@@ -3,7 +3,6 @@
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
-#include "balsa/glm/zipper_compat.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -892,7 +891,7 @@ void MeshControlsWidget::on_name_edited(const QString &text) {
 void MeshControlsWidget::on_reset_transform() {
     auto *obj = selected_object();
     if (!obj) return;
-    obj->set_local_transform(glm_compat::identity4f());
+    obj->set_local_transform(scene_graph::AffineTransformf{});
     emit scene_changed();
 }
 

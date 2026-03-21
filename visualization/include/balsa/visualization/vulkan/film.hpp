@@ -1,10 +1,10 @@
 #if !defined(BALSA_VISUALIZATION_VULKAN_FILM_HPP)
 #define BALSA_VISUALIZATION_VULKAN_FILM_HPP
 
+#include <array>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan.hpp>
-#include <glm/vec2.hpp>
 
 namespace balsa::visualization::vulkan {
 
@@ -12,7 +12,7 @@ class Film {
   public:
     virtual ~Film();
 
-    virtual glm::uvec2 swapchain_image_size() const = 0;
+    virtual std::array<uint32_t, 2> swapchain_image_size() const = 0;
 
     virtual vk::Format color_format() const = 0;
 

@@ -5,7 +5,6 @@
 #include <cmath>
 
 #include "balsa/scene_graph/types.hpp"
-#include "balsa/glm/zipper_compat.hpp"
 #include "balsa/visualization/input_handler.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 
@@ -105,9 +104,9 @@ class OrbitCameraController : public InputHandler {
             if (_right_down || _middle_down) {
                 // Pan: move center in the view plane
                 scene_graph::Vec3f eye = compute_eye();
-                scene_graph::Vec3f forward = glm_compat::normalize(_center - eye);
-                scene_graph::Vec3f right = glm_compat::normalize(glm_compat::cross(forward, _up));
-                scene_graph::Vec3f up = glm_compat::normalize(glm_compat::cross(right, forward));
+                scene_graph::Vec3f forward = (_center - eye).normalized();
+                scene_graph::Vec3f right = forward.cross(_up).normalized();
+                scene_graph::Vec3f up = right.cross(forward).normalized();
 
                 float pan_scale = _distance * pan_sensitivity;
                 _center = _center - right * (static_cast<float>(dx) * pan_scale);

@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <string_view>
-#include <glm/vec2.hpp>
+#include <array>
 #include "balsa/visualization/vulkan/scene_base.hpp"
 #include "balsa/visualization/input_handler.hpp"
 
@@ -36,7 +36,7 @@ class Window {
     const std::shared_ptr<InputHandler> &input_handler() const;
 
     // === Window properties ===
-    virtual glm::uvec2 framebuffer_size() const = 0;
+    virtual std::array<uint32_t, 2> framebuffer_size() const = 0;
     virtual void set_title(std::string_view title) = 0;
 
   protected:

@@ -20,7 +20,7 @@ class NativeFilm : public Film {
     NativeFilm(std::nullptr_t);
     virtual ~NativeFilm() override;
 
-    glm::uvec2 swapchain_image_size() const override;
+    std::array<uint32_t, 2> swapchain_image_size() const override;
 
 
     vk::Format color_format() const override;

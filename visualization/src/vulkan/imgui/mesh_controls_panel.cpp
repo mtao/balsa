@@ -3,7 +3,6 @@
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
-#include "balsa/glm/zipper_compat.hpp"
 
 #include <imgui.h>
 #include <algorithm>
@@ -400,7 +399,7 @@ bool draw_property_panel(MeshScene &scene, MeshPanelState &state) {
             }
 
             if (ImGui::Button("Reset Transform")) {
-                obj->set_local_transform(glm_compat::identity4f());
+                obj->set_local_transform(scene_graph::AffineTransformf{});
                 changed = true;
             }
         }

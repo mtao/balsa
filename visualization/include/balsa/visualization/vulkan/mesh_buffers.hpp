@@ -6,9 +6,8 @@
 #include <span>
 #include <vector>
 #include <vulkan/vulkan.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/vec4.hpp>
 
+#include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/vulkan/buffer.hpp"
 
 namespace balsa::visualization::vulkan {
@@ -19,20 +18,20 @@ class Film;
 
 // binding = 0 in mesh.vert
 struct TransformUBO {
-    glm::mat4 model;// 64 bytes
-    glm::mat4 view;// 64 bytes
-    glm::mat4 projection;// 64 bytes
-    glm::mat4 normal_matrix;// 64 bytes  (transpose(inverse(model)))
+    scene_graph::Mat4f model;// 64 bytes
+    scene_graph::Mat4f view;// 64 bytes
+    scene_graph::Mat4f projection;// 64 bytes
+    scene_graph::Mat4f normal_matrix;// 64 bytes  (transpose(inverse(model)))
 };
 static_assert(sizeof(TransformUBO) == 256, "TransformUBO must be 256 bytes");
 
 // binding = 1 in mesh.vert / mesh.frag
 struct MaterialUBO {
-    glm::vec4 uniform_color;// rgba
-    glm::vec4 light_dir;// xyz = direction, w = ambient_strength
-    glm::vec4 specular_params;// xyz = specular_color, w = shininess
-    glm::vec4 scalar_params;// x = scalar_min, y = scalar_max, z = point_size, w = two_sided (>0.5)
-    glm::vec4 wireframe_color;// rgba (used when RENDER_WIREFRAME is defined)
+    scene_graph::Vec4f uniform_color;// rgba
+    scene_graph::Vec4f light_dir;// xyz = direction, w = ambient_strength
+    scene_graph::Vec4f specular_params;// xyz = specular_color, w = shininess
+    scene_graph::Vec4f scalar_params;// x = scalar_min, y = scalar_max, z = point_size, w = two_sided (>0.5)
+    scene_graph::Vec4f wireframe_color;// rgba (used when RENDER_WIREFRAME is defined)
 };
 static_assert(sizeof(MaterialUBO) == 80, "MaterialUBO must be 80 bytes");
 

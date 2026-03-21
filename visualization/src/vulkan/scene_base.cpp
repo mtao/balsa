@@ -2,7 +2,6 @@
 #include "balsa/visualization/vulkan/scene_base.hpp"
 // #include "balsa/visualization/vulkan/objects/node.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
-#include <glm/mat4x4.hpp>
 
 
 namespace balsa::visualization::vulkan {
@@ -59,7 +58,7 @@ void SceneBase::begin_render_pass(Film &film) {
     }
 
 
-    const glm::uvec2 sz = film.swapchain_image_size();
+    const auto sz = film.swapchain_image_size();
     VkRenderPassBeginInfo rpBeginInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .pNext = nullptr,
@@ -71,8 +70,8 @@ void SceneBase::begin_render_pass(Film &film) {
                       .x = int32_t(0),
                       .y = int32_t(0) },
           .extent = { // VkExtent2D
-                      .width = uint32_t(sz.x),
-                      .height = uint32_t(sz.y) },
+                      .width = uint32_t(sz[0]),
+                      .height = uint32_t(sz[1]) },
         },
         .clearValueCount = clear_count,
         .pClearValues = clear_count > 0 ? clearValues : nullptr

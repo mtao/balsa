@@ -1,7 +1,7 @@
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/Object.hpp"
 
-#include "balsa/glm/zipper_compat.hpp"
+#include <zipper/transform/projection.hpp>
 
 namespace balsa::scene_graph {
 
@@ -20,7 +20,10 @@ void Camera::set_orthographic(float left, float right, float bottom, float top, 
     _projection_type = Projection::Orthographic;
     _near = near;
     _far = far;
-    _projection = glm_compat::ortho(left, right, bottom, top, near, far);
+    auto p = ::zipper::transform::ortho(left, right, bottom, top, near, far);
+    // Vulkan clip space: Y inverted vs OpenGL.
+    p(1, 1) *= -1.0f;
+    _projection = p;
 }
 
 void Camera::update_aspect(float aspect) {
@@ -33,13 +36,16 @@ void Camera::update_aspect(float aspect) {
 // ── Derived matrices ────────────────────────────────────────────────
 
 Mat4f Camera::view_matrix() const {
-    return glm_compat::inverse(object().world_transform());
+    return object().world_transform().inverse().to_matrix();
 }
 
 // ── Private ─────────────────────────────────────────────────────────
 
 void Camera::recompute_perspective() {
-    _projection = glm_compat::perspective(_fov_y, _aspect, _near, _far);
+    auto p = ::zipper::transform::perspective(_fov_y, _aspect, _near, _far);
+    // Vulkan clip space: Y inverted vs OpenGL.
+    p(1, 1) *= -1.0f;
+    _projection = p;
 }
 
 }// namespace balsa::scene_graph

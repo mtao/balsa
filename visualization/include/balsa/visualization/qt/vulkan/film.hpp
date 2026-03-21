@@ -14,7 +14,7 @@ class Film : public visualization::vulkan::Film {
     vk::Format color_format() const override;
 
 
-    glm::uvec2 swapchain_image_size() const override;
+    std::array<uint32_t, 2> swapchain_image_size() const override;
 
     vk::CommandBuffer current_command_buffer() const override;
     vk::Framebuffer current_framebuffer() const override;

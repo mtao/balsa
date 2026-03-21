@@ -9,9 +9,9 @@ Film::Film(QVulkanWindow &window) : _window(window) {
 }
 Film::~Film() {}
 
-glm::uvec2 Film::swapchain_image_size() const {
+std::array<uint32_t, 2> Film::swapchain_image_size() const {
     const QSize sz = _window.swapChainImageSize();
-    return glm::uvec2(sz.width(), sz.height());
+    return { static_cast<uint32_t>(sz.width()), static_cast<uint32_t>(sz.height()) };
 }
 
 

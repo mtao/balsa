@@ -3,7 +3,7 @@
 
 #include <string>
 #include <string_view>
-#include <glm/vec2.hpp>
+#include <array>
 #include "balsa/visualization/vulkan/window.hpp"
 #include "balsa/visualization/glfw/vulkan/film.hpp"
 
@@ -29,7 +29,7 @@ class Window : public visualization::vulkan::Window {
     int exec() override;
     void request_close() override;
     Film &film() override;
-    glm::uvec2 framebuffer_size() const override;
+    std::array<uint32_t, 2> framebuffer_size() const override;
     void set_title(std::string_view title) override;
 
     // Access the raw GLFW handle (e.g. for ImGui backends)

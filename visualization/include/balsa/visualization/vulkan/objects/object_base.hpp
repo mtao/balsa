@@ -4,7 +4,6 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan.hpp>
-#include <glm/vec2.hpp>
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 

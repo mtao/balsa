@@ -1,8 +1,8 @@
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 #include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
-#include "balsa/glm/zipper_compat.hpp"
 
+#include <zipper/transform/view.hpp>
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
@@ -162,9 +162,8 @@ void MeshScene::look_at(const scene_graph::Vec3f &eye,
     // But Camera::view_matrix() already returns inverse(world_transform),
     // so setting local_transform = inverse(lookAt(...)) gives us
     // view_matrix() == lookAt(...).  That's correct.
-    auto view = glm_compat::look_at(eye, center, up);
-    auto cam_pose = glm_compat::inverse(view);
-    _camera_object->set_local_transform(cam_pose);
+    auto view = ::zipper::transform::look_at(eye, center, up);
+    _camera_object->set_local_transform(view.inverse());
 }
 
 void MeshScene::set_perspective(float fov_y, float aspect, float near, float far) {

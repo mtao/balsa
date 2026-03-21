@@ -176,7 +176,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
         // Set initial projection
         auto fb = framebuffer_size();
-        float aspect = (fb.y > 0) ? static_cast<float>(fb.x) / static_cast<float>(fb.y) : 1.0f;
+        float aspect = (fb[1] > 0) ? static_cast<float>(fb[0]) / static_cast<float>(fb[1]) : 1.0f;
         constexpr float pi = 3.14159265358979323846f;
         _scene->set_perspective(45.0f * pi / 180.0f, aspect, 0.01f, 100.0f);
 
