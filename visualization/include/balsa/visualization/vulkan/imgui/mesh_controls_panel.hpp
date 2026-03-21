@@ -6,7 +6,6 @@
 namespace balsa::visualization::vulkan {
 
 class MeshScene;
-class MeshDrawable;
 struct MeshRenderState;
 
 namespace imgui {

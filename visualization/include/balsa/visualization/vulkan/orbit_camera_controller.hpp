@@ -3,9 +3,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
+#include "balsa/scene_graph/types.hpp"
+#include "balsa/glm/zipper_compat.hpp"
 #include "balsa/visualization/input_handler.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 
@@ -37,6 +37,10 @@ class OrbitCameraController : public InputHandler {
   public:
     explicit OrbitCameraController(MeshScene *scene)
       : _scene(scene) {
+        // Initialize _up to (0, 1, 0)
+        _up(0) = 0.0f;
+        _up(1) = 1.0f;
+        _up(2) = 0.0f;
         apply();
     }
 
@@ -46,7 +50,7 @@ class OrbitCameraController : public InputHandler {
         _distance = std::max(d, _min_distance);
         apply();
     }
-    void set_center(const glm::vec3 &c) {
+    void set_center(const scene_graph::Vec3f &c) {
         _center = c;
         apply();
     }
@@ -57,7 +61,7 @@ class OrbitCameraController : public InputHandler {
     }
 
     float distance() const { return _distance; }
-    const glm::vec3 &center() const { return _center; }
+    const scene_graph::Vec3f &center() const { return _center; }
     float theta() const { return _theta; }
     float phi() const { return _phi; }
 
@@ -100,14 +104,14 @@ class OrbitCameraController : public InputHandler {
 
             if (_right_down || _middle_down) {
                 // Pan: move center in the view plane
-                glm::vec3 eye = compute_eye();
-                glm::vec3 forward = glm::normalize(_center - eye);
-                glm::vec3 right = glm::normalize(glm::cross(forward, _up));
-                glm::vec3 up = glm::normalize(glm::cross(right, forward));
+                scene_graph::Vec3f eye = compute_eye();
+                scene_graph::Vec3f forward = glm_compat::normalize(_center - eye);
+                scene_graph::Vec3f right = glm_compat::normalize(glm_compat::cross(forward, _up));
+                scene_graph::Vec3f up = glm_compat::normalize(glm_compat::cross(right, forward));
 
                 float pan_scale = _distance * pan_sensitivity;
-                _center -= right * static_cast<float>(dx) * pan_scale;
-                _center += up * static_cast<float>(dy) * pan_scale;
+                _center = _center - right * (static_cast<float>(dx) * pan_scale);
+                _center = _center + up * (static_cast<float>(dy) * pan_scale);
                 apply();
             }
             break;
@@ -137,8 +141,8 @@ class OrbitCameraController : public InputHandler {
     float _theta = 0.0f;// azimuthal angle (radians)
     float _phi = 0.3f;// polar angle (radians, 0 = equator)
     float _distance = 3.0f;
-    glm::vec3 _center = { 0.0f, 0.0f, 0.0f };
-    glm::vec3 _up = { 0.0f, 1.0f, 0.0f };
+    scene_graph::Vec3f _center;// initialized below
+    scene_graph::Vec3f _up;// initialized below
 
     static constexpr float _max_phi = 1.5f;// ~86 degrees, avoid gimbal lock
     static constexpr float _min_distance = 0.01f;
@@ -150,14 +154,21 @@ class OrbitCameraController : public InputHandler {
     bool _right_down = false;
     bool _middle_down = false;
 
-    glm::vec3 compute_eye() const {
+    scene_graph::Vec3f compute_eye() const {
         float cos_phi = std::cos(_phi);
-        return _center + glm::vec3(_distance * cos_phi * std::sin(_theta), _distance * std::sin(_phi), _distance * cos_phi * std::cos(_theta));
+        float ex = _distance * cos_phi * std::sin(_theta);
+        float ey = _distance * std::sin(_phi);
+        float ez = _distance * cos_phi * std::cos(_theta);
+        scene_graph::Vec3f offset;
+        offset(0) = ex;
+        offset(1) = ey;
+        offset(2) = ez;
+        return _center + offset;
     }
 
     void apply() {
         if (!_scene) return;
-        glm::vec3 eye = compute_eye();
+        scene_graph::Vec3f eye = compute_eye();
         _scene->look_at(eye, _center, _up);
     }
 };

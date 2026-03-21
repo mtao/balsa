@@ -1,15 +1,22 @@
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
-#include "balsa/visualization/vulkan/mesh_drawable.hpp"
+#include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/glm/zipper_compat.hpp"
+
 #include <algorithm>
-#include <glm/gtc/matrix_transform.hpp>
 #include <spdlog/spdlog.h>
 
 namespace balsa::visualization::vulkan {
 
 // ── Constructor / Destructor ─────────────────────────────────────────
 
-MeshScene::MeshScene() = default;
+MeshScene::MeshScene()
+  : _scene_root("Root") {
+    // Create a camera Object as a child of the root.
+    auto &cam_obj = _scene_root.add_child("Camera");
+    _camera_object = &cam_obj;
+    _camera = &cam_obj.emplace_feature<scene_graph::Camera>();
+}
 
 MeshScene::~MeshScene() {
     release_vulkan_resources();
@@ -24,109 +31,148 @@ void MeshScene::initialize(Film &film) {
     _pipeline_manager.init(film);
     _initialized = true;
 
-    // Init any drawables that were added before initialize() was called.
-    for (auto &d : _drawables) {
-        if (d && !d->is_initialized()) {
-            d->init(film, _pipeline_manager);
+    // Init any VulkanMeshDrawables that were added before initialize().
+    for (auto *drawable : _drawable_group) {
+        auto *vmd = dynamic_cast<VulkanMeshDrawable *>(drawable);
+        if (vmd && !vmd->is_initialized()) {
+            vmd->init(film);
         }
     }
 
-    spdlog::info("MeshScene initialized with {} drawable(s)", _drawables.size());
+    spdlog::info("MeshScene initialized with {} drawable(s)", _drawable_group.size());
 }
 
 void MeshScene::draw(Film &film) {
     if (!_initialized) return;
 
-    for (auto &d : _drawables) {
-        if (!d || !d->visible) continue;
-        d->update_ubos(_view, _projection);
-        d->draw(film, _pipeline_manager);
+    for (auto *drawable : _drawable_group) {
+        auto *vmd = dynamic_cast<VulkanMeshDrawable *>(drawable);
+        if (!vmd) continue;
+        vmd->draw(*_camera, film);
     }
 }
 
 void MeshScene::release_vulkan_resources() {
     if (!_initialized) return;
 
-    spdlog::debug("MeshScene: releasing Vulkan resources ({} drawables)", _drawables.size());
+    spdlog::debug("MeshScene: releasing Vulkan resources ({} drawables)", _drawable_group.size());
 
-    // Release drawables first (they reference pipeline manager's descriptor pool).
-    for (auto &d : _drawables) {
-        if (d) d->release();
+    // Release all VulkanMeshDrawables first (they reference pipeline
+    // manager's descriptor pool).
+    for (auto *drawable : _drawable_group) {
+        auto *vmd = dynamic_cast<VulkanMeshDrawable *>(drawable);
+        if (vmd) vmd->release();
     }
 
-    // Then release the pipeline manager (destroys pool, layouts, cached pipelines).
+    // Then release the pipeline manager (destroys pool, layouts, cached
+    // pipelines).
     _pipeline_manager.release();
 
     _film = nullptr;
     _initialized = false;
 }
 
-// ── Drawable management ──────────────────────────────────────────────
+// ── Mesh management ──────────────────────────────────────────────────
 
-MeshDrawable *MeshScene::add_drawable(std::unique_ptr<MeshDrawable> drawable) {
-    if (!drawable) return nullptr;
-
-    MeshDrawable *ptr = drawable.get();
+scene_graph::Object &MeshScene::add_mesh(const std::string &name) {
+    auto &obj = _scene_root.add_child(name);
+    obj.emplace_feature<scene_graph::MeshData>();
+    auto &vmd = obj.emplace_feature<VulkanMeshDrawable>(
+      _drawable_group, _pipeline_manager);
 
     // If the scene is already initialized, init the drawable now.
-    if (_initialized && _film && !ptr->is_initialized()) {
-        ptr->init(*_film, _pipeline_manager);
+    if (_initialized && _film) {
+        vmd.init(*_film);
     }
 
-    _drawables.push_back(std::move(drawable));
-    return ptr;
+    return obj;
 }
 
-MeshDrawable *MeshScene::add_drawable(const std::string &name) {
-    auto d = std::make_unique<MeshDrawable>();
-    d->name = name;
-    return add_drawable(std::move(d));
-}
+bool MeshScene::remove_mesh(const scene_graph::Object *obj) {
+    if (!obj) return false;
 
-bool MeshScene::remove_drawable(const MeshDrawable *drawable) {
-    auto it = std::find_if(_drawables.begin(), _drawables.end(), [drawable](const auto &p) { return p.get() == drawable; });
-    if (it == _drawables.end()) return false;
+    auto &children = _scene_root.children();
+    auto it = std::find_if(children.begin(), children.end(), [obj](const auto &p) { return p.get() == obj; });
+    if (it == children.end()) return false;
 
-    if (*it) (*it)->release();
-    _drawables.erase(it);
+    // Release GPU resources before removing from scene graph.
+    auto *vmd = (*it)->find_feature<VulkanMeshDrawable>();
+    if (vmd) vmd->release();
+
+    // Remove from the scene graph.  The Object's destructor will
+    // unregister its VulkanMeshDrawable from the DrawableGroup.
+    // We need to use detach via the object itself.
+    // Since children are owned by root, we need to remove from root's
+    // children list.  Object doesn't expose erase-by-iterator, so
+    // we use detach() on the child itself.
+    auto *mutable_obj = const_cast<scene_graph::Object *>(obj);
+    auto detached = mutable_obj->detach();
+    // detached goes out of scope and is destroyed.
+
     return true;
 }
 
-bool MeshScene::remove_drawable(std::size_t index) {
-    if (index >= _drawables.size()) return false;
-
-    if (_drawables[index]) _drawables[index]->release();
-    _drawables.erase(_drawables.begin() + static_cast<std::ptrdiff_t>(index));
-    return true;
+std::size_t MeshScene::mesh_count() const {
+    std::size_t count = 0;
+    for (auto &child : _scene_root.children()) {
+        if (child->find_feature<scene_graph::MeshData>()) {
+            ++count;
+        }
+    }
+    return count;
 }
 
-MeshDrawable *MeshScene::drawable(std::size_t index) {
-    return index < _drawables.size() ? _drawables[index].get() : nullptr;
+scene_graph::Object *MeshScene::mesh_object(std::size_t index) {
+    std::size_t count = 0;
+    for (auto &child : _scene_root.children()) {
+        if (child->find_feature<scene_graph::MeshData>()) {
+            if (count == index) return child.get();
+            ++count;
+        }
+    }
+    return nullptr;
 }
 
-const MeshDrawable *MeshScene::drawable(std::size_t index) const {
-    return index < _drawables.size() ? _drawables[index].get() : nullptr;
+const scene_graph::Object *MeshScene::mesh_object(std::size_t index) const {
+    std::size_t count = 0;
+    for (auto &child : _scene_root.children()) {
+        if (child->find_feature<scene_graph::MeshData>()) {
+            if (count == index) return child.get();
+            ++count;
+        }
+    }
+    return nullptr;
 }
 
 // ── Camera helpers ───────────────────────────────────────────────────
 
-void MeshScene::look_at(const glm::vec3 &eye, const glm::vec3 &center, const glm::vec3 &up) {
-    _view = glm::lookAt(eye, center, up);
+void MeshScene::look_at(const scene_graph::Vec3f &eye,
+                        const scene_graph::Vec3f &center,
+                        const scene_graph::Vec3f &up) {
+    // The Camera derives view_matrix as inverse(world_transform).
+    // lookAt() returns a view matrix, so we set the camera Object's
+    // local transform to the *inverse* of the lookAt result, which
+    // is the camera's world-space pose.
+    //
+    // However, since the camera is a direct child of root (which has
+    // identity transform), local_transform == world_transform.  So:
+    //   view = lookAt(eye, center, up)
+    //   camera.local_transform = inverse(view)
+    //
+    // But Camera::view_matrix() already returns inverse(world_transform),
+    // so setting local_transform = inverse(lookAt(...)) gives us
+    // view_matrix() == lookAt(...).  That's correct.
+    auto view = glm_compat::look_at(eye, center, up);
+    auto cam_pose = glm_compat::inverse(view);
+    _camera_object->set_local_transform(cam_pose);
 }
 
 void MeshScene::set_perspective(float fov_y, float aspect, float near, float far) {
-    _fov_y = fov_y;
-    _near = near;
-    _far = far;
-    _projection = glm::perspective(fov_y, aspect, near, far);
-
-    // Vulkan clip space has Y inverted compared to OpenGL.
-    _projection[1][1] *= -1.0f;
+    _camera->set_perspective(fov_y, aspect, near, far);
 }
 
 void MeshScene::update_aspect(float aspect) {
-    _projection = glm::perspective(_fov_y, aspect, _near, _far);
-    _projection[1][1] *= -1.0f;
+    _camera->update_aspect(aspect);
 }
 
 }// namespace balsa::visualization::vulkan

@@ -5,21 +5,18 @@
 #include <memory>
 #include <limits>
 #include <vulkan/vulkan_core.h>
-#include "balsa/scene_graph/camera.hpp"
+#include "balsa/scene_graph/Camera.hpp"
 #include "scene_base.hpp"
 
 namespace balsa {
 namespace visualization::vulkan {
 
     class Film;
-    class DrawableGroup;
 
-    template<scene_graph::concepts::abstract_transformation TransformationType>
+    // Scene that knows about the scene graph Camera.
+    // Subclasses override draw(Film&) to render.
     class Scene : public SceneBase {
       public:
-        using embedding_traits = typename TransformationType::embedding_traits;
-        using camera_type = scene_graph::Camera<TransformationType>;
-        virtual void draw([[maybe_unused]] const camera_type &cam, Film &film) { return draw(film); }
         virtual void draw(Film &film) = 0;
         virtual ~Scene() = default;
     };

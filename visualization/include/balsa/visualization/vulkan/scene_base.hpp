@@ -5,7 +5,8 @@
 #include <memory>
 #include <limits>
 #include <vulkan/vulkan_core.h>
-#include "balsa/scene_graph/camera.hpp"
+// Forward declaration — SceneBase does not use Camera directly.
+// Subclasses that need Camera should include <balsa/scene_graph/Camera.hpp>.
 
 namespace balsa {
 namespace visualization::vulkan {

@@ -1,7 +1,9 @@
 #include "balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
-#include "balsa/visualization/vulkan/mesh_drawable.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/scene_graph/Object.hpp"
+#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/glm/zipper_compat.hpp"
 
 #include <imgui.h>
 #include <algorithm>
@@ -269,24 +271,24 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
     if (!state.show_scene_panel) return false;
 
     if (ImGui::Begin("Scene", &state.show_scene_panel)) {
-        ImGui::Text("Drawables: %zu", scene.drawable_count());
+        ImGui::Text("Meshes: %zu", scene.mesh_count());
         ImGui::Separator();
 
-        for (std::size_t i = 0; i < scene.drawable_count(); ++i) {
-            auto *d = scene.drawable(i);
-            if (!d) continue;
+        for (std::size_t i = 0; i < scene.mesh_count(); ++i) {
+            auto *obj = scene.mesh_object(i);
+            if (!obj) continue;
 
             ImGui::PushID(static_cast<int>(i));
 
             // Visibility toggle
-            if (ImGui::Checkbox("##vis", &d->visible)) {
+            if (ImGui::Checkbox("##vis", &obj->visible)) {
                 changed = true;
             }
             ImGui::SameLine();
 
             // Selectable name
             bool is_selected = (state.selected_drawable == static_cast<int>(i));
-            if (ImGui::Selectable(d->name.c_str(), is_selected)) {
+            if (ImGui::Selectable(obj->name.c_str(), is_selected)) {
                 state.selected_drawable = static_cast<int>(i);
             }
 
@@ -302,13 +304,13 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
 
         // Add/remove buttons
         if (ImGui::Button("Add Mesh")) {
-            scene.add_drawable("New Mesh");
+            scene.add_mesh("New Mesh");
             changed = true;
         }
         ImGui::SameLine();
-        if (state.selected_drawable >= 0 && state.selected_drawable < static_cast<int>(scene.drawable_count())) {
+        if (state.selected_drawable >= 0 && state.selected_drawable < static_cast<int>(scene.mesh_count())) {
             if (ImGui::Button("Remove Selected")) {
-                scene.remove_drawable(static_cast<std::size_t>(state.selected_drawable));
+                scene.remove_mesh(scene.mesh_object(static_cast<std::size_t>(state.selected_drawable)));
                 state.selected_drawable = -1;
                 changed = true;
             }
@@ -327,74 +329,87 @@ bool draw_property_panel(MeshScene &scene, MeshPanelState &state) {
     if (!state.show_property_panel) return false;
 
     if (ImGui::Begin("Properties", &state.show_property_panel)) {
-        if (state.selected_drawable < 0 || state.selected_drawable >= static_cast<int>(scene.drawable_count())) {
+        if (state.selected_drawable < 0 || state.selected_drawable >= static_cast<int>(scene.mesh_count())) {
             ImGui::TextDisabled("No object selected");
             ImGui::End();
             return false;
         }
 
-        auto *d = scene.drawable(static_cast<std::size_t>(state.selected_drawable));
-        if (!d) {
+        auto *obj = scene.mesh_object(static_cast<std::size_t>(state.selected_drawable));
+        if (!obj) {
             ImGui::TextDisabled("Invalid selection");
             ImGui::End();
             return false;
         }
 
+        auto *mesh_data = obj->find_feature<scene_graph::MeshData>();
+
         // ── Object info ─────────────────────────────────────────────
         if (ImGui::CollapsingHeader("Object", ImGuiTreeNodeFlags_DefaultOpen)) {
             // Editable name
             char name_buf[128];
-            std::strncpy(name_buf, d->name.c_str(), sizeof(name_buf) - 1);
+            std::strncpy(name_buf, obj->name.c_str(), sizeof(name_buf) - 1);
             name_buf[sizeof(name_buf) - 1] = '\0';
             if (ImGui::InputText("Name", name_buf, sizeof(name_buf))) {
-                d->name = name_buf;
+                obj->name = name_buf;
             }
 
-            ImGui::Checkbox("Visible", &d->visible);
+            ImGui::Checkbox("Visible", &obj->visible);
 
-            // Mesh info
-            const auto &buf = d->buffers();
-            ImGui::Text("Vertices: %u", buf.vertex_count());
-            ImGui::Text("Triangles: %u", buf.triangle_count());
-            ImGui::Text("Edges: %u", buf.edge_count());
+            // Mesh info (from MeshData)
+            if (mesh_data) {
+                ImGui::Text("Vertices: %zu", mesh_data->vertex_count());
+                ImGui::Text("Triangles: %zu", mesh_data->triangle_count());
+                ImGui::Text("Edges: %zu", mesh_data->edge_count());
 
-            ImGui::TextDisabled("Attributes:");
-            ImGui::SameLine();
-            if (buf.has_normals()) {
+                ImGui::TextDisabled("Attributes:");
                 ImGui::SameLine();
-                ImGui::Text("N");
-            }
-            if (buf.has_colors()) {
-                ImGui::SameLine();
-                ImGui::Text("C");
-            }
-            if (buf.has_scalars()) {
-                ImGui::SameLine();
-                ImGui::Text("S");
+                if (mesh_data->has_normals()) {
+                    ImGui::SameLine();
+                    ImGui::Text("N");
+                }
+                if (mesh_data->has_vertex_colors()) {
+                    ImGui::SameLine();
+                    ImGui::Text("C");
+                }
+                if (mesh_data->has_scalar_field()) {
+                    ImGui::SameLine();
+                    ImGui::Text("S");
+                }
+            } else {
+                ImGui::TextDisabled("No MeshData");
             }
         }
 
         // ── Transform ───────────────────────────────────────────────
         if (ImGui::CollapsingHeader("Transform")) {
-            // Display model matrix as translation/scale for simple editing.
-            // Full matrix editing is complex; for now expose the raw mat4.
-            float *m = &d->model_matrix[0][0];
+            // Display local transform matrix for editing.
+            // We need to get a mutable copy, edit, then set back.
+            auto transform = obj->local_transform();
+            auto span = transform.expression().as_std_span();
+            float *m = span.data();
             bool t_changed = false;
-            t_changed |= ImGui::DragFloat4("Row 0", m + 0, 0.01f);
-            t_changed |= ImGui::DragFloat4("Row 1", m + 4, 0.01f);
-            t_changed |= ImGui::DragFloat4("Row 2", m + 8, 0.01f);
-            t_changed |= ImGui::DragFloat4("Row 3", m + 12, 0.01f);
-            if (t_changed) changed = true;
+            // Column-major: columns are contiguous, display as columns
+            t_changed |= ImGui::DragFloat4("Col 0", m + 0, 0.01f);
+            t_changed |= ImGui::DragFloat4("Col 1", m + 4, 0.01f);
+            t_changed |= ImGui::DragFloat4("Col 2", m + 8, 0.01f);
+            t_changed |= ImGui::DragFloat4("Col 3", m + 12, 0.01f);
+            if (t_changed) {
+                obj->set_local_transform(transform);
+                changed = true;
+            }
 
             if (ImGui::Button("Reset Transform")) {
-                d->model_matrix = glm::mat4(1.0f);
+                obj->set_local_transform(glm_compat::identity4f());
                 changed = true;
             }
         }
 
         // ── Render State ────────────────────────────────────────────
-        if (ImGui::CollapsingHeader("Render State", ImGuiTreeNodeFlags_DefaultOpen)) {
-            changed |= draw_render_state_controls(d->render_state);
+        if (mesh_data) {
+            if (ImGui::CollapsingHeader("Render State", ImGuiTreeNodeFlags_DefaultOpen)) {
+                changed |= draw_render_state_controls(mesh_data->render_state());
+            }
         }
     }
     ImGui::End();

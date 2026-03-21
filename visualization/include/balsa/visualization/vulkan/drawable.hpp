@@ -1,26 +1,26 @@
 #if !defined(BALSA_VISUALIZATION_VULKAN_DRAWABLE_HPP)
 #define BALSA_VISUALIZATION_VULKAN_DRAWABLE_HPP
 
-#include "balsa/scene_graph/abstract_feature.hpp"
-#include "balsa/scene_graph/abstract_transformation.hpp"
-#include "balsa/scene_graph/camera.hpp"
+#include "balsa/scene_graph/Drawable.hpp"
+#include "balsa/scene_graph/Camera.hpp"
 
 namespace balsa::visualization::vulkan {
+
 class Film;
-template<scene_graph::concepts::abstract_transformation TransformationType>
-class Drawable : public scene_graph::AbstractFeature<typename TransformationType::embedding_traits> {
 
+// ── VulkanDrawable ──────────────────────────────────────────────────
+//
+// A scene_graph::Drawable that additionally knows how to issue
+// Vulkan draw commands.  Subclasses implement draw() to record
+// commands into the Film's current command buffer.
+
+class VulkanDrawable : public scene_graph::Drawable {
   public:
-    using embedding_traits = typename TransformationType::embedding_traits;
-    using camera_type = scene_graph::Camera<TransformationType>;
-    using abstract_feature_type = scene_graph::AbstractFeature<embedding_traits>;
-    using abstract_object_type = scene_graph::AbstractObject<embedding_traits>;
+    using scene_graph::Drawable::Drawable;// inherit ctor
 
-  private:
-    virtual ~Drawable() {}
-    // Drawable(const Object::Ptr& obj, const Shader::Ptr& shader);
-    virtual void draw(const camera_type &cam, Film &film) = 0;
+    virtual void draw(const scene_graph::Camera &cam, Film &film) = 0;
 };
+
 }// namespace balsa::visualization::vulkan
 
 #endif

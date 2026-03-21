@@ -17,9 +17,13 @@ class QStackedWidget;
 
 namespace balsa::visualization::vulkan {
 class MeshScene;
-class MeshDrawable;
 struct MeshRenderState;
 }// namespace balsa::visualization::vulkan
+
+namespace balsa::scene_graph {
+class Object;
+class MeshData;
+}// namespace balsa::scene_graph
 
 namespace balsa::visualization::qt {
 
@@ -110,8 +114,11 @@ class MeshControlsWidget : public QWidget {
     void sync_from_state();
     void sync_color_group_visibility();
 
-    // Helper: get the currently-selected drawable, or nullptr.
-    ::balsa::visualization::vulkan::MeshDrawable *selected_drawable();
+    // Helper: get the currently-selected mesh Object, or nullptr.
+    ::balsa::scene_graph::Object *selected_object();
+
+    // Helper: get the MeshData feature from the selected Object, or nullptr.
+    ::balsa::scene_graph::MeshData *selected_mesh_data();
 
     // ── State ────────────────────────────────────────────────────────
     ::balsa::visualization::vulkan::MeshScene *_scene = nullptr;

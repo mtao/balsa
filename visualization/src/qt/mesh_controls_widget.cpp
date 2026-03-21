@@ -1,7 +1,9 @@
 #include "balsa/visualization/qt/mesh_controls_widget.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
-#include "balsa/visualization/vulkan/mesh_drawable.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/scene_graph/Object.hpp"
+#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/glm/zipper_compat.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -182,15 +184,15 @@ void MeshControlsWidget::set_scene(::balsa::visualization::vulkan::MeshScene *sc
 }
 
 void MeshControlsWidget::refresh() {
-    // Rebuild drawable list
+    // Rebuild mesh object list
     {
         QSignalBlocker block(_drawable_list);
         _drawable_list->clear();
         if (_scene) {
-            for (std::size_t i = 0; i < _scene->drawable_count(); ++i) {
-                auto *d = _scene->drawable(i);
-                if (d) {
-                    _drawable_list->addItem(QString::fromStdString(d->name));
+            for (std::size_t i = 0; i < _scene->mesh_count(); ++i) {
+                auto *obj = _scene->mesh_object(i);
+                if (obj) {
+                    _drawable_list->addItem(QString::fromStdString(obj->name));
                 }
             }
         }
@@ -526,33 +528,37 @@ void MeshControlsWidget::build_points_group(QWidget *parent) {
     connect(_point_size_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_point_size_changed);
 }
 
-// ── selected_drawable ────────────────────────────────────────────────
+// ── selected_object / selected_mesh_data ─────────────────────────────
 
-::balsa::visualization::vulkan::MeshDrawable *MeshControlsWidget::selected_drawable() {
+::balsa::scene_graph::Object *MeshControlsWidget::selected_object() {
     if (!_scene) return nullptr;
     int row = _drawable_list->currentRow();
-    if (row < 0 || row >= static_cast<int>(_scene->drawable_count())) return nullptr;
-    return _scene->drawable(static_cast<std::size_t>(row));
+    if (row < 0 || row >= static_cast<int>(_scene->mesh_count())) return nullptr;
+    return _scene->mesh_object(static_cast<std::size_t>(row));
+}
+
+::balsa::scene_graph::MeshData *MeshControlsWidget::selected_mesh_data() {
+    auto *obj = selected_object();
+    if (!obj) return nullptr;
+    return obj->find_feature<::balsa::scene_graph::MeshData>();
 }
 
 // ── sync_from_state ──────────────────────────────────────────────────
 
 void MeshControlsWidget::sync_from_state() {
-    auto *d = selected_drawable();
-    bool have_selection = (d != nullptr);
+    auto *obj = selected_object();
+    auto *mesh_data = selected_mesh_data();
+    bool have_selection = (obj != nullptr);
 
     _object_group->setEnabled(have_selection);
-    _render_state_group->setEnabled(have_selection);
-    _color_group->setEnabled(have_selection);
-    _lighting_group->setEnabled(have_selection);
-    _wireframe_group->setEnabled(have_selection);
-    _points_group->setEnabled(have_selection);
+    _render_state_group->setEnabled(have_selection && mesh_data != nullptr);
+    _color_group->setEnabled(have_selection && mesh_data != nullptr);
+    _lighting_group->setEnabled(have_selection && mesh_data != nullptr);
+    _wireframe_group->setEnabled(have_selection && mesh_data != nullptr);
+    _points_group->setEnabled(have_selection && mesh_data != nullptr);
     _remove_button->setEnabled(have_selection);
 
-    if (!d) return;
-
-    const auto &s = d->render_state;
-    const auto &buf = d->buffers();
+    if (!obj) return;
 
     // Block signals to avoid feedback loops
     QSignalBlocker b1(_name_edit);
@@ -576,74 +582,84 @@ void MeshControlsWidget::sync_from_state() {
     QSignalBlocker b19(_point_size_slider);
 
     // Object info
-    _name_edit->setText(QString::fromStdString(d->name));
-    _visible_check->setChecked(d->visible);
-    _vertex_count_label->setText(QStringLiteral("Vertices: %1").arg(buf.vertex_count()));
-    _triangle_count_label->setText(QStringLiteral("Triangles: %1").arg(buf.triangle_count()));
-    _edge_count_label->setText(QStringLiteral("Edges: %1").arg(buf.edge_count()));
+    _name_edit->setText(QString::fromStdString(obj->name));
+    _visible_check->setChecked(obj->visible);
 
-    QString attrs;
-    if (buf.has_normals()) attrs += "N ";
-    if (buf.has_colors()) attrs += "C ";
-    if (buf.has_scalars()) attrs += "S ";
-    _attribute_label->setText(QStringLiteral("Attributes: %1").arg(attrs.isEmpty() ? "-" : attrs.trimmed()));
+    if (mesh_data) {
+        _vertex_count_label->setText(QStringLiteral("Vertices: %1").arg(static_cast<quint64>(mesh_data->vertex_count())));
+        _triangle_count_label->setText(QStringLiteral("Triangles: %1").arg(static_cast<quint64>(mesh_data->triangle_count())));
+        _edge_count_label->setText(QStringLiteral("Edges: %1").arg(static_cast<quint64>(mesh_data->edge_count())));
 
-    // Render state
-    _shading_combo->setCurrentIndex(static_cast<int>(s.shading));
-    _render_mode_combo->setCurrentIndex(static_cast<int>(s.render_mode));
-    _normal_source_combo->setCurrentIndex(static_cast<int>(s.normal_source));
-    _two_sided_check->setChecked(s.two_sided);
+        QString attrs;
+        if (mesh_data->has_normals()) attrs += "N ";
+        if (mesh_data->has_vertex_colors()) attrs += "C ";
+        if (mesh_data->has_scalar_field()) attrs += "S ";
+        _attribute_label->setText(QStringLiteral("Attributes: %1").arg(attrs.isEmpty() ? "-" : attrs.trimmed()));
 
-    // Color
-    _color_source_combo->setCurrentIndex(static_cast<int>(s.color_source));
-    set_button_color(_uniform_color_button,
-                     s.uniform_color[0],
-                     s.uniform_color[1],
-                     s.uniform_color[2],
-                     s.uniform_color[3]);
+        const auto &s = mesh_data->render_state();
 
-    int cmap_idx = find_colormap_index(s.colormap_name);
-    if (cmap_idx >= 0) {
-        _colormap_combo->setCurrentIndex(cmap_idx);
+        // Render state
+        _shading_combo->setCurrentIndex(static_cast<int>(s.shading));
+        _render_mode_combo->setCurrentIndex(static_cast<int>(s.render_mode));
+        _normal_source_combo->setCurrentIndex(static_cast<int>(s.normal_source));
+        _two_sided_check->setChecked(s.two_sided);
+
+        // Color
+        _color_source_combo->setCurrentIndex(static_cast<int>(s.color_source));
+        set_button_color(_uniform_color_button,
+                         s.uniform_color[0],
+                         s.uniform_color[1],
+                         s.uniform_color[2],
+                         s.uniform_color[3]);
+
+        int cmap_idx = find_colormap_index(s.colormap_name);
+        if (cmap_idx >= 0) {
+            _colormap_combo->setCurrentIndex(cmap_idx);
+        }
+        _colormap_custom_edit->setText(QString::fromStdString(s.colormap_name));
+        _scalar_min_spin->setValue(static_cast<double>(s.scalar_min));
+        _scalar_max_spin->setValue(static_cast<double>(s.scalar_max));
+
+        sync_color_group_visibility();
+
+        // Lighting
+        _light_x_spin->setValue(static_cast<double>(s.light_dir[0]));
+        _light_y_spin->setValue(static_cast<double>(s.light_dir[1]));
+        _light_z_spin->setValue(static_cast<double>(s.light_dir[2]));
+        _ambient_slider->setValue(static_cast<int>(s.ambient_strength * 100.0f));
+        _specular_slider->setValue(static_cast<int>(s.specular_strength * 100.0f));
+        _shininess_slider->setValue(static_cast<int>(s.shininess));
+        _ambient_label->setText(QStringLiteral("Ambient: %1").arg(s.ambient_strength, 0, 'f', 2));
+        _specular_label->setText(QStringLiteral("Specular: %1").arg(s.specular_strength, 0, 'f', 2));
+        _shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(s.shininess)));
+
+        // Wireframe
+        set_button_color(_wireframe_color_button,
+                         s.wireframe_color[0],
+                         s.wireframe_color[1],
+                         s.wireframe_color[2],
+                         s.wireframe_color[3]);
+        _wireframe_width_slider->setValue(static_cast<int>(s.wireframe_width * 10.0f));
+
+        // Points
+        _point_size_slider->setValue(static_cast<int>(s.point_size * 10.0f));
+
+        // Show/hide wireframe and points groups based on render mode
+        _wireframe_group->setVisible(
+          s.render_mode == vulkan::RenderMode::Wireframe || s.render_mode == vulkan::RenderMode::SolidWireframe);
+        _points_group->setVisible(s.render_mode == vulkan::RenderMode::Points);
+    } else {
+        _vertex_count_label->setText("Vertices: -");
+        _triangle_count_label->setText("Triangles: -");
+        _edge_count_label->setText("Edges: -");
+        _attribute_label->setText("Attributes: -");
     }
-    _colormap_custom_edit->setText(QString::fromStdString(s.colormap_name));
-    _scalar_min_spin->setValue(static_cast<double>(s.scalar_min));
-    _scalar_max_spin->setValue(static_cast<double>(s.scalar_max));
-
-    sync_color_group_visibility();
-
-    // Lighting
-    _light_x_spin->setValue(static_cast<double>(s.light_dir[0]));
-    _light_y_spin->setValue(static_cast<double>(s.light_dir[1]));
-    _light_z_spin->setValue(static_cast<double>(s.light_dir[2]));
-    _ambient_slider->setValue(static_cast<int>(s.ambient_strength * 100.0f));
-    _specular_slider->setValue(static_cast<int>(s.specular_strength * 100.0f));
-    _shininess_slider->setValue(static_cast<int>(s.shininess));
-    _ambient_label->setText(QStringLiteral("Ambient: %1").arg(s.ambient_strength, 0, 'f', 2));
-    _specular_label->setText(QStringLiteral("Specular: %1").arg(s.specular_strength, 0, 'f', 2));
-    _shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(s.shininess)));
-
-    // Wireframe
-    set_button_color(_wireframe_color_button,
-                     s.wireframe_color[0],
-                     s.wireframe_color[1],
-                     s.wireframe_color[2],
-                     s.wireframe_color[3]);
-    _wireframe_width_slider->setValue(static_cast<int>(s.wireframe_width * 10.0f));
-
-    // Points
-    _point_size_slider->setValue(static_cast<int>(s.point_size * 10.0f));
-
-    // Show/hide wireframe and points groups based on render mode
-    _wireframe_group->setVisible(
-      s.render_mode == vulkan::RenderMode::Wireframe || s.render_mode == vulkan::RenderMode::SolidWireframe);
-    _points_group->setVisible(s.render_mode == vulkan::RenderMode::Points);
 }
 
 void MeshControlsWidget::sync_color_group_visibility() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    auto src = d->render_state.color_source;
+    auto *mesh_data = selected_mesh_data();
+    if (!mesh_data) return;
+    auto src = mesh_data->render_state().color_source;
     _uniform_color_container->setVisible(src == vulkan::ColorSource::Uniform);
     _scalar_field_container->setVisible(src == vulkan::ColorSource::ScalarField);
 }
@@ -656,7 +672,7 @@ void MeshControlsWidget::on_drawable_selected(int /*row*/) {
 
 void MeshControlsWidget::on_add_drawable() {
     if (!_scene) return;
-    _scene->add_drawable("New Mesh");
+    _scene->add_mesh("New Mesh");
     refresh();
     emit scene_changed();
 }
@@ -665,66 +681,69 @@ void MeshControlsWidget::on_remove_drawable() {
     if (!_scene) return;
     int row = _drawable_list->currentRow();
     if (row < 0) return;
-    _scene->remove_drawable(static_cast<std::size_t>(row));
+    auto *obj = _scene->mesh_object(static_cast<std::size_t>(row));
+    if (obj) {
+        _scene->remove_mesh(obj);
+    }
     refresh();
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_visibility_changed(bool checked) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->visible = checked;
+    auto *obj = selected_object();
+    if (!obj) return;
+    obj->visible = checked;
     emit scene_changed();
 }
 
 // ── Render state slots ───────────────────────────────────────────────
 
 void MeshControlsWidget::on_shading_changed(int index) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.shading = static_cast<vulkan::ShadingModel>(index);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().shading = static_cast<vulkan::ShadingModel>(index);
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_render_mode_changed(int index) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.render_mode = static_cast<vulkan::RenderMode>(index);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().render_mode = static_cast<vulkan::RenderMode>(index);
     // Update group visibility
     _wireframe_group->setVisible(
-      d->render_state.render_mode == vulkan::RenderMode::Wireframe || d->render_state.render_mode == vulkan::RenderMode::SolidWireframe);
-    _points_group->setVisible(d->render_state.render_mode == vulkan::RenderMode::Points);
+      md->render_state().render_mode == vulkan::RenderMode::Wireframe || md->render_state().render_mode == vulkan::RenderMode::SolidWireframe);
+    _points_group->setVisible(md->render_state().render_mode == vulkan::RenderMode::Points);
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_color_source_changed(int index) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.color_source = static_cast<vulkan::ColorSource>(index);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().color_source = static_cast<vulkan::ColorSource>(index);
     sync_color_group_visibility();
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_normal_source_changed(int index) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.normal_source = static_cast<vulkan::NormalSource>(index);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().normal_source = static_cast<vulkan::NormalSource>(index);
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_two_sided_changed(bool checked) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.two_sided = checked;
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().two_sided = checked;
     emit scene_changed();
 }
 
 // ── Color slots ──────────────────────────────────────────────────────
 
 void MeshControlsWidget::on_uniform_color_clicked() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    auto &uc = d->render_state.uniform_color;
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    auto &uc = md->render_state().uniform_color;
     QColor initial = QColor::fromRgbF(uc[0], uc[1], uc[2], uc[3]);
     QColor chosen = QColorDialog::getColor(initial, this, "Uniform Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
@@ -738,22 +757,22 @@ void MeshControlsWidget::on_uniform_color_clicked() {
 }
 
 void MeshControlsWidget::on_colormap_changed(int index) {
-    auto *d = selected_drawable();
-    if (!d || index < 0 || index >= k_colormap_count) return;
-    d->render_state.colormap_name = k_colormap_names[index];
+    auto *md = selected_mesh_data();
+    if (!md || index < 0 || index >= k_colormap_count) return;
+    md->render_state().colormap_name = k_colormap_names[index];
     {
         QSignalBlocker block(_colormap_custom_edit);
-        _colormap_custom_edit->setText(QString::fromStdString(d->render_state.colormap_name));
+        _colormap_custom_edit->setText(QString::fromStdString(md->render_state().colormap_name));
     }
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_colormap_custom_edited() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.colormap_name = _colormap_custom_edit->text().toStdString();
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().colormap_name = _colormap_custom_edit->text().toStdString();
     // Try to sync the combo to match
-    int idx = find_colormap_index(d->render_state.colormap_name);
+    int idx = find_colormap_index(md->render_state().colormap_name);
     if (idx >= 0) {
         QSignalBlocker block(_colormap_combo);
         _colormap_combo->setCurrentIndex(idx);
@@ -762,24 +781,24 @@ void MeshControlsWidget::on_colormap_custom_edited() {
 }
 
 void MeshControlsWidget::on_scalar_min_changed(double value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.scalar_min = static_cast<float>(value);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().scalar_min = static_cast<float>(value);
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_scalar_max_changed(double value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.scalar_max = static_cast<float>(value);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().scalar_max = static_cast<float>(value);
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_scalar_range_reset() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.scalar_min = 0.0f;
-    d->render_state.scalar_max = 1.0f;
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().scalar_min = 0.0f;
+    md->render_state().scalar_max = 1.0f;
     {
         QSignalBlocker b1(_scalar_min_spin);
         QSignalBlocker b2(_scalar_max_spin);
@@ -792,34 +811,34 @@ void MeshControlsWidget::on_scalar_range_reset() {
 // ── Lighting slots ───────────────────────────────────────────────────
 
 void MeshControlsWidget::on_light_dir_changed() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.light_dir[0] = static_cast<float>(_light_x_spin->value());
-    d->render_state.light_dir[1] = static_cast<float>(_light_y_spin->value());
-    d->render_state.light_dir[2] = static_cast<float>(_light_z_spin->value());
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().light_dir[0] = static_cast<float>(_light_x_spin->value());
+    md->render_state().light_dir[1] = static_cast<float>(_light_y_spin->value());
+    md->render_state().light_dir[2] = static_cast<float>(_light_z_spin->value());
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_ambient_changed(int value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.ambient_strength = static_cast<float>(value) / 100.0f;
-    _ambient_label->setText(QStringLiteral("Ambient: %1").arg(d->render_state.ambient_strength, 0, 'f', 2));
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().ambient_strength = static_cast<float>(value) / 100.0f;
+    _ambient_label->setText(QStringLiteral("Ambient: %1").arg(md->render_state().ambient_strength, 0, 'f', 2));
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_specular_changed(int value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.specular_strength = static_cast<float>(value) / 100.0f;
-    _specular_label->setText(QStringLiteral("Specular: %1").arg(d->render_state.specular_strength, 0, 'f', 2));
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().specular_strength = static_cast<float>(value) / 100.0f;
+    _specular_label->setText(QStringLiteral("Specular: %1").arg(md->render_state().specular_strength, 0, 'f', 2));
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_shininess_changed(int value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.shininess = static_cast<float>(value);
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().shininess = static_cast<float>(value);
     _shininess_label->setText(QStringLiteral("Shininess: %1").arg(value));
     emit scene_changed();
 }
@@ -827,9 +846,9 @@ void MeshControlsWidget::on_shininess_changed(int value) {
 // ── Wireframe / Points slots ─────────────────────────────────────────
 
 void MeshControlsWidget::on_wireframe_color_clicked() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    auto &wc = d->render_state.wireframe_color;
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    auto &wc = md->render_state().wireframe_color;
     QColor initial = QColor::fromRgbF(wc[0], wc[1], wc[2], wc[3]);
     QColor chosen = QColorDialog::getColor(initial, this, "Wireframe Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
@@ -843,25 +862,25 @@ void MeshControlsWidget::on_wireframe_color_clicked() {
 }
 
 void MeshControlsWidget::on_wireframe_width_changed(int value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.wireframe_width = static_cast<float>(value) / 10.0f;
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().wireframe_width = static_cast<float>(value) / 10.0f;
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_point_size_changed(int value) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->render_state.point_size = static_cast<float>(value) / 10.0f;
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().point_size = static_cast<float>(value) / 10.0f;
     emit scene_changed();
 }
 
 // ── Object slots ─────────────────────────────────────────────────────
 
 void MeshControlsWidget::on_name_edited(const QString &text) {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->name = text.toStdString();
+    auto *obj = selected_object();
+    if (!obj) return;
+    obj->name = text.toStdString();
     // Update the list item text to match
     auto *item = _drawable_list->currentItem();
     if (item) {
@@ -871,9 +890,9 @@ void MeshControlsWidget::on_name_edited(const QString &text) {
 }
 
 void MeshControlsWidget::on_reset_transform() {
-    auto *d = selected_drawable();
-    if (!d) return;
-    d->model_matrix = glm::mat4(1.0f);
+    auto *obj = selected_object();
+    if (!obj) return;
+    obj->set_local_transform(glm_compat::identity4f());
     emit scene_changed();
 }
 

@@ -33,11 +33,11 @@
 
 #include <balsa/visualization/qt/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
-#include <balsa/visualization/vulkan/mesh_drawable.hpp>
-#include <balsa/visualization/vulkan/mesh_buffers.hpp>
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 #include <balsa/visualization/qt/mesh_controls_widget.hpp>
+#include <balsa/scene_graph/Object.hpp>
+#include <balsa/scene_graph/MeshData.hpp>
 
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/geometry/bounding_box.hpp>
@@ -78,7 +78,8 @@ class MeshViewerMainWindow : public QMainWindow {
         _vk_window->set_input_handler(_camera);
 
         // Initial projection
-        _scene->set_perspective(glm::radians(45.0f), 900.0f / 800.0f, 0.01f, 100.0f);
+        constexpr float pi = 3.14159265358979323846f;
+        _scene->set_perspective(45.0f * pi / 180.0f, 900.0f / 800.0f, 0.01f, 100.0f);
 
         // ── Create the controls dock ─────────────────────────────────
         _controls = new viz::qt::MeshControlsWidget();
@@ -176,55 +177,68 @@ class MeshViewerMainWindow : public QMainWindow {
             col = (col - center_pt) / range;
         }
 
-        auto &film = _vk_window->film();
-        auto *drawable = _scene->add_drawable(path.filename().string());
+        // Add a mesh Object to the scene graph
+        auto &mesh_obj = _scene->add_mesh(path.filename().string());
+        auto *mesh_data = mesh_obj.find_feature<balsa::scene_graph::MeshData>();
 
-        // Upload positions
+        // Convert positions from ColVectors (SOA row-major) to
+        // vector<Vec3f> (AOS)
+        std::size_t n_verts = V.extent(1);
         {
-            auto sp = V.expression().as_std_span();
-            drawable->buffers().upload_positions(
-              film,
-              std::span<const float>(sp.data(), sp.size()),
-              static_cast<uint32_t>(V.extent(1)));
+            std::vector<balsa::scene_graph::Vec3f> positions(n_verts);
+            for (std::size_t j = 0; j < n_verts; ++j) {
+                positions[j](0) = V(0, j);
+                positions[j](1) = V(1, j);
+                positions[j](2) = V(2, j);
+            }
+            mesh_data->set_positions(positions);
         }
 
-        // Upload normals if available
+        // Convert and set normals if available
         if (nrm.vertices.extent(1) == pos.vertices.extent(1)) {
-            auto sp = nrm.vertices.expression().as_std_span();
-            drawable->buffers().upload_normals(
-              film,
-              std::span<const float>(sp.data(), sp.size()));
-            drawable->render_state.normal_source = vk_viz::NormalSource::FromAttribute;
+            std::vector<balsa::scene_graph::Vec3f> normals(n_verts);
+            for (std::size_t j = 0; j < n_verts; ++j) {
+                normals[j](0) = nrm.vertices(0, j);
+                normals[j](1) = nrm.vertices(1, j);
+                normals[j](2) = nrm.vertices(2, j);
+            }
+            mesh_data->set_normals(normals);
+            mesh_data->render_state().normal_source = vk_viz::NormalSource::FromAttribute;
         } else {
-            drawable->render_state.normal_source = vk_viz::NormalSource::None;
-            drawable->render_state.shading = vk_viz::ShadingModel::Flat;
+            mesh_data->render_state().normal_source = vk_viz::NormalSource::None;
+            mesh_data->render_state().shading = vk_viz::ShadingModel::Flat;
         }
 
-        // Upload triangle indices (size_t → uint32 conversion done internally)
+        // Convert triangle indices (size_t -> uint32_t)
         if (pos.triangles.extent(1) > 0) {
-            auto sp = pos.triangles.expression().as_std_span();
-            drawable->buffers().upload_triangle_indices_from_sizet(
-              film,
-              std::span<const std::size_t>(sp.data(), sp.size()),
-              static_cast<uint32_t>(pos.triangles.extent(1)));
+            std::size_t n_tris = pos.triangles.extent(1);
+            std::vector<uint32_t> tri_indices(n_tris * 3);
+            for (std::size_t j = 0; j < n_tris; ++j) {
+                tri_indices[j * 3 + 0] = static_cast<uint32_t>(pos.triangles(0, j));
+                tri_indices[j * 3 + 1] = static_cast<uint32_t>(pos.triangles(1, j));
+                tri_indices[j * 3 + 2] = static_cast<uint32_t>(pos.triangles(2, j));
+            }
+            mesh_data->set_triangle_indices(tri_indices);
         }
 
-        // Upload edge indices
+        // Convert edge indices
         if (pos.edges.extent(1) > 0) {
-            auto sp = pos.edges.expression().as_std_span();
-            drawable->buffers().upload_edge_indices_from_sizet(
-              film,
-              std::span<const std::size_t>(sp.data(), sp.size()),
-              static_cast<uint32_t>(pos.edges.extent(1)));
+            std::size_t n_edges = pos.edges.extent(1);
+            std::vector<uint32_t> edge_indices(n_edges * 2);
+            for (std::size_t j = 0; j < n_edges; ++j) {
+                edge_indices[j * 2 + 0] = static_cast<uint32_t>(pos.edges(0, j));
+                edge_indices[j * 2 + 1] = static_cast<uint32_t>(pos.edges(1, j));
+            }
+            mesh_data->set_edge_indices(edge_indices);
         }
 
-        spdlog::info("  Drawable '{}' added: {} verts, {} tris, {} edges",
-                     drawable->name,
-                     drawable->buffers().vertex_count(),
-                     drawable->buffers().triangle_count(),
-                     drawable->buffers().edge_count());
+        spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
+                     mesh_obj.name,
+                     mesh_data->vertex_count(),
+                     mesh_data->triangle_count(),
+                     mesh_data->edge_count());
 
-        // Refresh the controls panel to show the new drawable
+        // Refresh the controls panel to show the new mesh
         _controls->refresh();
 
         // Request a redraw

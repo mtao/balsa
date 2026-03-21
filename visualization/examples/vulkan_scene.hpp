@@ -5,7 +5,6 @@
 #include <vulkan/vulkan.hpp>
 #include <optional>
 #include <balsa/visualization/vulkan/scene.hpp>
-#include <balsa/scene_graph/transformations/matrix_transformation.hpp>
 #include <balsa/scene_graph/embedding_traits.hpp>
 
 // A simple demo scene that renders a colormap-cycling triangle with an
@@ -38,11 +37,7 @@ class BasicImGuiScene : public balsa::visualization::vulkan::SceneBase {
     bool _show_demo_window = true;
 };
 
-class HelloTriangleScene : public balsa::visualization::vulkan::Scene<balsa::scene_graph::transformations::MatrixTransformation<balsa::scene_graph::embedding_traits3F>> {
-    using embedding_traits = balsa::scene_graph::embedding_traits3F;
-    using transformation_type = balsa::scene_graph::transformations::MatrixTransformation<embedding_traits>;
-    using scene_type = balsa::visualization::vulkan::Scene<transformation_type>;
-
+class HelloTriangleScene : public balsa::visualization::vulkan::Scene {
   public:
     HelloTriangleScene();
     ~HelloTriangleScene();

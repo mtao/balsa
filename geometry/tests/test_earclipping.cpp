@@ -28,7 +28,7 @@ TEST_CASE("earclipping_orientation", "[earclipping]") {
 
 
     auto T = balsa::geometry::triangle_mesh::earclipping(V, loop);
-    spdlog::info("{}", T);
+    // spdlog::info("{}", T);  // fmt/spdlog version mismatch prevents formatting zipper types
 
     // 0 1 2
     // 0 2 3
@@ -43,7 +43,7 @@ TEST_CASE("earclipping_orientation", "[earclipping]") {
 
     auto vols = balsa::geometry::triangle_mesh::volumes(V, T);
 
-    spdlog::info("volumes: {}", vols);
+    // spdlog::info("volumes: {}", vols);  // fmt/spdlog version mismatch prevents formatting zipper types
 
     CHECK(zipper::utils::minCoeff(vols) > 0);
     loop = { 4, 3, 2, 1, 0 };

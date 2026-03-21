@@ -50,11 +50,16 @@ visualization_sources = [
   'src/vulkan/vulkan_buffer.cpp',
   'src/vulkan/mesh_buffers.cpp',
   'src/vulkan/mesh_pipeline.cpp',
-  'src/vulkan/mesh_drawable.cpp',
   'src/vulkan/mesh_scene.cpp',
+  'src/vulkan/vulkan_mesh_drawable.cpp',
   'src/shaders/abstract_shader.cpp',
   'src/vulkan/native_film.cpp',
   'src/vulkan/window.cpp',
+  'src/scene_graph/Object.cpp',
+  'src/scene_graph/Camera.cpp',
+  'src/scene_graph/MeshData.cpp',
+  'src/scene_graph/DrawableGroup.cpp',
+  'src/glm/zipper_compat.cpp',
 ]
 
 if get_option('qt')

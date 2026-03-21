@@ -96,7 +96,8 @@ auto MainWindow::loadMesh(const QString &str) -> bool {
         auto bb = balsa::geometry::bounding_box(V);
         assert(bb.min().size() == 3);
         assert(bb.max().size() == 3);
-        spdlog::info("Input {} {} => {}", bb.min(), bb.max(), bb.range());
+        // TODO: spdlog/fmt version mismatch prevents formatting zipper types
+        // spdlog::info("Input {} {} => {}", bb.min(), bb.max(), bb.range());
 
         double r = ::zipper::utils::maxCoeff(bb.range());
 

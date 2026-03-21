@@ -3,7 +3,9 @@
 
 #include <memory>
 #include <limits>
-#include "balsa/scene_graph/camera.hpp"
+#include <string>
+#include <vector>
+// Camera is not needed by AbstractShader.
 
 namespace shaderc {
 class CompileOptions;
@@ -32,8 +34,7 @@ class AbstractShader {
     virtual std::vector<uint32_t> vert_spirv() const { return {}; }
     virtual std::vector<uint32_t> frag_spirv() const { return {}; }
 
-    static std::string read_path_to_string(const std::string& path);
-
+    static std::string read_path_to_string(const std::string &path);
 };
 }// namespace balsa::visualization::shaders
 #endif

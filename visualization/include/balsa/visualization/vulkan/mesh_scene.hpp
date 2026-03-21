@@ -4,33 +4,36 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <glm/mat4x4.hpp>
-#include <glm/vec3.hpp>
 
+#include "balsa/scene_graph/Object.hpp"
+#include "balsa/scene_graph/Camera.hpp"
+#include "balsa/scene_graph/DrawableGroup.hpp"
+#include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/visualization/vulkan/scene_base.hpp"
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 
 namespace balsa::visualization::vulkan {
 
-class MeshDrawable;
+class VulkanMeshDrawable;
 
 // ── MeshScene ────────────────────────────────────────────────────────
 //
-// SceneBase subclass that manages a collection of MeshDrawable objects
-// and a MeshPipelineManager.  Provides camera control (view/projection
-// matrices) and orchestrates the per-frame update→draw loop.
+// SceneBase subclass that uses a scene graph for camera and mesh
+// management.  Owns:
 //
-// Owns:
-//   - MeshPipelineManager (shared by all drawables for descriptor sets
-//     and pipeline caching)
-//   - vector<unique_ptr<MeshDrawable>> (the drawable list)
-//   - View and projection matrices
+//   - A root scene_graph::Object (the scene graph root)
+//   - A camera Object (child of root) with a Camera feature
+//   - A DrawableGroup (flat registry of all VulkanMeshDrawables)
+//   - A MeshPipelineManager (shared by all drawables)
 //
 // Lifecycle:
 //   1. Construct MeshScene
-//   2. Call initialize(film) — creates pipeline manager, inits drawables
-//   3. Each frame: Window calls begin_render_pass → draw → end_render_pass
-//   4. On teardown: release_vulkan_resources() destroys everything
+//   2. Add meshes via add_mesh() — creates Object + MeshData +
+//      VulkanMeshDrawable in the scene graph
+//   3. Call initialize(film) — creates pipeline manager, inits all
+//      VulkanMeshDrawables
+//   4. Each frame: Window calls begin_render_pass → draw → end_render_pass
+//   5. On teardown: release_vulkan_resources() destroys everything
 //
 // Thread-safety: NOT thread-safe — call only from the rendering thread.
 
@@ -47,7 +50,7 @@ class MeshScene : public SceneBase {
 
     // ── SceneBase overrides ─────────────────────────────────────────
 
-    // Initialize the pipeline manager and any already-added drawables.
+    // Initialize the pipeline manager and all VulkanMeshDrawables.
     void initialize(Film &film) override;
 
     // Draw all visible drawables.
@@ -57,50 +60,58 @@ class MeshScene : public SceneBase {
     // Idempotent — safe to call from both the renderer and destructor.
     void release_vulkan_resources() override;
 
-    // ── Drawable management ─────────────────────────────────────────
+    // ── Mesh management (scene graph API) ───────────────────────────
 
-    // Add a drawable.  If the scene is already initialized, the drawable
-    // is immediately init'd with the Film.  Returns a non-owning pointer
-    // for the caller to configure (upload buffers, set render state, etc.).
-    MeshDrawable *add_drawable(std::unique_ptr<MeshDrawable> drawable);
+    // Add a mesh to the scene.  Creates a child Object under the root
+    // with MeshData and VulkanMeshDrawable features.  Returns the
+    // Object so the caller can populate its MeshData and set transforms.
+    //
+    // If the scene is already initialized, the VulkanMeshDrawable is
+    // immediately init'd with the Film.
+    scene_graph::Object &add_mesh(const std::string &name = "Mesh");
 
-    // Convenience: create a new MeshDrawable with the given name.
-    MeshDrawable *add_drawable(const std::string &name = "Mesh");
+    // Remove a mesh Object from the scene by pointer.  Releases its
+    // VulkanMeshDrawable GPU resources and removes it from the scene
+    // graph.  Returns true if found and removed.
+    bool remove_mesh(const scene_graph::Object *obj);
 
-    // Remove a drawable by pointer.  Returns true if found and removed.
-    bool remove_drawable(const MeshDrawable *drawable);
+    // Number of mesh Objects in the scene.
+    std::size_t mesh_count() const;
 
-    // Remove a drawable by index.  Returns true if index was valid.
-    bool remove_drawable(std::size_t index);
-
-    // Number of drawables.
-    std::size_t drawable_count() const { return _drawables.size(); }
-
-    // Access drawables (for UI iteration).
-    MeshDrawable *drawable(std::size_t index);
-    const MeshDrawable *drawable(std::size_t index) const;
+    // Access mesh Objects by index (children of root that have MeshData).
+    // Returns nullptr if index is out of range.
+    scene_graph::Object *mesh_object(std::size_t index);
+    const scene_graph::Object *mesh_object(std::size_t index) const;
 
     // ── Camera ──────────────────────────────────────────────────────
 
-    // Set view matrix directly.
-    void set_view(const glm::mat4 &view) { _view = view; }
+    // The scene's camera feature (on the camera Object).
+    scene_graph::Camera &camera() { return *_camera; }
+    const scene_graph::Camera &camera() const { return *_camera; }
 
-    // Set projection matrix directly.
-    void set_projection(const glm::mat4 &projection) { _projection = projection; }
+    // The scene's camera Object (for setting position/orientation).
+    scene_graph::Object &camera_object() { return *_camera_object; }
+    const scene_graph::Object &camera_object() const { return *_camera_object; }
 
-    // Convenience: set view via look_at parameters.
-    void look_at(const glm::vec3 &eye, const glm::vec3 &center, const glm::vec3 &up);
+    // Convenience: set camera position via look_at parameters.
+    // Sets the camera Object's local_transform to the lookAt matrix.
+    void look_at(const scene_graph::Vec3f &eye,
+                 const scene_graph::Vec3f &center,
+                 const scene_graph::Vec3f &up);
 
-    // Convenience: set perspective projection.
-    // fov_y in radians, aspect = width/height.
+    // Convenience: set perspective projection on the camera.
     void set_perspective(float fov_y, float aspect, float near, float far);
 
-    // Convenience: update aspect ratio (e.g. on window resize), keeping
-    // the current fov, near, far.
+    // Convenience: update aspect ratio (e.g. on window resize).
     void update_aspect(float aspect);
 
-    const glm::mat4 &view() const { return _view; }
-    const glm::mat4 &projection() const { return _projection; }
+    // ── Scene graph access ──────────────────────────────────────────
+
+    scene_graph::Object &root() { return _scene_root; }
+    const scene_graph::Object &root() const { return _scene_root; }
+
+    scene_graph::DrawableGroup &drawable_group() { return _drawable_group; }
+    const scene_graph::DrawableGroup &drawable_group() const { return _drawable_group; }
 
     // ── Pipeline manager access (for advanced use) ──────────────────
 
@@ -108,17 +119,14 @@ class MeshScene : public SceneBase {
     const MeshPipelineManager &pipeline_manager() const { return _pipeline_manager; }
 
   private:
+    // Scene graph
+    scene_graph::Object _scene_root;
+    scene_graph::Object *_camera_object = nullptr;
+    scene_graph::Camera *_camera = nullptr;
+    scene_graph::DrawableGroup _drawable_group;
+
+    // Vulkan resources
     MeshPipelineManager _pipeline_manager;
-    std::vector<std::unique_ptr<MeshDrawable>> _drawables;
-
-    glm::mat4 _view = glm::mat4(1.0f);
-    glm::mat4 _projection = glm::mat4(1.0f);
-
-    // Cached perspective parameters for update_aspect().
-    float _fov_y = 0.7854f;// ~45 degrees
-    float _near = 0.01f;
-    float _far = 100.0f;
-
     Film *_film = nullptr;
     bool _initialized = false;
 };
