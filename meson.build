@@ -6,14 +6,13 @@ cc = meson.get_compiler('cpp')
 dl_lib = cc.find_library('dl')
 
 # ── Core dependencies (system or WrapDB subproject fallback) ──────────────
-fmt_dep    = dependency('fmt',    version: '>=8.0.1')
 spdlog_dep = dependency('spdlog', version: '>=1.9.2')
 eigen_dep  = dependency('eigen3', version: '>=3.4.0')
 
 zipper_proj = subproject('zipper', default_options: {'testing': false})
 zipper_dep = zipper_proj.get_variable('zipper_dep')
 
-core_required_deps = [spdlog_dep, eigen_dep, fmt_dep, zipper_dep]
+core_required_deps = [spdlog_dep, eigen_dep, zipper_dep]
 
 # ── Optional dependencies (system only -- enable via Conan or system packages) ──
 if get_option('protobuf')
