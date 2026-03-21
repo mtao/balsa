@@ -2,7 +2,6 @@
 #include <QByteArray>
 #include <QString>
 #include <spdlog/spdlog.h>
-#include <fmt/format.h>
 #include "balsa/qt/spdlog_logger.hpp"
 
 #include <string>

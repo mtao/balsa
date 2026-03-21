@@ -2,7 +2,7 @@
 #include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/geometry/polygon_mesh/read_obj.hpp>
-#include <fmt/ranges.h>
+
 #include <spdlog/spdlog.h>
 #include <vector>
 #include <iostream>

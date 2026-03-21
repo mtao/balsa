@@ -1,7 +1,6 @@
 #include "balsa/visualization/qt/mesh_viewer/widget.hpp"
-#include <ranges>
 #include <fstream>
-#include <sstream>
+#include <iterator>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 #include <spdlog/spdlog.h>
@@ -19,9 +18,7 @@ namespace {
         source_path = std::filesystem::absolute(source_path);
         std::filesystem::path src = source_path.parent_path() / name;
         std::ifstream ifs(src);
-        std::ostringstream oss;
-        oss << ifs.rdbuf();
-        return oss.str();
+        return std::string{ std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>() };
     }
     static const std::string vertexShaderSource = get_source("shaders/phong.vert");
 

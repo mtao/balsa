@@ -1,11 +1,11 @@
 #include "partio_loader_impl.hpp"
-#include <fmt/format.h>
+#include <format>
 namespace balsa::geometry::point_cloud
 
 {
 
 PartioFileWriter::PartioFileWriter(const std::string &filename) : _filename(filename), _handle(Partio::create()) {
-    if (!_handle) throw std::invalid_argument(fmt::format("failed to open {}", filename));
+    if (!_handle) throw std::invalid_argument(std::format("failed to open {}", filename));
 }
 PartioFileWriter::~PartioFileWriter() {
     write();
@@ -45,7 +45,7 @@ void PartioFileWriter::write() {
 }
 
 PartioFileReader::PartioFileReader(const std::string &filename) : _handle(Partio::read(filename.c_str())) {
-    if (!_handle) throw std::invalid_argument(fmt::format("failed to open {}", filename));
+    if (!_handle) throw std::invalid_argument(std::format("failed to open {}", filename));
 }
 PartioFileReader::~PartioFileReader() {
     _handle->release();

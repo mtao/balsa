@@ -1,6 +1,6 @@
 #include <catch2/catch_all.hpp>
 #include <zipper/utils/max_coeff.hpp>
-#include <fmt/format.h>
+#include <format>
 #include "circumcenter_utils.hpp"
 
 #include <balsa/geometry/point_cloud/smallest_enclosing_sphere_welzl.hpp>
@@ -112,7 +112,7 @@ std::array<balsa::zipper::ColVectors<double, D>, 2>
         outside = 5 * inside;
     }
     if (inside >= outside) {
-        throw std::invalid_argument(fmt::format("Invalid valid torus: {} to {}", inside, outside));
+        throw std::invalid_argument(std::format("Invalid valid torus: {} to {}", inside, outside));
     }
     double inside_r = inside;
 

@@ -1,5 +1,6 @@
 #include <Partio.h>
 #include <PartioAttribute.h>
+#include <format>
 #include "balsa/geometry/point_cloud/partio_loader.hpp"
 #include "balsa/zipper/concepts/shape_types.hpp"
 
@@ -69,7 +70,7 @@ template<typename T, rank_type D>
 balsa::ColVectors<T, D> PartioFileReader::vector_attribute(const std::string &name) const {
 
     if (!has_attribute<T, D>(name)) {
-        throw std::invalid_argument(fmt::format("failed to get {} as a vector of size {}", name, D));
+        throw std::invalid_argument(std::format("failed to get {} as a vector of size {}", name, D));
     }
     Partio::ParticleAttribute attr;
     _handle->attributeInfo(name.c_str(), attr);
@@ -98,7 +99,7 @@ template<typename T>
 balsa::VectorX<T> PartioFileReader::attribute(const std::string &name) const {
 
     if (!has_attribute<T, 1>(name)) {
-        throw std::invalid_argument(fmt::format("failed to get {} as a vector of size {}", name, 1));
+        throw std::invalid_argument(std::format("failed to get {} as a vector of size {}", name, 1));
     }
     Partio::ParticleAttribute attr;
     _handle->attributeInfo(name.c_str(), attr);

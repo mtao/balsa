@@ -1,6 +1,6 @@
 #include "balsa/visualization/vulkan/native_film.hpp"
 #include <spdlog/spdlog.h>
-#include <fmt/ranges.h>
+#include <format>
 
 #include <ranges>
 #include <array>
@@ -373,7 +373,7 @@ void NativeFilm::pick_physical_device() {
         int idx = *_requested_physical_device_index;
         if (idx < 0 || static_cast<size_t>(idx) >= devices.size()) {
             throw std::runtime_error(
-              fmt::format("Requested physical device index {} is out of range (0-{})",
+              std::format("Requested physical device index {} is out of range (0-{})",
                           idx,
                           devices.size() - 1));
         }
