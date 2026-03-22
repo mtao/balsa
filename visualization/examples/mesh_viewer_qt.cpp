@@ -258,6 +258,12 @@ class MeshViewerMainWindow : public QMainWindow {
             mesh_data->set_edge_indices(edge_indices);
         }
 
+        // If the mesh has edges but no triangles, default to wireframe
+        // so that edge-only meshes are visible immediately.
+        if (!mesh_data->has_triangle_indices() && mesh_data->has_edge_indices()) {
+            mesh_data->render_state().render_mode = vk_viz::RenderMode::Wireframe;
+        }
+
         spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
                      mesh_obj.name,
                      mesh_data->vertex_count(),
