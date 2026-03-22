@@ -13,31 +13,37 @@
 //        -> ::zipper::Matrix<float, 4, 4, false>
 
 #include <balsa/zipper/types.hpp>
+#include <zipper/Quaternion.hpp>
 #include <zipper/transform/Transform.hpp>
+#include <zipper/transform/Translation.hpp>
+#include <zipper/transform/Rotation.hpp>
+#include <zipper/transform/Scaling.hpp>
+#include <zipper/transform/model.hpp>
+#include <zipper/transform/quaternion_transform.hpp>
 
 namespace balsa::scene_graph {
 
 // ── Column-major matrices ──────────────────────────────────────────
-// Explicitly IsRowMajor=false so that in-memory layout matches
-// glm::mat4 (column-major) and can be memcpy'd to/from GPU buffers.
-
 using Mat4f = balsa::zipper::Matrix<float, 4, 4, /*IsRowMajor=*/false>;
 using Mat3f = balsa::zipper::Matrix<float, 3, 3, /*IsRowMajor=*/false>;
 
-// ── Affine transform ───────────────────────────────────────────────
-// Column-major 4x4 affine transform.  Default-constructs to identity.
-// Use this for Object local/world transforms instead of a raw Mat4f.
-
-using AffineTransformf = ::zipper::transform::AffineTransform<float>;
-
 // ── Vectors ────────────────────────────────────────────────────────
-// Vectors don't have a row/column-major distinction (they're 1D),
-// but we alias them here for convenience so that scene_graph code
-// doesn't need to pull in the full tensor_types header.
-
 using Vec2f = balsa::zipper::Vector<float, 2>;
 using Vec3f = balsa::zipper::Vector<float, 3>;
 using Vec4f = balsa::zipper::Vector<float, 4>;
+
+// ── Full-matrix transform aliases ──────────────────────────────────
+using AffineTransformf = ::zipper::transform::AffineTransform<float>;
+using Isometry3f = ::zipper::transform::Isometry<float, 3>;
+using ProjectiveTransform3f = ::zipper::transform::ProjectiveTransform<float, 3>;
+
+// ── Specialized (minimal-storage) transform aliases ────────────────
+using Translation3f = ::zipper::transform::Translation<float, 3>;
+using Rotation3f = ::zipper::transform::Rotation<float, 3>;
+using Scaling3f = ::zipper::transform::Scaling<float, 3>;
+
+// ── Quaternion ─────────────────────────────────────────────────────
+using Quaternionf = ::zipper::Quaternion<float>;
 
 }// namespace balsa::scene_graph
 

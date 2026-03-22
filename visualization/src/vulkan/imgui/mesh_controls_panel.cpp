@@ -382,24 +382,58 @@ bool draw_property_panel(MeshScene &scene, MeshPanelState &state) {
 
         // ── Transform ───────────────────────────────────────────────
         if (ImGui::CollapsingHeader("Transform")) {
-            // Display local transform matrix for editing.
-            // We need to get a mutable copy, edit, then set back.
-            auto transform = obj->local_transform();
-            auto span = transform.expression().as_std_span();
-            float *m = span.data();
+            // Display decomposed TRS for editing.
+            auto t = obj->translation();
+            auto euler = obj->rotation_euler();
+            auto s = obj->scale_factors();
+
+            // We need contiguous float[3] for DragFloat3, so copy into
+            // local arrays, edit, then set back.
+            float tv[3] = {
+                static_cast<float>(t(0)),
+                static_cast<float>(t(1)),
+                static_cast<float>(t(2))
+            };
+            float rv[3] = {
+                static_cast<float>(euler(0)),
+                static_cast<float>(euler(1)),
+                static_cast<float>(euler(2))
+            };
+            float sv[3] = {
+                static_cast<float>(s(0)),
+                static_cast<float>(s(1)),
+                static_cast<float>(s(2))
+            };
+
             bool t_changed = false;
-            // Column-major: columns are contiguous, display as columns
-            t_changed |= ImGui::DragFloat4("Col 0", m + 0, 0.01f);
-            t_changed |= ImGui::DragFloat4("Col 1", m + 4, 0.01f);
-            t_changed |= ImGui::DragFloat4("Col 2", m + 8, 0.01f);
-            t_changed |= ImGui::DragFloat4("Col 3", m + 12, 0.01f);
+            t_changed |= ImGui::DragFloat3("Translation", tv, 0.01f);
+            t_changed |= ImGui::DragFloat3("Rotation", rv, 0.5f);
+            t_changed |= ImGui::DragFloat3("Scale", sv, 0.01f);
+
             if (t_changed) {
-                obj->set_local_transform(transform);
+                scene_graph::Vec3f new_t;
+                new_t(0) = tv[0];
+                new_t(1) = tv[1];
+                new_t(2) = tv[2];
+                obj->set_translation(new_t);
+
+                scene_graph::Vec3f new_r;
+                new_r(0) = rv[0];
+                new_r(1) = rv[1];
+                new_r(2) = rv[2];
+                obj->set_rotation_euler(new_r);
+
+                scene_graph::Vec3f new_s;
+                new_s(0) = sv[0];
+                new_s(1) = sv[1];
+                new_s(2) = sv[2];
+                obj->set_scale_factors(new_s);
+
                 changed = true;
             }
 
             if (ImGui::Button("Reset Transform")) {
-                obj->set_local_transform(scene_graph::AffineTransformf{});
+                obj->reset_transform();
                 changed = true;
             }
         }

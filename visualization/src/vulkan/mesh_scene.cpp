@@ -163,7 +163,9 @@ void MeshScene::look_at(const scene_graph::Vec3f &eye,
     // so setting local_transform = inverse(lookAt(...)) gives us
     // view_matrix() == lookAt(...).  That's correct.
     auto view = ::zipper::transform::look_at(eye, center, up);
-    _camera_object->set_local_transform(view.inverse());
+    auto inv_view = view.inverse();
+    _camera_object->set_from_transform(
+      scene_graph::AffineTransformf{ inv_view.to_matrix() });
 }
 
 void MeshScene::set_perspective(float fov_y, float aspect, float near, float far) {

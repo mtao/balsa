@@ -891,7 +891,7 @@ void MeshControlsWidget::on_name_edited(const QString &text) {
 void MeshControlsWidget::on_reset_transform() {
     auto *obj = selected_object();
     if (!obj) return;
-    obj->set_local_transform(scene_graph::AffineTransformf{});
+    obj->reset_transform();
     emit scene_changed();
 }
 

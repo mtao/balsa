@@ -1,7 +1,9 @@
 #if !defined(BALSA_SCENE_GRAPH_OBJECT_HPP_NEW)
 #define BALSA_SCENE_GRAPH_OBJECT_HPP_NEW
 
+#include <cmath>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -15,10 +17,15 @@ namespace balsa::scene_graph {
 //
 // The universal scene graph node.  Every node in the scene graph is an
 // Object with:
-//   - A local affine transform (AffineTransformf, column-major 4x4)
+//   - Decomposed TRS local transform (Translation, Rotation as
+//     quaternion, Scale) following the Blender convention
 //   - A parent pointer and an ordered list of children
 //   - A collection of features (components) attached to it
-//   - A name and a visibility flag
+//   - A name, visibility flag, and selectability flag
+//
+// The local transform is composed as T * R * S.  local_transform()
+// returns the composed AffineTransformf by value; there is no stored
+// 4×4 matrix.
 //
 // Features are the extensibility mechanism: Camera, MeshData, Drawable
 // etc. are all features that can be attached to any Object via
@@ -40,10 +47,52 @@ class Object {
     Object(Object &&) noexcept;
     Object &operator=(Object &&) noexcept;
 
-    // ── Transform ───────────────────────────────────────────────────
+    // ── Transform (decomposed TRS) ─────────────────────────────────
 
-    const AffineTransformf &local_transform() const { return _local_transform; }
-    void set_local_transform(const AffineTransformf &t) { _local_transform = t; }
+    // Translation
+    const Vec3f &translation() const { return _translation; }
+    void set_translation(const Vec3f &t) { _translation = t; }
+
+    // Rotation (stored as unit quaternion)
+    const Quaternionf &rotation() const { return _rotation; }
+    void set_rotation(const Quaternionf &q) { _rotation = q; }
+
+    // Rotation as Euler angles in degrees (XYZ / pitch-yaw-roll).
+    // Returns (pitch, yaw, roll) in degrees.
+    Vec3f rotation_euler() const;
+
+    // Set rotation from Euler angles in degrees (pitch, yaw, roll).
+    void set_rotation_euler(const Vec3f &degrees);
+
+    // Scale factors (per-axis)
+    const Vec3f &scale_factors() const { return _scale; }
+    void set_scale_factors(const Vec3f &s) { _scale = s; }
+
+    // ── Convenience mutators ────────────────────────────────────────
+
+    // Add to current translation.
+    void translate(const Vec3f &delta);
+
+    // Post-multiply rotation by the given quaternion.
+    void rotate(const Quaternionf &q);
+
+    // Set uniform scale on all axes.
+    void set_uniform_scale(float s);
+
+    // Reset TRS to identity (translation=0, rotation=identity, scale=1).
+    void reset_transform();
+
+    // ── Composed transforms ─────────────────────────────────────────
+
+    // Compose T * R * S and return the resulting affine transform.
+    // Computed on the fly — not cached.
+    AffineTransformf local_transform() const;
+
+    // Decompose an affine transform into T/R/S and store them.
+    // Assumes the transform contains no shear (only translation,
+    // rotation, and axis-aligned scale).  If the linear block has
+    // negative determinant, one scale factor will be negative.
+    void set_from_transform(const AffineTransformf &xf);
 
     // Accumulated world transform: product of all ancestors' local
     // transforms, from root down to (and including) this node.
@@ -89,9 +138,12 @@ class Object {
 
     std::string name;
     bool visible = true;
+    bool selectable = true;
 
   private:
-    AffineTransformf _local_transform;// default-constructs to identity
+    Vec3f _translation;// default: {0, 0, 0}
+    Quaternionf _rotation{ 1, 0, 0, 0 };// identity quaternion (w=1)
+    Vec3f _scale;// default: {1, 1, 1} — set in ctor
     Object *_parent = nullptr;
     std::vector<std::unique_ptr<Object>> _children;
     std::vector<std::unique_ptr<AbstractFeature>> _features;
