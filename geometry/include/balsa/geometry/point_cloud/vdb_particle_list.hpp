@@ -1,5 +1,5 @@
 #pragma once
-#include "balsa/eigen/types.hpp"
+#include "balsa/zipper/types.hpp"
 #include <openvdb/Types.h>
 
 namespace balsa::geometry::point_cloud {
@@ -7,8 +7,8 @@ namespace balsa::geometry::point_cloud {
 // Each struct implements the interface expected by OpenVDB's particle tools.
 
 struct VDBParticleList_Pos {
-    eigen::ColVecs3d P;
-    VDBParticleList_Pos(eigen::ColVecs3d P) : P(std::move(P)) {}
+    zipper::ColVecs3d P;
+    VDBParticleList_Pos(zipper::ColVecs3d P) : P(std::move(P)) {}
     VDBParticleList_Pos() = default;
     VDBParticleList_Pos(const VDBParticleList_Pos &) = default;
     VDBParticleList_Pos(VDBParticleList_Pos &&) = default;
@@ -20,19 +20,19 @@ struct VDBParticleList_Pos {
     }
     void getPos(size_t n, openvdb::Vec3R &xyz) const {
         auto p = P.col(n);
-        xyz = openvdb::Vec3R(p.x(), p.y(), p.z());
+        xyz = openvdb::Vec3R(p(0), p(1), p(2));
     }
 };
 
 struct VDBParticleList_PosRad : public VDBParticleList_Pos {
-    VDBParticleList_PosRad(eigen::ColVecs3d P, eigen::VecXd R)
+    VDBParticleList_PosRad(zipper::ColVecs3d P, zipper::VecXd R)
       : VDBParticleList_Pos(std::move(P)), R(std::move(R)) {}
     VDBParticleList_PosRad() = default;
     VDBParticleList_PosRad(const VDBParticleList_PosRad &) = default;
     VDBParticleList_PosRad(VDBParticleList_PosRad &&) = default;
     VDBParticleList_PosRad &operator=(const VDBParticleList_PosRad &) = default;
     VDBParticleList_PosRad &operator=(VDBParticleList_PosRad &&) = default;
-    eigen::VecXd R;
+    zipper::VecXd R;
     void getPosRad(size_t n, openvdb::Vec3R &xyz, openvdb::Real &radius) const {
         getPos(n, xyz);
         radius = R(n);
@@ -40,7 +40,7 @@ struct VDBParticleList_PosRad : public VDBParticleList_Pos {
 };
 
 struct VDBParticleList_PosRadVec : public VDBParticleList_PosRad {
-    VDBParticleList_PosRadVec(eigen::ColVecs3d P, eigen::VecXd R, eigen::ColVecs3d V)
+    VDBParticleList_PosRadVec(zipper::ColVecs3d P, zipper::VecXd R, zipper::ColVecs3d V)
       : VDBParticleList_PosRad(std::move(P), std::move(R)), V(std::move(V)) {}
     VDBParticleList_PosRadVec() = default;
     VDBParticleList_PosRadVec(const VDBParticleList_PosRadVec &) = default;
@@ -50,9 +50,9 @@ struct VDBParticleList_PosRadVec : public VDBParticleList_PosRad {
     void getPosRadVel(size_t n, openvdb::Vec3R &xyz, openvdb::Real &radius, openvdb::Vec3R &vel) const {
         getPosRad(n, xyz, radius);
         auto v = V.col(n);
-        vel = openvdb::Vec3R(v.x(), v.y(), v.z());
+        vel = openvdb::Vec3R(v(0), v(1), v(2));
     }
-    eigen::ColVecs3d V;
+    zipper::ColVecs3d V;
 };
 
 }// namespace balsa::geometry::point_cloud
