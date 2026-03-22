@@ -108,6 +108,11 @@ class MeshViewerScene : public vk_viz::MeshScene {
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("View")) {
+                ImGui::MenuItem("Scene Graph", nullptr, &_panel_state.show_scene_panel);
+                ImGui::MenuItem("Properties", nullptr, &_panel_state.show_property_panel);
+                ImGui::EndMenu();
+            }
             ImGui::EndMainMenuBar();
         }
     }

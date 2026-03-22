@@ -86,23 +86,23 @@ class MeshViewerMainWindow : public QMainWindow {
         _outliner = new viz::qt::SceneGraphWidget();
         _outliner->set_root(&_scene->root());
 
-        auto *outliner_dock = new QDockWidget("Scene Graph", this);
-        outliner_dock->setWidget(_outliner);
-        outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-        addDockWidget(Qt::RightDockWidgetArea, outliner_dock);
+        _outliner_dock = new QDockWidget("Scene Graph", this);
+        _outliner_dock->setWidget(_outliner);
+        _outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        addDockWidget(Qt::RightDockWidgetArea, _outliner_dock);
 
         // ── Create the mesh properties dock ──────────────────────────
         _controls = new viz::qt::MeshControlsWidget();
         _controls->set_scene(_scene.get());
 
-        auto *controls_dock = new QDockWidget("Mesh Properties", this);
-        controls_dock->setWidget(_controls);
-        controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-        addDockWidget(Qt::RightDockWidgetArea, controls_dock);
+        _controls_dock = new QDockWidget("Mesh Properties", this);
+        _controls_dock->setWidget(_controls);
+        _controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        addDockWidget(Qt::RightDockWidgetArea, _controls_dock);
 
-        // Stack the docks vertically (outliner on top, properties below)
-        tabifyDockWidget(outliner_dock, controls_dock);
-        outliner_dock->raise();
+        // Stack docks vertically: outliner on top, properties below
+        // (Blender-style right sidebar with both panels visible)
+        splitDockWidget(_outliner_dock, _controls_dock, Qt::Vertical);
 
         // ── Wire outliner selection → properties panel ───────────────
         connect(_outliner, &viz::qt::SceneGraphWidget::object_selected, _controls, &viz::qt::MeshControlsWidget::set_selected_object);
@@ -146,6 +146,8 @@ class MeshViewerMainWindow : public QMainWindow {
     std::shared_ptr<vk_viz::OrbitCameraController> _camera;
     viz::qt::MeshControlsWidget *_controls = nullptr;
     viz::qt::SceneGraphWidget *_outliner = nullptr;
+    QDockWidget *_outliner_dock = nullptr;
+    QDockWidget *_controls_dock = nullptr;
     std::filesystem::path _initial_obj;
     bool _loaded = false;
 
@@ -167,6 +169,11 @@ class MeshViewerMainWindow : public QMainWindow {
         QAction *quit_action = file_menu->addAction(tr("&Quit"));
         quit_action->setShortcuts(QKeySequence::Quit);
         connect(quit_action, &QAction::triggered, this, &QMainWindow::close);
+
+        // ── View menu ────────────────────────────────────────────────
+        QMenu *view_menu = menuBar()->addMenu(tr("&View"));
+        view_menu->addAction(_outliner_dock->toggleViewAction());
+        view_menu->addAction(_controls_dock->toggleViewAction());
     }
 
     void load_obj(const std::filesystem::path &path) {
