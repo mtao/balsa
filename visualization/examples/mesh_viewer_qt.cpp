@@ -36,6 +36,7 @@
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 #include <balsa/visualization/qt/mesh_controls_widget.hpp>
+#include <balsa/visualization/qt/SceneGraphWidget.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
 
@@ -81,17 +82,34 @@ class MeshViewerMainWindow : public QMainWindow {
         constexpr float pi = 3.14159265358979323846f;
         _scene->set_perspective(45.0f * pi / 180.0f, 900.0f / 800.0f, 0.01f, 100.0f);
 
-        // ── Create the controls dock ─────────────────────────────────
+        // ── Create the scene graph outliner dock ─────────────────────
+        _outliner = new viz::qt::SceneGraphWidget();
+        _outliner->set_root(&_scene->root());
+
+        auto *outliner_dock = new QDockWidget("Scene Graph", this);
+        outliner_dock->setWidget(_outliner);
+        outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        addDockWidget(Qt::RightDockWidgetArea, outliner_dock);
+
+        // ── Create the mesh properties dock ──────────────────────────
         _controls = new viz::qt::MeshControlsWidget();
         _controls->set_scene(_scene.get());
 
-        auto *dock = new QDockWidget("Mesh Controls", this);
-        dock->setWidget(_controls);
-        dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-        addDockWidget(Qt::RightDockWidgetArea, dock);
+        auto *controls_dock = new QDockWidget("Mesh Properties", this);
+        controls_dock->setWidget(_controls);
+        controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        addDockWidget(Qt::RightDockWidgetArea, controls_dock);
 
-        // Re-render when controls change
+        // Stack the docks vertically (outliner on top, properties below)
+        tabifyDockWidget(outliner_dock, controls_dock);
+        outliner_dock->raise();
+
+        // ── Wire outliner selection → properties panel ───────────────
+        connect(_outliner, &viz::qt::SceneGraphWidget::object_selected, _controls, &viz::qt::MeshControlsWidget::set_selected_object);
+
+        // Re-render when controls or outliner change
         connect(_controls, &viz::qt::MeshControlsWidget::scene_changed, _vk_window, [this]() { _vk_window->requestUpdate(); });
+        connect(_outliner, &viz::qt::SceneGraphWidget::scene_changed, _vk_window, [this]() { _vk_window->requestUpdate(); });
 
         // ── Create menus ─────────────────────────────────────────────
         create_menus();
@@ -127,6 +145,7 @@ class MeshViewerMainWindow : public QMainWindow {
     std::shared_ptr<vk_viz::MeshScene> _scene;
     std::shared_ptr<vk_viz::OrbitCameraController> _camera;
     viz::qt::MeshControlsWidget *_controls = nullptr;
+    viz::qt::SceneGraphWidget *_outliner = nullptr;
     std::filesystem::path _initial_obj;
     bool _loaded = false;
 
@@ -238,8 +257,9 @@ class MeshViewerMainWindow : public QMainWindow {
                      mesh_data->triangle_count(),
                      mesh_data->edge_count());
 
-        // Refresh the controls panel to show the new mesh
-        _controls->refresh();
+        // Refresh the outliner and select the new mesh in the properties panel
+        _outliner->refresh();
+        _controls->set_selected_object(&mesh_obj);
 
         // Request a redraw
         _vk_window->requestUpdate();

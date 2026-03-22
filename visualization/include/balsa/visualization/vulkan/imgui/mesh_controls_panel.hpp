@@ -3,6 +3,10 @@
 
 #include <cstddef>
 
+namespace balsa::scene_graph {
+class Object;
+}
+
 namespace balsa::visualization::vulkan {
 
 class MeshScene;
@@ -13,9 +17,16 @@ namespace imgui {
     // Persistent state for the mesh controls panel.
     // Caller owns this and passes it to draw_*() each frame.
     struct MeshPanelState {
-        int selected_drawable = -1;// -1 = nothing selected
+        scene_graph::Object *selected_object = nullptr;
         bool show_scene_panel = true;
         bool show_property_panel = true;
+
+        // Drag-and-drop state (internal)
+        scene_graph::Object *drag_source = nullptr;
+
+        // Inline rename state (internal)
+        scene_graph::Object *renaming_object = nullptr;
+        char rename_buf[128] = {};
     };
 
     // ── Panel drawing functions ─────────────────────────────────────
@@ -27,12 +38,15 @@ namespace imgui {
     // Return true if any value was modified this frame (useful for
     // triggering re-renders in non-continuous-draw setups).
 
-    // Draw the scene tree panel: lists all drawables with visibility
-    // toggles and click-to-select.
+    // Draw the hierarchical scene graph outliner: tree of all Objects
+    // with expand/collapse, visibility toggles, type icons,
+    // click-to-select, drag-and-drop reparenting, right-click context
+    // menu (Add Child, Add Mesh, Rename, Duplicate, Delete), and
+    // inline rename (double-click or F2).
     bool draw_scene_tree(MeshScene &scene, MeshPanelState &state);
 
     // Draw the property/controls panel for the currently-selected
-    // drawable.  Shows render state controls (shading, color, lighting,
+    // object.  Shows render state controls (shading, color, lighting,
     // etc.) and per-object properties (name, visibility, transform).
     // If nothing is selected, shows a placeholder message.
     bool draw_property_panel(MeshScene &scene, MeshPanelState &state);

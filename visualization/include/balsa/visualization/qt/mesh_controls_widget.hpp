@@ -9,11 +9,9 @@ class QCheckBox;
 class QDoubleSpinBox;
 class QSlider;
 class QLabel;
-class QListWidget;
 class QLineEdit;
 class QPushButton;
 class QGroupBox;
-class QStackedWidget;
 
 namespace balsa::visualization::vulkan {
 class MeshScene;
@@ -29,19 +27,16 @@ namespace balsa::visualization::qt {
 
 // ── MeshControlsWidget ──────────────────────────────────────────────
 //
-// Qt control panel for the Vulkan mesh viewer.  Mirrors the ImGui
-// mesh_controls_panel functionality using native Qt widgets.
+// Qt control panel for mesh-specific properties.  Shows shading, color,
+// lighting, wireframe, and point size controls for the currently
+// selected mesh Object.
 //
-// Operates on a MeshScene pointer — set via set_scene().  When the
-// scene changes (drawables added/removed, selection changes) call
-// refresh() to rebuild the UI state.
+// Does NOT contain scene tree / outliner controls — those belong in
+// SceneGraphWidget.  The host application wires them together:
+//   SceneGraphWidget::object_selected(Object*) →
+//     MeshControlsWidget::set_selected_object(Object*)
 //
-// Emits scene_changed() whenever the user modifies any render state,
-// visibility flag, transform, etc.  The host window should connect
-// this signal to trigger a re-render.
-//
-// Designed to be embedded as a dock widget or sidebar panel in a
-// QMainWindow.
+// Emits scene_changed() whenever the user modifies any render state.
 
 class MeshControlsWidget : public QWidget {
     Q_OBJECT
@@ -50,22 +45,18 @@ class MeshControlsWidget : public QWidget {
     explicit MeshControlsWidget(QWidget *parent = nullptr);
     ~MeshControlsWidget() override;
 
-    // Set the scene to control.  nullptr clears the panel.
+    // Set the scene for global context (e.g. accessing pipeline state).
     void set_scene(::balsa::visualization::vulkan::MeshScene *scene);
 
-    // Refresh the drawable list and property display from the scene.
-    // Call after adding/removing drawables externally.
-    void refresh();
+    // Set the currently selected object.  nullptr clears the panel.
+    // This replaces the old internal QListWidget-based selection.
+    void set_selected_object(::balsa::scene_graph::Object *obj);
 
   signals:
     // Emitted whenever the user changes any rendering parameter.
     void scene_changed();
 
   private slots:
-    // Scene tree
-    void on_drawable_selected(int row);
-    void on_add_drawable();
-    void on_remove_drawable();
     void on_visibility_changed(bool checked);
 
     // Render state
@@ -96,11 +87,9 @@ class MeshControlsWidget : public QWidget {
 
     // Object
     void on_name_edited(const QString &text);
-    void on_reset_transform();
 
   private:
     void build_ui();
-    void build_scene_panel(QWidget *parent);
     void build_property_panel(QWidget *parent);
     void build_render_state_group(QWidget *parent);
     void build_color_group(QWidget *parent);
@@ -109,24 +98,17 @@ class MeshControlsWidget : public QWidget {
     void build_points_group(QWidget *parent);
     void build_object_group(QWidget *parent);
 
-    // Populate widgets from the currently-selected drawable's state.
+    // Populate widgets from the currently-selected object's state.
     // Blocks signals while setting values to avoid feedback loops.
     void sync_from_state();
     void sync_color_group_visibility();
-
-    // Helper: get the currently-selected mesh Object, or nullptr.
-    ::balsa::scene_graph::Object *selected_object();
 
     // Helper: get the MeshData feature from the selected Object, or nullptr.
     ::balsa::scene_graph::MeshData *selected_mesh_data();
 
     // ── State ────────────────────────────────────────────────────────
     ::balsa::visualization::vulkan::MeshScene *_scene = nullptr;
-
-    // ── Scene panel widgets ──────────────────────────────────────────
-    QListWidget *_drawable_list = nullptr;
-    QPushButton *_add_button = nullptr;
-    QPushButton *_remove_button = nullptr;
+    ::balsa::scene_graph::Object *_selected = nullptr;
 
     // ── Object group ─────────────────────────────────────────────────
     QGroupBox *_object_group = nullptr;
@@ -136,7 +118,6 @@ class MeshControlsWidget : public QWidget {
     QLabel *_triangle_count_label = nullptr;
     QLabel *_edge_count_label = nullptr;
     QLabel *_attribute_label = nullptr;
-    QPushButton *_reset_transform_button = nullptr;
 
     // ── Render state group ───────────────────────────────────────────
     QGroupBox *_render_state_group = nullptr;

@@ -3,35 +3,14 @@
 #include <algorithm>
 #include <cmath>
 
+#include <zipper/transform/decompose.hpp>
 #include <zipper/transform/quaternion_transform.hpp>
 
 namespace balsa::scene_graph {
 
 namespace {
-
-    // ── Helpers for TRS decomposition ──────────────────────────────
-
-    // Column norm of a 3×3 linear block (given a slice view or matrix).
-    // We compute it manually since the linear() slice may not have .norm().
-    template<typename M>
-    float col_norm(const M &m, int col) {
-        float sum = 0;
-        for (int r = 0; r < 3; ++r) {
-            float v = static_cast<float>(m(r, col));
-            sum += v * v;
-        }
-        return std::sqrt(sum);
-    }
-
-    // 3×3 determinant from element access.
-    template<typename M>
-    float det3(const M &m) {
-        return static_cast<float>(m(0, 0)) * (static_cast<float>(m(1, 1)) * static_cast<float>(m(2, 2)) - static_cast<float>(m(1, 2)) * static_cast<float>(m(2, 1))) - static_cast<float>(m(0, 1)) * (static_cast<float>(m(1, 0)) * static_cast<float>(m(2, 2)) - static_cast<float>(m(1, 2)) * static_cast<float>(m(2, 0))) + static_cast<float>(m(0, 2)) * (static_cast<float>(m(1, 0)) * static_cast<float>(m(2, 1)) - static_cast<float>(m(1, 1)) * static_cast<float>(m(2, 0)));
-    }
-
     constexpr float k_deg2rad = std::numbers::pi_v<float> / 180.0f;
     constexpr float k_rad2deg = 180.0f / std::numbers::pi_v<float>;
-
 }// namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────
@@ -157,67 +136,21 @@ void Object::reset_transform() {
 // ── Composed transforms ─────────────────────────────────────────────
 
 AffineTransformf Object::local_transform() const {
-    // Build T * R * S manually for efficiency.
-    // The resulting 4×4 column-major matrix is:
-    //   [ R*S | t ]
-    //   [ 0   | 1 ]
-    //
-    // where R is the 3×3 rotation matrix from the quaternion and
-    // S is a diagonal matrix of scale factors.
-
-    auto rot_mat = ::zipper::transform::to_rotation_matrix(_rotation);
-
-    AffineTransformf xf;// identity
-    // Fill the linear block (upper-left 3×3) = R * diag(scale)
-    for (int c = 0; c < 3; ++c) {
-        float sc = static_cast<float>(_scale(c));
-        for (int r = 0; r < 3; ++r) {
-            xf(r, c) = static_cast<float>(rot_mat(r, c)) * sc;
-        }
-    }
-    // Fill the translation column
-    xf(0, 3) = static_cast<float>(_translation(0));
-    xf(1, 3) = static_cast<float>(_translation(1));
-    xf(2, 3) = static_cast<float>(_translation(2));
-
-    // Last row is already [0, 0, 0, 1] from identity init.
-    return xf;
+    // Compose T * R * S using zipper's transform composition.
+    Translation3f t(_translation);
+    Rotation3f r(::zipper::transform::to_rotation_matrix(_rotation));
+    Scaling3f s(_scale);
+    return t * r * s;
 }
 
 void Object::set_from_transform(const AffineTransformf &xf) {
-    // 1. Extract translation from column 3.
-    _translation(0) = static_cast<float>(xf(0, 3));
-    _translation(1) = static_cast<float>(xf(1, 3));
-    _translation(2) = static_cast<float>(xf(2, 3));
+    auto [t, r, s] = ::zipper::transform::trs_decompose(xf);
 
-    // 2. Extract scale as column norms of the linear block.
-    auto lin = xf.linear();
-    float sx = col_norm(lin, 0);
-    float sy = col_norm(lin, 1);
-    float sz = col_norm(lin, 2);
-
-    // Handle reflection: if the determinant is negative, negate one scale axis.
-    if (det3(lin) < 0) {
-        sx = -sx;
+    for (int i = 0; i < 3; ++i) {
+        _translation(i) = static_cast<float>(t(i));
+        _scale(i) = static_cast<float>(s(i));
     }
-
-    _scale(0) = sx;
-    _scale(1) = sy;
-    _scale(2) = sz;
-
-    // 3. Build the pure rotation matrix by dividing out the scale.
-    //    Avoid division by zero for degenerate scale.
-    ::zipper::Matrix<float, 3, 3> rot;
-    for (int c = 0; c < 3; ++c) {
-        float s = (c == 0) ? sx : (c == 1 ? sy : sz);
-        float inv_s = (std::abs(s) > 1e-7f) ? (1.0f / s) : 0.0f;
-        for (int r = 0; r < 3; ++r) {
-            rot(r, c) = static_cast<float>(lin(r, c)) * inv_s;
-        }
-    }
-
-    // 4. Convert the rotation matrix to a quaternion.
-    _rotation = ::zipper::transform::to_quaternion(rot);
+    _rotation = ::zipper::transform::to_quaternion(r.matrix());
 }
 
 AffineTransformf Object::world_transform() const {

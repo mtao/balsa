@@ -12,12 +12,10 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
-#include <QSplitter>
 #include <QString>
 
 namespace balsa::visualization::qt {
@@ -175,33 +173,16 @@ MeshControlsWidget::MeshControlsWidget(QWidget *parent)
 
 MeshControlsWidget::~MeshControlsWidget() = default;
 
-// ── set_scene / refresh ──────────────────────────────────────────────
+// ── set_scene / set_selected_object ─────────────────────────────────
 
 void MeshControlsWidget::set_scene(::balsa::visualization::vulkan::MeshScene *scene) {
     _scene = scene;
-    refresh();
+    _selected = nullptr;
+    sync_from_state();
 }
 
-void MeshControlsWidget::refresh() {
-    // Rebuild mesh object list
-    {
-        QSignalBlocker block(_drawable_list);
-        _drawable_list->clear();
-        if (_scene) {
-            for (std::size_t i = 0; i < _scene->mesh_count(); ++i) {
-                auto *obj = _scene->mesh_object(i);
-                if (obj) {
-                    _drawable_list->addItem(QString::fromStdString(obj->name));
-                }
-            }
-        }
-    }
-
-    // Enable/disable buttons
-    _add_button->setEnabled(_scene != nullptr);
-    _remove_button->setEnabled(false);
-
-    // Sync property panel
+void MeshControlsWidget::set_selected_object(::balsa::scene_graph::Object *obj) {
+    _selected = obj;
     sync_from_state();
 }
 
@@ -211,47 +192,12 @@ void MeshControlsWidget::build_ui() {
     auto *root_layout = new QVBoxLayout(this);
     root_layout->setContentsMargins(4, 4, 4, 4);
 
-    auto *splitter = new QSplitter(Qt::Vertical, this);
-
-    // ── Scene panel (top) ────────────────────────────────────────────
-    auto *scene_widget = new QWidget(splitter);
-    build_scene_panel(scene_widget);
-    splitter->addWidget(scene_widget);
-
-    // ── Property panel (bottom, scrollable) ──────────────────────────
-    auto *scroll = new QScrollArea(splitter);
+    auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     auto *props_widget = new QWidget(scroll);
     build_property_panel(props_widget);
     scroll->setWidget(props_widget);
-    splitter->addWidget(scroll);
-
-    splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 3);
-    root_layout->addWidget(splitter);
-}
-
-void MeshControlsWidget::build_scene_panel(QWidget *parent) {
-    auto *layout = new QVBoxLayout(parent);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    layout->addWidget(new QLabel("Scene", parent));
-
-    _drawable_list = new QListWidget(parent);
-    _drawable_list->setSelectionMode(QAbstractItemView::SingleSelection);
-    layout->addWidget(_drawable_list);
-
-    auto *btn_layout = new QHBoxLayout;
-    _add_button = new QPushButton("Add Mesh", parent);
-    _remove_button = new QPushButton("Remove", parent);
-    _remove_button->setEnabled(false);
-    btn_layout->addWidget(_add_button);
-    btn_layout->addWidget(_remove_button);
-    layout->addLayout(btn_layout);
-
-    connect(_drawable_list, &QListWidget::currentRowChanged, this, &MeshControlsWidget::on_drawable_selected);
-    connect(_add_button, &QPushButton::clicked, this, &MeshControlsWidget::on_add_drawable);
-    connect(_remove_button, &QPushButton::clicked, this, &MeshControlsWidget::on_remove_drawable);
+    root_layout->addWidget(scroll);
 }
 
 void MeshControlsWidget::build_property_panel(QWidget *parent) {
@@ -306,13 +252,8 @@ void MeshControlsWidget::build_object_group(QWidget *parent) {
     layout->addWidget(_edge_count_label);
     layout->addWidget(_attribute_label);
 
-    // Reset transform
-    _reset_transform_button = new QPushButton("Reset Transform", _object_group);
-    layout->addWidget(_reset_transform_button);
-
     connect(_name_edit, &QLineEdit::textChanged, this, &MeshControlsWidget::on_name_edited);
     connect(_visible_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_visibility_changed);
-    connect(_reset_transform_button, &QPushButton::clicked, this, &MeshControlsWidget::on_reset_transform);
 }
 
 // ── Render state group ───────────────────────────────────────────────
@@ -527,25 +468,17 @@ void MeshControlsWidget::build_points_group(QWidget *parent) {
     connect(_point_size_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_point_size_changed);
 }
 
-// ── selected_object / selected_mesh_data ─────────────────────────────
-
-::balsa::scene_graph::Object *MeshControlsWidget::selected_object() {
-    if (!_scene) return nullptr;
-    int row = _drawable_list->currentRow();
-    if (row < 0 || row >= static_cast<int>(_scene->mesh_count())) return nullptr;
-    return _scene->mesh_object(static_cast<std::size_t>(row));
-}
+// ── selected_mesh_data ──────────────────────────────────────────────
 
 ::balsa::scene_graph::MeshData *MeshControlsWidget::selected_mesh_data() {
-    auto *obj = selected_object();
-    if (!obj) return nullptr;
-    return obj->find_feature<::balsa::scene_graph::MeshData>();
+    if (!_selected) return nullptr;
+    return _selected->find_feature<::balsa::scene_graph::MeshData>();
 }
 
 // ── sync_from_state ──────────────────────────────────────────────────
 
 void MeshControlsWidget::sync_from_state() {
-    auto *obj = selected_object();
+    auto *obj = _selected;
     auto *mesh_data = selected_mesh_data();
     bool have_selection = (obj != nullptr);
 
@@ -555,7 +488,6 @@ void MeshControlsWidget::sync_from_state() {
     _lighting_group->setEnabled(have_selection && mesh_data != nullptr);
     _wireframe_group->setEnabled(have_selection && mesh_data != nullptr);
     _points_group->setEnabled(have_selection && mesh_data != nullptr);
-    _remove_button->setEnabled(have_selection);
 
     if (!obj) return;
 
@@ -663,35 +595,11 @@ void MeshControlsWidget::sync_color_group_visibility() {
     _scalar_field_container->setVisible(src == vulkan::ColorSource::ScalarField);
 }
 
-// ── Scene tree slots ─────────────────────────────────────────────────
-
-void MeshControlsWidget::on_drawable_selected(int /*row*/) {
-    sync_from_state();
-}
-
-void MeshControlsWidget::on_add_drawable() {
-    if (!_scene) return;
-    _scene->add_mesh("New Mesh");
-    refresh();
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_remove_drawable() {
-    if (!_scene) return;
-    int row = _drawable_list->currentRow();
-    if (row < 0) return;
-    auto *obj = _scene->mesh_object(static_cast<std::size_t>(row));
-    if (obj) {
-        _scene->remove_mesh(obj);
-    }
-    refresh();
-    emit scene_changed();
-}
+// ── Visibility slot ──────────────────────────────────────────────────
 
 void MeshControlsWidget::on_visibility_changed(bool checked) {
-    auto *obj = selected_object();
-    if (!obj) return;
-    obj->visible = checked;
+    if (!_selected) return;
+    _selected->visible = checked;
     emit scene_changed();
 }
 
@@ -877,21 +785,8 @@ void MeshControlsWidget::on_point_size_changed(int value) {
 // ── Object slots ─────────────────────────────────────────────────────
 
 void MeshControlsWidget::on_name_edited(const QString &text) {
-    auto *obj = selected_object();
-    if (!obj) return;
-    obj->name = text.toStdString();
-    // Update the list item text to match
-    auto *item = _drawable_list->currentItem();
-    if (item) {
-        item->setText(text);
-    }
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_reset_transform() {
-    auto *obj = selected_object();
-    if (!obj) return;
-    obj->reset_transform();
+    if (!_selected) return;
+    _selected->name = text.toStdString();
     emit scene_changed();
 }
 
