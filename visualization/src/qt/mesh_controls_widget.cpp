@@ -3,6 +3,7 @@
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/Light.hpp"
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -216,6 +217,9 @@ void MeshControlsWidget::build_property_panel(QWidget *parent) {
     build_lighting_group(parent);
     layout->addWidget(_lighting_group);
 
+    build_scene_lighting_group(parent);
+    layout->addWidget(_scene_lighting_group);
+
     build_wireframe_group(parent);
     layout->addWidget(_wireframe_group);
 
@@ -386,12 +390,22 @@ void MeshControlsWidget::build_lighting_group(QWidget *parent) {
     _lighting_group->setCheckable(false);
     auto *layout = new QVBoxLayout(_lighting_group);
 
+    // Use scene lights checkbox
+    _use_scene_lights_check = new QCheckBox("Use Scene Lights", _lighting_group);
+    _use_scene_lights_check->setChecked(true);
+    layout->addWidget(_use_scene_lights_check);
+
+    // Per-mesh lighting controls (hidden when using scene lights)
+    _per_mesh_lighting_container = new QWidget(_lighting_group);
+    auto *per_mesh_layout = new QVBoxLayout(_per_mesh_lighting_container);
+    per_mesh_layout->setContentsMargins(0, 0, 0, 0);
+
     // Light direction
     auto *dir_layout = new QHBoxLayout;
-    dir_layout->addWidget(new QLabel("Dir:", _lighting_group));
-    _light_x_spin = new QDoubleSpinBox(_lighting_group);
-    _light_y_spin = new QDoubleSpinBox(_lighting_group);
-    _light_z_spin = new QDoubleSpinBox(_lighting_group);
+    dir_layout->addWidget(new QLabel("Dir:", _per_mesh_lighting_container));
+    _light_x_spin = new QDoubleSpinBox(_per_mesh_lighting_container);
+    _light_y_spin = new QDoubleSpinBox(_per_mesh_lighting_container);
+    _light_z_spin = new QDoubleSpinBox(_per_mesh_lighting_container);
     for (auto *s : { _light_x_spin, _light_y_spin, _light_z_spin }) {
         s->setRange(-1.0, 1.0);
         s->setDecimals(3);
@@ -401,32 +415,36 @@ void MeshControlsWidget::build_lighting_group(QWidget *parent) {
     _light_x_spin->setValue(0.577);
     _light_y_spin->setValue(0.577);
     _light_z_spin->setValue(0.577);
-    layout->addLayout(dir_layout);
+    per_mesh_layout->addLayout(dir_layout);
 
     // Ambient
     auto *amb_row = new QHBoxLayout;
-    _ambient_label = new QLabel("Ambient: 0.15", _lighting_group);
+    _ambient_label = new QLabel("Ambient: 0.15", _per_mesh_lighting_container);
     amb_row->addWidget(_ambient_label);
-    _ambient_slider = make_slider(0, 100, 15, _lighting_group);
+    _ambient_slider = make_slider(0, 100, 15, _per_mesh_lighting_container);
     amb_row->addWidget(_ambient_slider);
-    layout->addLayout(amb_row);
+    per_mesh_layout->addLayout(amb_row);
 
     // Specular
     auto *spec_row = new QHBoxLayout;
-    _specular_label = new QLabel("Specular: 0.50", _lighting_group);
+    _specular_label = new QLabel("Specular: 0.50", _per_mesh_lighting_container);
     spec_row->addWidget(_specular_label);
-    _specular_slider = make_slider(0, 200, 50, _lighting_group);
+    _specular_slider = make_slider(0, 200, 50, _per_mesh_lighting_container);
     spec_row->addWidget(_specular_slider);
-    layout->addLayout(spec_row);
+    per_mesh_layout->addLayout(spec_row);
 
     // Shininess
     auto *shin_row = new QHBoxLayout;
-    _shininess_label = new QLabel("Shininess: 32", _lighting_group);
+    _shininess_label = new QLabel("Shininess: 32", _per_mesh_lighting_container);
     shin_row->addWidget(_shininess_label);
-    _shininess_slider = make_slider(1, 256, 32, _lighting_group);
+    _shininess_slider = make_slider(1, 256, 32, _per_mesh_lighting_container);
     shin_row->addWidget(_shininess_slider);
-    layout->addLayout(shin_row);
+    per_mesh_layout->addLayout(shin_row);
 
+    layout->addWidget(_per_mesh_lighting_container);
+    _per_mesh_lighting_container->setVisible(false);// Hidden by default (use_scene_lights=true)
+
+    connect(_use_scene_lights_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_use_scene_lights_changed);
     connect(_light_x_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_light_dir_changed);
     connect(_light_y_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_light_dir_changed);
     connect(_light_z_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_light_dir_changed);
@@ -436,6 +454,65 @@ void MeshControlsWidget::build_lighting_group(QWidget *parent) {
 }
 
 // ── Wireframe group ──────────────────────────────────────────────────
+
+void MeshControlsWidget::build_scene_lighting_group(QWidget *parent) {
+    _scene_lighting_group = new QGroupBox("Scene Lighting", parent);
+    auto *layout = new QVBoxLayout(_scene_lighting_group);
+
+    // Enabled checkbox
+    _scene_light_enabled_check = new QCheckBox("Enabled", _scene_lighting_group);
+    _scene_light_enabled_check->setChecked(true);
+    layout->addWidget(_scene_light_enabled_check);
+
+    // Direction (camera-local)
+    auto *dir_layout = new QHBoxLayout;
+    dir_layout->addWidget(new QLabel("Dir (cam):", _scene_lighting_group));
+    _scene_light_x_spin = new QDoubleSpinBox(_scene_lighting_group);
+    _scene_light_y_spin = new QDoubleSpinBox(_scene_lighting_group);
+    _scene_light_z_spin = new QDoubleSpinBox(_scene_lighting_group);
+    for (auto *s : { _scene_light_x_spin, _scene_light_y_spin, _scene_light_z_spin }) {
+        s->setRange(-1.0, 1.0);
+        s->setDecimals(3);
+        s->setSingleStep(0.01);
+        dir_layout->addWidget(s);
+    }
+    _scene_light_x_spin->setValue(0.0);
+    _scene_light_y_spin->setValue(0.0);
+    _scene_light_z_spin->setValue(1.0);
+    layout->addLayout(dir_layout);
+
+    // Ambient
+    auto *amb_row = new QHBoxLayout;
+    _scene_ambient_label = new QLabel("Ambient: 0.15", _scene_lighting_group);
+    amb_row->addWidget(_scene_ambient_label);
+    _scene_ambient_slider = make_slider(0, 100, 15, _scene_lighting_group);
+    amb_row->addWidget(_scene_ambient_slider);
+    layout->addLayout(amb_row);
+
+    // Specular
+    auto *spec_row = new QHBoxLayout;
+    _scene_specular_label = new QLabel("Specular: 0.50", _scene_lighting_group);
+    spec_row->addWidget(_scene_specular_label);
+    _scene_specular_slider = make_slider(0, 200, 50, _scene_lighting_group);
+    spec_row->addWidget(_scene_specular_slider);
+    layout->addLayout(spec_row);
+
+    // Shininess
+    auto *shin_row = new QHBoxLayout;
+    _scene_shininess_label = new QLabel("Shininess: 32", _scene_lighting_group);
+    shin_row->addWidget(_scene_shininess_label);
+    _scene_shininess_slider = make_slider(1, 256, 32, _scene_lighting_group);
+    shin_row->addWidget(_scene_shininess_slider);
+    layout->addLayout(shin_row);
+
+    connect(_scene_light_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_scene_light_enabled_changed);
+    connect(_scene_light_x_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
+    connect(_scene_light_y_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
+    connect(_scene_light_z_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
+    connect(_scene_ambient_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_scene_ambient_changed);
+    connect(_scene_specular_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_scene_specular_changed);
+    connect(_scene_shininess_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_scene_shininess_changed);
+}
 
 void MeshControlsWidget::build_wireframe_group(QWidget *parent) {
     _wireframe_group = new QGroupBox("Wireframe", parent);
@@ -511,6 +588,14 @@ void MeshControlsWidget::sync_from_state() {
     QSignalBlocker b17(_shininess_slider);
     QSignalBlocker b18(_wireframe_width_slider);
     QSignalBlocker b19(_point_size_slider);
+    QSignalBlocker b20(_use_scene_lights_check);
+    QSignalBlocker b21(_scene_light_enabled_check);
+    QSignalBlocker b22(_scene_light_x_spin);
+    QSignalBlocker b23(_scene_light_y_spin);
+    QSignalBlocker b24(_scene_light_z_spin);
+    QSignalBlocker b25(_scene_ambient_slider);
+    QSignalBlocker b26(_scene_specular_slider);
+    QSignalBlocker b27(_scene_shininess_slider);
 
     // Object info
     _name_edit->setText(QString::fromStdString(obj->name));
@@ -554,6 +639,8 @@ void MeshControlsWidget::sync_from_state() {
         sync_color_group_visibility();
 
         // Lighting
+        _use_scene_lights_check->setChecked(s.use_scene_lights);
+        _per_mesh_lighting_container->setVisible(!s.use_scene_lights);
         _light_x_spin->setValue(static_cast<double>(s.light_dir[0]));
         _light_y_spin->setValue(static_cast<double>(s.light_dir[1]));
         _light_z_spin->setValue(static_cast<double>(s.light_dir[2]));
@@ -584,6 +671,24 @@ void MeshControlsWidget::sync_from_state() {
         _triangle_count_label->setText("Triangles: -");
         _edge_count_label->setText("Edges: -");
         _attribute_label->setText("Attributes: -");
+    }
+
+    // Scene lighting (always synced, not per-mesh)
+    if (_scene) {
+        auto &light = _scene->headlight();
+        _scene_lighting_group->setEnabled(true);
+        _scene_light_enabled_check->setChecked(light.enabled);
+        _scene_light_x_spin->setValue(static_cast<double>(light.direction(0)));
+        _scene_light_y_spin->setValue(static_cast<double>(light.direction(1)));
+        _scene_light_z_spin->setValue(static_cast<double>(light.direction(2)));
+        _scene_ambient_slider->setValue(static_cast<int>(light.ambient_strength * 100.0f));
+        _scene_specular_slider->setValue(static_cast<int>(light.specular_strength * 100.0f));
+        _scene_shininess_slider->setValue(static_cast<int>(light.shininess));
+        _scene_ambient_label->setText(QStringLiteral("Ambient: %1").arg(light.ambient_strength, 0, 'f', 2));
+        _scene_specular_label->setText(QStringLiteral("Specular: %1").arg(light.specular_strength, 0, 'f', 2));
+        _scene_shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(light.shininess)));
+    } else {
+        _scene_lighting_group->setEnabled(false);
     }
 }
 
@@ -717,6 +822,14 @@ void MeshControlsWidget::on_scalar_range_reset() {
 
 // ── Lighting slots ───────────────────────────────────────────────────
 
+void MeshControlsWidget::on_use_scene_lights_changed(bool checked) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().use_scene_lights = checked;
+    _per_mesh_lighting_container->setVisible(!checked);
+    emit scene_changed();
+}
+
 void MeshControlsWidget::on_light_dir_changed() {
     auto *md = selected_mesh_data();
     if (!md) return;
@@ -747,6 +860,44 @@ void MeshControlsWidget::on_shininess_changed(int value) {
     if (!md) return;
     md->render_state().shininess = static_cast<float>(value);
     _shininess_label->setText(QStringLiteral("Shininess: %1").arg(value));
+    emit scene_changed();
+}
+
+// ── Scene lighting slots ─────────────────────────────────────────────
+
+void MeshControlsWidget::on_scene_light_enabled_changed(bool checked) {
+    if (!_scene) return;
+    _scene->headlight().enabled = checked;
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_scene_light_dir_changed() {
+    if (!_scene) return;
+    auto &light = _scene->headlight();
+    light.direction(0) = static_cast<float>(_scene_light_x_spin->value());
+    light.direction(1) = static_cast<float>(_scene_light_y_spin->value());
+    light.direction(2) = static_cast<float>(_scene_light_z_spin->value());
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_scene_ambient_changed(int value) {
+    if (!_scene) return;
+    _scene->headlight().ambient_strength = static_cast<float>(value) / 100.0f;
+    _scene_ambient_label->setText(QStringLiteral("Ambient: %1").arg(_scene->headlight().ambient_strength, 0, 'f', 2));
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_scene_specular_changed(int value) {
+    if (!_scene) return;
+    _scene->headlight().specular_strength = static_cast<float>(value) / 100.0f;
+    _scene_specular_label->setText(QStringLiteral("Specular: %1").arg(_scene->headlight().specular_strength, 0, 'f', 2));
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_scene_shininess_changed(int value) {
+    if (!_scene) return;
+    _scene->headlight().shininess = static_cast<float>(value);
+    _scene_shininess_label->setText(QStringLiteral("Shininess: %1").arg(value));
     emit scene_changed();
 }
 

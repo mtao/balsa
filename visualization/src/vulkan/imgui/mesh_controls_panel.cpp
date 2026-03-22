@@ -4,6 +4,7 @@
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/Light.hpp"
 
 #include <imgui.h>
 #include <algorithm>
@@ -289,10 +290,16 @@ bool draw_render_state_controls(MeshRenderState &state) {
 
     // ── Lighting ────────────────────────────────────────────────────
     if (ImGui::CollapsingHeader("Lighting")) {
-        changed |= ImGui::DragFloat3("Light Direction", state.light_dir, 0.01f, -1.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Ambient", &state.ambient_strength, 0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Specular", &state.specular_strength, 0.0f, 2.0f);
-        changed |= ImGui::SliderFloat("Shininess", &state.shininess, 1.0f, 256.0f, "%.0f");
+        changed |= ImGui::Checkbox("Use Scene Lights", &state.use_scene_lights);
+
+        if (state.use_scene_lights) {
+            ImGui::TextDisabled("Per-mesh lighting disabled (using scene lights)");
+        } else {
+            changed |= ImGui::DragFloat3("Light Direction", state.light_dir, 0.01f, -1.0f, 1.0f);
+            changed |= ImGui::SliderFloat("Ambient", &state.ambient_strength, 0.0f, 1.0f);
+            changed |= ImGui::SliderFloat("Specular", &state.specular_strength, 0.0f, 2.0f);
+            changed |= ImGui::SliderFloat("Shininess", &state.shininess, 1.0f, 256.0f, "%.0f");
+        }
     }
 
     // ── Wireframe / Points ──────────────────────────────────────────
@@ -692,10 +699,57 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
 
 // ── draw_mesh_controls ───────────────────────────────────────────────
 
+bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state) {
+    bool changed = false;
+
+    if (!state.show_lighting_panel) return false;
+
+    if (ImGui::Begin("Scene Lighting", &state.show_lighting_panel)) {
+        auto &light = scene.headlight();
+
+        changed |= ImGui::Checkbox("Enabled", &light.enabled);
+
+        if (light.enabled) {
+            // Direction in local space (camera space for headlight).
+            float dir[3] = {
+                static_cast<float>(light.direction(0)),
+                static_cast<float>(light.direction(1)),
+                static_cast<float>(light.direction(2))
+            };
+            if (ImGui::DragFloat3("Direction", dir, 0.01f, -1.0f, 1.0f)) {
+                light.direction(0) = dir[0];
+                light.direction(1) = dir[1];
+                light.direction(2) = dir[2];
+                changed = true;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(camera-local)");
+
+            changed |= ImGui::SliderFloat("Ambient##scene", &light.ambient_strength, 0.0f, 1.0f);
+            changed |= ImGui::SliderFloat("Specular##scene", &light.specular_strength, 0.0f, 2.0f);
+            changed |= ImGui::SliderFloat("Shininess##scene", &light.shininess, 1.0f, 256.0f, "%.0f");
+
+            if (ImGui::Button("Reset to Default")) {
+                light.direction(0) = 0.0f;
+                light.direction(1) = 0.0f;
+                light.direction(2) = 1.0f;
+                light.ambient_strength = 0.15f;
+                light.specular_strength = 0.5f;
+                light.shininess = 32.0f;
+                changed = true;
+            }
+        }
+    }
+    ImGui::End();
+
+    return changed;
+}
+
 bool draw_mesh_controls(MeshScene &scene, MeshPanelState &state) {
     bool changed = false;
     changed |= draw_scene_tree(scene, state);
     changed |= draw_property_panel(scene, state);
+    changed |= draw_scene_lighting_panel(scene, state);
     return changed;
 }
 

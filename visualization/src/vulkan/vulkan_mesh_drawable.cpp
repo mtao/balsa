@@ -180,15 +180,28 @@ void VulkanMeshDrawable::update_ubos(const scene_graph::Camera &cam) {
     material.uniform_color(2) = rs.uniform_color[2];
     material.uniform_color(3) = rs.uniform_color[3];
 
-    material.light_dir(0) = rs.light_dir[0];
-    material.light_dir(1) = rs.light_dir[1];
-    material.light_dir(2) = rs.light_dir[2];
-    material.light_dir(3) = rs.ambient_strength;
+    // Lighting — use scene lights or per-mesh, depending on flag.
+    if (rs.use_scene_lights) {
+        material.light_dir(0) = _scene_light_state.light_dir[0];
+        material.light_dir(1) = _scene_light_state.light_dir[1];
+        material.light_dir(2) = _scene_light_state.light_dir[2];
+        material.light_dir(3) = _scene_light_state.ambient_strength;
 
-    material.specular_params(0) = rs.specular_strength;
-    material.specular_params(1) = rs.specular_strength;
-    material.specular_params(2) = rs.specular_strength;
-    material.specular_params(3) = rs.shininess;
+        material.specular_params(0) = _scene_light_state.specular_strength;
+        material.specular_params(1) = _scene_light_state.specular_strength;
+        material.specular_params(2) = _scene_light_state.specular_strength;
+        material.specular_params(3) = _scene_light_state.shininess;
+    } else {
+        material.light_dir(0) = rs.light_dir[0];
+        material.light_dir(1) = rs.light_dir[1];
+        material.light_dir(2) = rs.light_dir[2];
+        material.light_dir(3) = rs.ambient_strength;
+
+        material.specular_params(0) = rs.specular_strength;
+        material.specular_params(1) = rs.specular_strength;
+        material.specular_params(2) = rs.specular_strength;
+        material.specular_params(3) = rs.shininess;
+    }
 
     material.scalar_params(0) = rs.scalar_min;
     material.scalar_params(1) = rs.scalar_max;

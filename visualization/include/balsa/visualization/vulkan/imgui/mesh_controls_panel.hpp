@@ -20,6 +20,7 @@ namespace imgui {
         scene_graph::Object *selected_object = nullptr;
         bool show_scene_panel = true;
         bool show_property_panel = true;
+        bool show_lighting_panel = true;
 
         // Drag-and-drop state (internal)
         scene_graph::Object *drag_source = nullptr;
@@ -55,6 +56,12 @@ namespace imgui {
     // Useful for custom layouts or when you only have one mesh.
     // Returns true if any value changed.
     bool draw_render_state_controls(MeshRenderState &state);
+
+    // Draw the scene-level lighting panel.  Shows controls for the
+    // scene's headlight (direction, ambient, specular, shininess)
+    // and an enabled toggle.  These values apply to all meshes that
+    // have use_scene_lights == true.
+    bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state);
 
     // Convenience: draw both scene tree and property panel in one call.
     bool draw_mesh_controls(MeshScene &scene, MeshPanelState &state);

@@ -9,8 +9,10 @@
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/DrawableGroup.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/Light.hpp"
 #include "balsa/visualization/vulkan/scene_base.hpp"
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
+#include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
 namespace balsa::visualization::vulkan {
 
@@ -118,11 +120,25 @@ class MeshScene : public SceneBase {
     MeshPipelineManager &pipeline_manager() { return _pipeline_manager; }
     const MeshPipelineManager &pipeline_manager() const { return _pipeline_manager; }
 
+    // ── Scene lighting ──────────────────────────────────────────────
+
+    // The default headlight (Light feature attached to the camera Object).
+    // Direction (0,0,1) in camera local space means it shines along
+    // the view direction, automatically tracking camera orientation.
+    scene_graph::Light &headlight() { return *_headlight; }
+    const scene_graph::Light &headlight() const { return *_headlight; }
+
+    // Walk the scene graph and resolve all enabled Light features
+    // into a single ResolvedLightState (world-space direction + params).
+    // Currently uses the first enabled Light found.
+    ResolvedLightState resolve_scene_lights() const;
+
   private:
     // Scene graph
     scene_graph::Object _scene_root;
     scene_graph::Object *_camera_object = nullptr;
     scene_graph::Camera *_camera = nullptr;
+    scene_graph::Light *_headlight = nullptr;
     scene_graph::DrawableGroup _drawable_group;
 
     // Vulkan resources

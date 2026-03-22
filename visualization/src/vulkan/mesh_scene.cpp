@@ -1,9 +1,11 @@
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 #include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/scene_graph/Light.hpp"
 
 #include <zipper/transform/view.hpp>
 #include <algorithm>
+#include <cmath>
 #include <spdlog/spdlog.h>
 
 namespace balsa::visualization::vulkan {
@@ -16,6 +18,11 @@ MeshScene::MeshScene()
     auto &cam_obj = _scene_root.add_child("Camera");
     _camera_object = &cam_obj;
     _camera = &cam_obj.emplace_feature<scene_graph::Camera>();
+
+    // Attach a default headlight to the camera Object.
+    // Direction (0, 0, 1) in camera local space = shining along the
+    // view direction, automatically tracking camera orientation.
+    _headlight = &cam_obj.emplace_feature<scene_graph::Light>();
 }
 
 MeshScene::~MeshScene() {
@@ -45,9 +52,13 @@ void MeshScene::initialize(Film &film) {
 void MeshScene::draw(Film &film) {
     if (!_initialized) return;
 
+    // Resolve scene-level lighting once per frame.
+    auto light_state = resolve_scene_lights();
+
     for (auto *drawable : _drawable_group) {
         auto *vmd = dynamic_cast<VulkanMeshDrawable *>(drawable);
         if (!vmd) continue;
+        vmd->set_scene_light_state(light_state);
         vmd->draw(*_camera, film);
     }
 }
@@ -174,6 +185,66 @@ void MeshScene::set_perspective(float fov_y, float aspect, float near, float far
 
 void MeshScene::update_aspect(float aspect) {
     _camera->update_aspect(aspect);
+}
+
+// ── Scene lighting ──────────────────────────────────────────────────
+
+// Helper: recursively search the scene graph for the first enabled
+// Light feature.  Returns {Light*, Object*} or {nullptr, nullptr}.
+static std::pair<const scene_graph::Light *, const scene_graph::Object *>
+  find_first_light(const scene_graph::Object &obj) {
+    if (auto *light = obj.find_feature<scene_graph::Light>()) {
+        if (light->enabled) {
+            return { light, &obj };
+        }
+    }
+    for (auto &child : obj.children()) {
+        auto result = find_first_light(*child);
+        if (result.first) return result;
+    }
+    return { nullptr, nullptr };
+}
+
+ResolvedLightState MeshScene::resolve_scene_lights() const {
+    ResolvedLightState state;
+
+    auto [light, obj] = find_first_light(_scene_root);
+    if (!light || !obj) {
+        // No lights in the scene — use defaults.
+        return state;
+    }
+
+    // Transform the light direction from local space to world space.
+    // The direction is a vector (not a point), so we use the linear
+    // part (upper-left 3x3) of the world transform, ignoring translation.
+    auto world_xf = obj->world_transform();
+    auto world_mat = world_xf.to_matrix();
+
+    // Extract 3x3 rotation/scale block and transform direction.
+    float dx = light->direction(0);
+    float dy = light->direction(1);
+    float dz = light->direction(2);
+
+    float wx = world_mat(0, 0) * dx + world_mat(0, 1) * dy + world_mat(0, 2) * dz;
+    float wy = world_mat(1, 0) * dx + world_mat(1, 1) * dy + world_mat(1, 2) * dz;
+    float wz = world_mat(2, 0) * dx + world_mat(2, 1) * dy + world_mat(2, 2) * dz;
+
+    // Normalise.
+    float len = std::sqrt(wx * wx + wy * wy + wz * wz);
+    if (len > 1e-6f) {
+        wx /= len;
+        wy /= len;
+        wz /= len;
+    }
+
+    state.light_dir[0] = wx;
+    state.light_dir[1] = wy;
+    state.light_dir[2] = wz;
+    state.ambient_strength = light->ambient_strength;
+    state.specular_strength = light->specular_strength;
+    state.shininess = light->shininess;
+
+    return state;
 }
 
 }// namespace balsa::visualization::vulkan

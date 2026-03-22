@@ -75,10 +75,18 @@ class MeshControlsWidget : public QWidget {
     void on_scalar_range_reset();
 
     // Lighting
+    void on_use_scene_lights_changed(bool checked);
     void on_light_dir_changed();
     void on_ambient_changed(int value);
     void on_specular_changed(int value);
     void on_shininess_changed(int value);
+
+    // Scene lighting
+    void on_scene_light_enabled_changed(bool checked);
+    void on_scene_light_dir_changed();
+    void on_scene_ambient_changed(int value);
+    void on_scene_specular_changed(int value);
+    void on_scene_shininess_changed(int value);
 
     // Wireframe / Points
     void on_wireframe_color_clicked();
@@ -94,6 +102,7 @@ class MeshControlsWidget : public QWidget {
     void build_render_state_group(QWidget *parent);
     void build_color_group(QWidget *parent);
     void build_lighting_group(QWidget *parent);
+    void build_scene_lighting_group(QWidget *parent);
     void build_wireframe_group(QWidget *parent);
     void build_points_group(QWidget *parent);
     void build_object_group(QWidget *parent);
@@ -141,6 +150,8 @@ class MeshControlsWidget : public QWidget {
 
     // ── Lighting group ───────────────────────────────────────────────
     QGroupBox *_lighting_group = nullptr;
+    QCheckBox *_use_scene_lights_check = nullptr;
+    QWidget *_per_mesh_lighting_container = nullptr;
     QDoubleSpinBox *_light_x_spin = nullptr;
     QDoubleSpinBox *_light_y_spin = nullptr;
     QDoubleSpinBox *_light_z_spin = nullptr;
@@ -150,6 +161,19 @@ class MeshControlsWidget : public QWidget {
     QLabel *_ambient_label = nullptr;
     QLabel *_specular_label = nullptr;
     QLabel *_shininess_label = nullptr;
+
+    // ── Scene lighting group ─────────────────────────────────────────
+    QGroupBox *_scene_lighting_group = nullptr;
+    QCheckBox *_scene_light_enabled_check = nullptr;
+    QDoubleSpinBox *_scene_light_x_spin = nullptr;
+    QDoubleSpinBox *_scene_light_y_spin = nullptr;
+    QDoubleSpinBox *_scene_light_z_spin = nullptr;
+    QSlider *_scene_ambient_slider = nullptr;
+    QSlider *_scene_specular_slider = nullptr;
+    QSlider *_scene_shininess_slider = nullptr;
+    QLabel *_scene_ambient_label = nullptr;
+    QLabel *_scene_specular_label = nullptr;
+    QLabel *_scene_shininess_label = nullptr;
 
     // ── Wireframe group ──────────────────────────────────────────────
     QGroupBox *_wireframe_group = nullptr;

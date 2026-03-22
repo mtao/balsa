@@ -7,6 +7,7 @@
 #include "balsa/visualization/vulkan/buffer.hpp"
 #include "balsa/visualization/vulkan/drawable.hpp"
 #include "balsa/visualization/vulkan/mesh_buffers.hpp"
+#include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
 namespace balsa::visualization::vulkan {
 
@@ -66,6 +67,17 @@ class VulkanMeshDrawable : public VulkanDrawable {
     // Object's world transform, then issues Vulkan draw commands.
     void draw(const scene_graph::Camera &cam, Film &film) override;
 
+    // ── Scene lighting ──────────────────────────────────────────────
+
+    // Set the resolved scene-level light state for this frame.
+    // Called by MeshScene::draw() before each drawable's draw().
+    // If the mesh's MeshRenderState::use_scene_lights is true,
+    // update_ubos() will pack MaterialUBO from this state instead
+    // of from the per-mesh lighting fields.
+    void set_scene_light_state(const ResolvedLightState &state) {
+        _scene_light_state = state;
+    }
+
   private:
     // Sync GPU buffers from the sibling MeshData feature if its
     // version has changed since our last sync.
@@ -85,6 +97,7 @@ class VulkanMeshDrawable : public VulkanDrawable {
     VulkanBuffer _material_ubo;
     vk::DescriptorSet _descriptor_set;
 
+    ResolvedLightState _scene_light_state;
     uint64_t _synced_version = 0;
     bool _initialized = false;
 };

@@ -72,6 +72,27 @@ struct MeshRenderState {
 
     // Light both sides of faces.
     bool two_sided = true;
+
+    // When true, lighting comes from the scene's Light features
+    // (resolved by MeshScene) rather than the per-mesh fields above.
+    // The per-mesh light_dir / ambient / specular / shininess are
+    // ignored when this is true.
+    bool use_scene_lights = true;
+};
+
+// ── ResolvedLightState ──────────────────────────────────────────────
+//
+// World-space lighting parameters resolved once per frame by
+// MeshScene from the scene graph's Light features.  Passed to each
+// VulkanMeshDrawable so that meshes with use_scene_lights == true
+// pack their MaterialUBO from this instead of per-mesh values.
+
+struct ResolvedLightState {
+    // World-space light direction (normalised).
+    float light_dir[3] = { 0.577f, 0.577f, 0.577f };
+    float ambient_strength = 0.15f;
+    float specular_strength = 0.5f;
+    float shininess = 32.0f;
 };
 
 }// namespace balsa::visualization::vulkan
