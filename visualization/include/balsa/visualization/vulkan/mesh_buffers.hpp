@@ -31,7 +31,7 @@ struct MaterialUBO {
     scene_graph::Vec4f light_dir;// xyz = direction, w = ambient_strength
     scene_graph::Vec4f specular_params;// xyz = specular_color, w = shininess
     scene_graph::Vec4f scalar_params;// x = scalar_min, y = scalar_max, z = point_size, w = two_sided (>0.5)
-    scene_graph::Vec4f wireframe_color;// rgba (used when RENDER_WIREFRAME is defined)
+    scene_graph::Vec4f layer_color;// rgba — per-layer color (solid/wireframe/point)
 };
 static_assert(sizeof(MaterialUBO) == 80, "MaterialUBO must be 80 bytes");
 

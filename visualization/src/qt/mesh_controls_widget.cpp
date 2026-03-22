@@ -1,6 +1,7 @@
 #include "balsa/visualization/qt/mesh_controls_widget.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/visualization/colormap_list.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/scene_graph/Light.hpp"
@@ -23,130 +24,9 @@ namespace balsa::visualization::qt {
 
 namespace vulkan = ::balsa::visualization::vulkan;
 
-// ── Colormap list ────────────────────────────────────────────────────
-// Same list as the ImGui panel, kept in sync manually.
-
-static const char *k_colormap_names[] = {
-    // MATLAB family
-    "MATLAB_jet",
-    "MATLAB_parula",
-    "MATLAB_hot",
-    "MATLAB_cool",
-    "MATLAB_spring",
-    "MATLAB_summer",
-    "MATLAB_autumn",
-    "MATLAB_winter",
-    "MATLAB_bone",
-    "MATLAB_copper",
-    "MATLAB_pink",
-    "MATLAB_hsv",
-    // transform family
-    "transform_rainbow",
-    "transform_seismic",
-    "transform_hot_metal",
-    "transform_grayscale_banded",
-    "transform_space",
-    "transform_supernova",
-    "transform_ether",
-    "transform_malachite",
-    "transform_morning_glory",
-    "transform_peanut_butter_and_jerry",
-    "transform_purple_haze",
-    "transform_rose",
-    "transform_saturn",
-    "transform_lava_waves",
-    "transform_apricot",
-    "transform_carnation",
-    // IDL ColorBrewer (sequential / diverging)
-    "IDL_CB-Blues",
-    "IDL_CB-Greens",
-    "IDL_CB-Greys",
-    "IDL_CB-Oranges",
-    "IDL_CB-Purples",
-    "IDL_CB-Reds",
-    "IDL_CB-BuGn",
-    "IDL_CB-BuPu",
-    "IDL_CB-GnBu",
-    "IDL_CB-OrRd",
-    "IDL_CB-PuBu",
-    "IDL_CB-PuBuGn",
-    "IDL_CB-PuOr",
-    "IDL_CB-PuRd",
-    "IDL_CB-RdBu",
-    "IDL_CB-RdGy",
-    "IDL_CB-RdPu",
-    "IDL_CB-RdYiBu",
-    "IDL_CB-RdYiGn",
-    "IDL_CB-BrBG",
-    "IDL_CB-PiYG",
-    "IDL_CB-PRGn",
-    "IDL_CB-Spectral",
-    "IDL_CB-YIGn",
-    "IDL_CB-YIGnBu",
-    "IDL_CB-YIOrBr",
-    // IDL ColorBrewer (qualitative)
-    "IDL_CB-Accent",
-    "IDL_CB-Dark2",
-    "IDL_CB-Paired",
-    "IDL_CB-Pastel1",
-    "IDL_CB-Pastel2",
-    "IDL_CB-Set1",
-    "IDL_CB-Set2",
-    "IDL_CB-Set3",
-    // IDL classic
-    "IDL_Rainbow",
-    "IDL_Rainbow_2",
-    "IDL_Rainbow_18",
-    "IDL_Rainbow+Black",
-    "IDL_Rainbow+White",
-    "IDL_Blue-Red",
-    "IDL_Blue-Red_2",
-    "IDL_Blue-White_Linear",
-    "IDL_Blue-Green-Red-Yellow",
-    "IDL_Blue-Pastel-Red",
-    "IDL_Blue_Waves",
-    "IDL_Green-Pink",
-    "IDL_Green-Red-Blue-White",
-    "IDL_Green-White_Exponential",
-    "IDL_Green-White_Linear",
-    "IDL_Red-Purple",
-    "IDL_Red_Temperature",
-    "IDL_Black-White_Linear",
-    "IDL_16_Level",
-    "IDL_Beach",
-    "IDL_Eos_A",
-    "IDL_Eos_B",
-    "IDL_Hardcandy",
-    "IDL_Haze",
-    "IDL_Hue_Sat_Lightness_1",
-    "IDL_Hue_Sat_Lightness_2",
-    "IDL_Hue_Sat_Value_1",
-    "IDL_Hue_Sat_Value_2",
-    "IDL_Mac_Style",
-    "IDL_Nature",
-    "IDL_Ocean",
-    "IDL_Pastels",
-    "IDL_Peppermint",
-    "IDL_Plasma",
-    "IDL_Prism",
-    "IDL_Purple-Red+Stripes",
-    "IDL_Standard_Gamma-II",
-    "IDL_Steps",
-    "IDL_Stern_Special",
-    "IDL_Volcano",
-    "IDL_Waves",
-    // Other
-    "gnuplot",
-    "kbinani_altitude",
-};
-static const int k_colormap_count = static_cast<int>(std::size(k_colormap_names));
-
-static int find_colormap_index(const std::string &name) {
-    for (int i = 0; i < k_colormap_count; ++i) {
-        if (name == k_colormap_names[i]) return i;
-    }
-    return -1;
-}
+using visualization::k_colormap_names;
+using visualization::k_colormap_count;
+using visualization::find_colormap_index;
 
 // ── Helper: create a labeled slider ─────────────────────────────────
 
@@ -211,20 +91,17 @@ void MeshControlsWidget::build_property_panel(QWidget *parent) {
     build_render_state_group(parent);
     layout->addWidget(_render_state_group);
 
+    build_layers_group(parent);
+    layout->addWidget(_layers_group);
+
     build_color_group(parent);
     layout->addWidget(_color_group);
 
-    build_lighting_group(parent);
-    layout->addWidget(_lighting_group);
+    build_material_group(parent);
+    layout->addWidget(_material_group);
 
     build_scene_lighting_group(parent);
     layout->addWidget(_scene_lighting_group);
-
-    build_wireframe_group(parent);
-    layout->addWidget(_wireframe_group);
-
-    build_points_group(parent);
-    layout->addWidget(_points_group);
 
     layout->addStretch();
 }
@@ -274,14 +151,6 @@ void MeshControlsWidget::build_render_state_group(QWidget *parent) {
     shading_row->addWidget(_shading_combo);
     layout->addLayout(shading_row);
 
-    // Render mode
-    auto *mode_row = new QHBoxLayout;
-    mode_row->addWidget(new QLabel("Render Mode:", _render_state_group));
-    _render_mode_combo = new QComboBox(_render_state_group);
-    _render_mode_combo->addItems({ "Solid", "Wireframe", "Points", "Solid + Wireframe" });
-    mode_row->addWidget(_render_mode_combo);
-    layout->addLayout(mode_row);
-
     // Normal source
     auto *normal_row = new QHBoxLayout;
     normal_row->addWidget(new QLabel("Normals:", _render_state_group));
@@ -295,9 +164,78 @@ void MeshControlsWidget::build_render_state_group(QWidget *parent) {
     layout->addWidget(_two_sided_check);
 
     connect(_shading_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_shading_changed);
-    connect(_render_mode_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_render_mode_changed);
     connect(_normal_source_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_normal_source_changed);
     connect(_two_sided_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_two_sided_changed);
+}
+
+// ── Render layers group ──────────────────────────────────────────────
+
+void MeshControlsWidget::build_layers_group(QWidget *parent) {
+    _layers_group = new QGroupBox("Render Layers", parent);
+    auto *layout = new QVBoxLayout(_layers_group);
+
+    // ── Solid sub-section ───────────────────────────────────────────
+    auto *solid_row = new QHBoxLayout;
+    _solid_enabled_check = new QCheckBox("Solid", _layers_group);
+    solid_row->addWidget(_solid_enabled_check);
+    _solid_color_button = new QPushButton(_layers_group);
+    _solid_color_button->setFixedSize(60, 24);
+    set_button_color(_solid_color_button, 0.8f, 0.8f, 0.8f, 1.0f);
+    solid_row->addWidget(_solid_color_button);
+    solid_row->addStretch();
+    layout->addLayout(solid_row);
+
+    // ── Wireframe sub-section ───────────────────────────────────────
+    auto *wire_row = new QHBoxLayout;
+    _wireframe_enabled_check = new QCheckBox("Wireframe", _layers_group);
+    wire_row->addWidget(_wireframe_enabled_check);
+    _wireframe_color_button = new QPushButton(_layers_group);
+    _wireframe_color_button->setFixedSize(60, 24);
+    set_button_color(_wireframe_color_button, 0.0f, 0.0f, 0.0f, 1.0f);
+    wire_row->addWidget(_wireframe_color_button);
+    wire_row->addStretch();
+    layout->addLayout(wire_row);
+
+    // Wireframe details (width slider) — visible only when enabled
+    _wireframe_details_container = new QWidget(_layers_group);
+    auto *wire_details_layout = new QHBoxLayout(_wireframe_details_container);
+    wire_details_layout->setContentsMargins(20, 0, 0, 0);// indent
+    _wireframe_width_label = new QLabel("Width: 1.5", _wireframe_details_container);
+    wire_details_layout->addWidget(_wireframe_width_label);
+    _wireframe_width_slider = make_slider(5, 50, 15, _wireframe_details_container);// *10 scale
+    wire_details_layout->addWidget(_wireframe_width_slider);
+    layout->addWidget(_wireframe_details_container);
+
+    // ── Points sub-section ──────────────────────────────────────────
+    auto *point_row = new QHBoxLayout;
+    _points_enabled_check = new QCheckBox("Points", _layers_group);
+    point_row->addWidget(_points_enabled_check);
+    _point_color_button = new QPushButton(_layers_group);
+    _point_color_button->setFixedSize(60, 24);
+    set_button_color(_point_color_button, 1.0f, 0.0f, 0.0f, 1.0f);
+    point_row->addWidget(_point_color_button);
+    point_row->addStretch();
+    layout->addLayout(point_row);
+
+    // Point details (size slider) — visible only when enabled
+    _points_details_container = new QWidget(_layers_group);
+    auto *point_details_layout = new QHBoxLayout(_points_details_container);
+    point_details_layout->setContentsMargins(20, 0, 0, 0);// indent
+    _point_size_label = new QLabel("Size: 3.0", _points_details_container);
+    point_details_layout->addWidget(_point_size_label);
+    _point_size_slider = make_slider(1, 200, 30, _points_details_container);// *10 scale
+    point_details_layout->addWidget(_point_size_slider);
+    layout->addWidget(_points_details_container);
+
+    // Connections
+    connect(_solid_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_solid_enabled_changed);
+    connect(_solid_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_solid_color_clicked);
+    connect(_wireframe_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_wireframe_enabled_changed);
+    connect(_wireframe_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_wireframe_color_clicked);
+    connect(_wireframe_width_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_wireframe_width_changed);
+    connect(_points_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_points_enabled_changed);
+    connect(_point_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_point_color_clicked);
+    connect(_point_size_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_point_size_changed);
 }
 
 // ── Color group ──────────────────────────────────────────────────────
@@ -383,77 +321,42 @@ void MeshControlsWidget::build_color_group(QWidget *parent) {
     connect(_scalar_range_reset_button, &QPushButton::clicked, this, &MeshControlsWidget::on_scalar_range_reset);
 }
 
-// ── Lighting group ───────────────────────────────────────────────────
+// ── Material group ───────────────────────────────────────────────────
 
-void MeshControlsWidget::build_lighting_group(QWidget *parent) {
-    _lighting_group = new QGroupBox("Lighting", parent);
-    _lighting_group->setCheckable(false);
-    auto *layout = new QVBoxLayout(_lighting_group);
-
-    // Use scene lights checkbox
-    _use_scene_lights_check = new QCheckBox("Use Scene Lights", _lighting_group);
-    _use_scene_lights_check->setChecked(true);
-    layout->addWidget(_use_scene_lights_check);
-
-    // Per-mesh lighting controls (hidden when using scene lights)
-    _per_mesh_lighting_container = new QWidget(_lighting_group);
-    auto *per_mesh_layout = new QVBoxLayout(_per_mesh_lighting_container);
-    per_mesh_layout->setContentsMargins(0, 0, 0, 0);
-
-    // Light direction
-    auto *dir_layout = new QHBoxLayout;
-    dir_layout->addWidget(new QLabel("Dir:", _per_mesh_lighting_container));
-    _light_x_spin = new QDoubleSpinBox(_per_mesh_lighting_container);
-    _light_y_spin = new QDoubleSpinBox(_per_mesh_lighting_container);
-    _light_z_spin = new QDoubleSpinBox(_per_mesh_lighting_container);
-    for (auto *s : { _light_x_spin, _light_y_spin, _light_z_spin }) {
-        s->setRange(-1.0, 1.0);
-        s->setDecimals(3);
-        s->setSingleStep(0.01);
-        dir_layout->addWidget(s);
-    }
-    _light_x_spin->setValue(0.577);
-    _light_y_spin->setValue(0.577);
-    _light_z_spin->setValue(0.577);
-    per_mesh_layout->addLayout(dir_layout);
+void MeshControlsWidget::build_material_group(QWidget *parent) {
+    _material_group = new QGroupBox("Material", parent);
+    auto *layout = new QVBoxLayout(_material_group);
 
     // Ambient
     auto *amb_row = new QHBoxLayout;
-    _ambient_label = new QLabel("Ambient: 0.15", _per_mesh_lighting_container);
-    amb_row->addWidget(_ambient_label);
-    _ambient_slider = make_slider(0, 100, 15, _per_mesh_lighting_container);
-    amb_row->addWidget(_ambient_slider);
-    per_mesh_layout->addLayout(amb_row);
+    _material_ambient_label = new QLabel("Ambient: 0.15", _material_group);
+    amb_row->addWidget(_material_ambient_label);
+    _material_ambient_slider = make_slider(0, 100, 15, _material_group);
+    amb_row->addWidget(_material_ambient_slider);
+    layout->addLayout(amb_row);
 
     // Specular
     auto *spec_row = new QHBoxLayout;
-    _specular_label = new QLabel("Specular: 0.50", _per_mesh_lighting_container);
-    spec_row->addWidget(_specular_label);
-    _specular_slider = make_slider(0, 200, 50, _per_mesh_lighting_container);
-    spec_row->addWidget(_specular_slider);
-    per_mesh_layout->addLayout(spec_row);
+    _material_specular_label = new QLabel("Specular: 0.50", _material_group);
+    spec_row->addWidget(_material_specular_label);
+    _material_specular_slider = make_slider(0, 200, 50, _material_group);
+    spec_row->addWidget(_material_specular_slider);
+    layout->addLayout(spec_row);
 
     // Shininess
     auto *shin_row = new QHBoxLayout;
-    _shininess_label = new QLabel("Shininess: 32", _per_mesh_lighting_container);
-    shin_row->addWidget(_shininess_label);
-    _shininess_slider = make_slider(1, 256, 32, _per_mesh_lighting_container);
-    shin_row->addWidget(_shininess_slider);
-    per_mesh_layout->addLayout(shin_row);
+    _material_shininess_label = new QLabel("Shininess: 32", _material_group);
+    shin_row->addWidget(_material_shininess_label);
+    _material_shininess_slider = make_slider(1, 256, 32, _material_group);
+    shin_row->addWidget(_material_shininess_slider);
+    layout->addLayout(shin_row);
 
-    layout->addWidget(_per_mesh_lighting_container);
-    _per_mesh_lighting_container->setVisible(false);// Hidden by default (use_scene_lights=true)
-
-    connect(_use_scene_lights_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_use_scene_lights_changed);
-    connect(_light_x_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_light_dir_changed);
-    connect(_light_y_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_light_dir_changed);
-    connect(_light_z_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_light_dir_changed);
-    connect(_ambient_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_ambient_changed);
-    connect(_specular_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_specular_changed);
-    connect(_shininess_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_shininess_changed);
+    connect(_material_ambient_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_material_ambient_changed);
+    connect(_material_specular_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_material_specular_changed);
+    connect(_material_shininess_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_material_shininess_changed);
 }
 
-// ── Wireframe group ──────────────────────────────────────────────────
+// ── Scene lighting group ─────────────────────────────────────────────
 
 void MeshControlsWidget::build_scene_lighting_group(QWidget *parent) {
     _scene_lighting_group = new QGroupBox("Scene Lighting", parent);
@@ -481,68 +384,21 @@ void MeshControlsWidget::build_scene_lighting_group(QWidget *parent) {
     _scene_light_z_spin->setValue(1.0);
     layout->addLayout(dir_layout);
 
-    // Ambient
-    auto *amb_row = new QHBoxLayout;
-    _scene_ambient_label = new QLabel("Ambient: 0.15", _scene_lighting_group);
-    amb_row->addWidget(_scene_ambient_label);
-    _scene_ambient_slider = make_slider(0, 100, 15, _scene_lighting_group);
-    amb_row->addWidget(_scene_ambient_slider);
-    layout->addLayout(amb_row);
-
-    // Specular
-    auto *spec_row = new QHBoxLayout;
-    _scene_specular_label = new QLabel("Specular: 0.50", _scene_lighting_group);
-    spec_row->addWidget(_scene_specular_label);
-    _scene_specular_slider = make_slider(0, 200, 50, _scene_lighting_group);
-    spec_row->addWidget(_scene_specular_slider);
-    layout->addLayout(spec_row);
-
-    // Shininess
-    auto *shin_row = new QHBoxLayout;
-    _scene_shininess_label = new QLabel("Shininess: 32", _scene_lighting_group);
-    shin_row->addWidget(_scene_shininess_label);
-    _scene_shininess_slider = make_slider(1, 256, 32, _scene_lighting_group);
-    shin_row->addWidget(_scene_shininess_slider);
-    layout->addLayout(shin_row);
+    // Light color
+    auto *color_row = new QHBoxLayout;
+    color_row->addWidget(new QLabel("Color:", _scene_lighting_group));
+    _scene_light_color_button = new QPushButton(_scene_lighting_group);
+    _scene_light_color_button->setFixedSize(60, 24);
+    set_button_color(_scene_light_color_button, 1.0f, 1.0f, 1.0f, 1.0f);
+    color_row->addWidget(_scene_light_color_button);
+    color_row->addStretch();
+    layout->addLayout(color_row);
 
     connect(_scene_light_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_scene_light_enabled_changed);
     connect(_scene_light_x_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
     connect(_scene_light_y_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
     connect(_scene_light_z_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
-    connect(_scene_ambient_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_scene_ambient_changed);
-    connect(_scene_specular_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_scene_specular_changed);
-    connect(_scene_shininess_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_scene_shininess_changed);
-}
-
-void MeshControlsWidget::build_wireframe_group(QWidget *parent) {
-    _wireframe_group = new QGroupBox("Wireframe", parent);
-    auto *layout = new QHBoxLayout(_wireframe_group);
-
-    layout->addWidget(new QLabel("Color:", _wireframe_group));
-    _wireframe_color_button = new QPushButton(_wireframe_group);
-    _wireframe_color_button->setFixedSize(60, 24);
-    set_button_color(_wireframe_color_button, 0.0f, 0.0f, 0.0f, 1.0f);
-    layout->addWidget(_wireframe_color_button);
-
-    layout->addWidget(new QLabel("Width:", _wireframe_group));
-    _wireframe_width_slider = make_slider(5, 50, 15, _wireframe_group);// *10 scale
-    layout->addWidget(_wireframe_width_slider);
-
-    connect(_wireframe_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_wireframe_color_clicked);
-    connect(_wireframe_width_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_wireframe_width_changed);
-}
-
-// ── Points group ─────────────────────────────────────────────────────
-
-void MeshControlsWidget::build_points_group(QWidget *parent) {
-    _points_group = new QGroupBox("Points", parent);
-    auto *layout = new QHBoxLayout(_points_group);
-
-    layout->addWidget(new QLabel("Size:", _points_group));
-    _point_size_slider = make_slider(1, 200, 30, _points_group);// *10 scale
-    layout->addWidget(_point_size_slider);
-
-    connect(_point_size_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_point_size_changed);
+    connect(_scene_light_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_scene_light_color_clicked);
 }
 
 // ── selected_mesh_data ──────────────────────────────────────────────
@@ -562,9 +418,8 @@ void MeshControlsWidget::sync_from_state() {
     _object_group->setEnabled(have_selection);
     _render_state_group->setEnabled(have_selection && mesh_data != nullptr);
     _color_group->setEnabled(have_selection && mesh_data != nullptr);
-    _lighting_group->setEnabled(have_selection && mesh_data != nullptr);
-    _wireframe_group->setEnabled(have_selection && mesh_data != nullptr);
-    _points_group->setEnabled(have_selection && mesh_data != nullptr);
+    _layers_group->setEnabled(have_selection && mesh_data != nullptr);
+    _material_group->setEnabled(have_selection && mesh_data != nullptr);
 
     if (!obj) return;
 
@@ -572,30 +427,25 @@ void MeshControlsWidget::sync_from_state() {
     QSignalBlocker b1(_name_edit);
     QSignalBlocker b2(_visible_check);
     QSignalBlocker b3(_shading_combo);
-    QSignalBlocker b4(_render_mode_combo);
-    QSignalBlocker b5(_normal_source_combo);
-    QSignalBlocker b6(_two_sided_check);
-    QSignalBlocker b7(_color_source_combo);
-    QSignalBlocker b8(_colormap_combo);
-    QSignalBlocker b9(_colormap_custom_edit);
-    QSignalBlocker b10(_scalar_min_spin);
-    QSignalBlocker b11(_scalar_max_spin);
-    QSignalBlocker b12(_light_x_spin);
-    QSignalBlocker b13(_light_y_spin);
-    QSignalBlocker b14(_light_z_spin);
-    QSignalBlocker b15(_ambient_slider);
-    QSignalBlocker b16(_specular_slider);
-    QSignalBlocker b17(_shininess_slider);
-    QSignalBlocker b18(_wireframe_width_slider);
-    QSignalBlocker b19(_point_size_slider);
-    QSignalBlocker b20(_use_scene_lights_check);
-    QSignalBlocker b21(_scene_light_enabled_check);
-    QSignalBlocker b22(_scene_light_x_spin);
-    QSignalBlocker b23(_scene_light_y_spin);
-    QSignalBlocker b24(_scene_light_z_spin);
-    QSignalBlocker b25(_scene_ambient_slider);
-    QSignalBlocker b26(_scene_specular_slider);
-    QSignalBlocker b27(_scene_shininess_slider);
+    QSignalBlocker b4(_normal_source_combo);
+    QSignalBlocker b5(_two_sided_check);
+    QSignalBlocker b6(_color_source_combo);
+    QSignalBlocker b7(_colormap_combo);
+    QSignalBlocker b8(_colormap_custom_edit);
+    QSignalBlocker b9(_scalar_min_spin);
+    QSignalBlocker b10(_scalar_max_spin);
+    QSignalBlocker b11(_solid_enabled_check);
+    QSignalBlocker b12(_wireframe_enabled_check);
+    QSignalBlocker b13(_wireframe_width_slider);
+    QSignalBlocker b14(_points_enabled_check);
+    QSignalBlocker b15(_point_size_slider);
+    QSignalBlocker b16(_material_ambient_slider);
+    QSignalBlocker b17(_material_specular_slider);
+    QSignalBlocker b18(_material_shininess_slider);
+    QSignalBlocker b19(_scene_light_enabled_check);
+    QSignalBlocker b20(_scene_light_x_spin);
+    QSignalBlocker b21(_scene_light_y_spin);
+    QSignalBlocker b22(_scene_light_z_spin);
 
     // Object info
     _name_edit->setText(QString::fromStdString(obj->name));
@@ -616,7 +466,6 @@ void MeshControlsWidget::sync_from_state() {
 
         // Render state
         _shading_combo->setCurrentIndex(static_cast<int>(s.shading));
-        _render_mode_combo->setCurrentIndex(static_cast<int>(s.render_mode));
         _normal_source_combo->setCurrentIndex(static_cast<int>(s.normal_source));
         _two_sided_check->setChecked(s.two_sided);
 
@@ -638,34 +487,47 @@ void MeshControlsWidget::sync_from_state() {
 
         sync_color_group_visibility();
 
-        // Lighting
-        _use_scene_lights_check->setChecked(s.use_scene_lights);
-        _per_mesh_lighting_container->setVisible(!s.use_scene_lights);
-        _light_x_spin->setValue(static_cast<double>(s.light_dir[0]));
-        _light_y_spin->setValue(static_cast<double>(s.light_dir[1]));
-        _light_z_spin->setValue(static_cast<double>(s.light_dir[2]));
-        _ambient_slider->setValue(static_cast<int>(s.ambient_strength * 100.0f));
-        _specular_slider->setValue(static_cast<int>(s.specular_strength * 100.0f));
-        _shininess_slider->setValue(static_cast<int>(s.shininess));
-        _ambient_label->setText(QStringLiteral("Ambient: %1").arg(s.ambient_strength, 0, 'f', 2));
-        _specular_label->setText(QStringLiteral("Specular: %1").arg(s.specular_strength, 0, 'f', 2));
-        _shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(s.shininess)));
+        // Render layers
+        const auto &layers = s.layers;
 
-        // Wireframe
+        _solid_enabled_check->setChecked(layers.solid.enabled);
+        set_button_color(_solid_color_button,
+                         layers.solid.color[0],
+                         layers.solid.color[1],
+                         layers.solid.color[2],
+                         layers.solid.color[3]);
+        _solid_color_button->setVisible(layers.solid.enabled);
+
+        _wireframe_enabled_check->setChecked(layers.wireframe.enabled);
         set_button_color(_wireframe_color_button,
-                         s.wireframe_color[0],
-                         s.wireframe_color[1],
-                         s.wireframe_color[2],
-                         s.wireframe_color[3]);
-        _wireframe_width_slider->setValue(static_cast<int>(s.wireframe_width * 10.0f));
+                         layers.wireframe.color[0],
+                         layers.wireframe.color[1],
+                         layers.wireframe.color[2],
+                         layers.wireframe.color[3]);
+        _wireframe_color_button->setVisible(layers.wireframe.enabled);
+        _wireframe_details_container->setVisible(layers.wireframe.enabled);
+        _wireframe_width_slider->setValue(static_cast<int>(layers.wireframe.width * 10.0f));
+        _wireframe_width_label->setText(QStringLiteral("Width: %1").arg(layers.wireframe.width, 0, 'f', 1));
 
-        // Points
-        _point_size_slider->setValue(static_cast<int>(s.point_size * 10.0f));
+        _points_enabled_check->setChecked(layers.points.enabled);
+        set_button_color(_point_color_button,
+                         layers.points.color[0],
+                         layers.points.color[1],
+                         layers.points.color[2],
+                         layers.points.color[3]);
+        _point_color_button->setVisible(layers.points.enabled);
+        _points_details_container->setVisible(layers.points.enabled);
+        _point_size_slider->setValue(static_cast<int>(layers.points.size * 10.0f));
+        _point_size_label->setText(QStringLiteral("Size: %1").arg(layers.points.size, 0, 'f', 1));
 
-        // Show/hide wireframe and points groups based on render mode
-        _wireframe_group->setVisible(
-          s.render_mode == vulkan::RenderMode::Wireframe || s.render_mode == vulkan::RenderMode::SolidWireframe);
-        _points_group->setVisible(s.render_mode == vulkan::RenderMode::Points);
+        // Material
+        const auto &mat = s.material;
+        _material_ambient_slider->setValue(static_cast<int>(mat.ambient_strength * 100.0f));
+        _material_specular_slider->setValue(static_cast<int>(mat.specular_strength * 100.0f));
+        _material_shininess_slider->setValue(static_cast<int>(mat.shininess));
+        _material_ambient_label->setText(QStringLiteral("Ambient: %1").arg(mat.ambient_strength, 0, 'f', 2));
+        _material_specular_label->setText(QStringLiteral("Specular: %1").arg(mat.specular_strength, 0, 'f', 2));
+        _material_shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(mat.shininess)));
     } else {
         _vertex_count_label->setText("Vertices: -");
         _triangle_count_label->setText("Triangles: -");
@@ -681,12 +543,11 @@ void MeshControlsWidget::sync_from_state() {
         _scene_light_x_spin->setValue(static_cast<double>(light.direction(0)));
         _scene_light_y_spin->setValue(static_cast<double>(light.direction(1)));
         _scene_light_z_spin->setValue(static_cast<double>(light.direction(2)));
-        _scene_ambient_slider->setValue(static_cast<int>(light.ambient_strength * 100.0f));
-        _scene_specular_slider->setValue(static_cast<int>(light.specular_strength * 100.0f));
-        _scene_shininess_slider->setValue(static_cast<int>(light.shininess));
-        _scene_ambient_label->setText(QStringLiteral("Ambient: %1").arg(light.ambient_strength, 0, 'f', 2));
-        _scene_specular_label->setText(QStringLiteral("Specular: %1").arg(light.specular_strength, 0, 'f', 2));
-        _scene_shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(light.shininess)));
+        set_button_color(_scene_light_color_button,
+                         static_cast<float>(light.color(0)),
+                         static_cast<float>(light.color(1)),
+                         static_cast<float>(light.color(2)),
+                         1.0f);
     } else {
         _scene_lighting_group->setEnabled(false);
     }
@@ -714,17 +575,6 @@ void MeshControlsWidget::on_shading_changed(int index) {
     auto *md = selected_mesh_data();
     if (!md) return;
     md->render_state().shading = static_cast<vulkan::ShadingModel>(index);
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_render_mode_changed(int index) {
-    auto *md = selected_mesh_data();
-    if (!md) return;
-    md->render_state().render_mode = static_cast<vulkan::RenderMode>(index);
-    // Update group visibility
-    _wireframe_group->setVisible(
-      md->render_state().render_mode == vulkan::RenderMode::Wireframe || md->render_state().render_mode == vulkan::RenderMode::SolidWireframe);
-    _points_group->setVisible(md->render_state().render_mode == vulkan::RenderMode::Points);
     emit scene_changed();
 }
 
@@ -820,46 +670,125 @@ void MeshControlsWidget::on_scalar_range_reset() {
     emit scene_changed();
 }
 
-// ── Lighting slots ───────────────────────────────────────────────────
+// ── Render layer slots ───────────────────────────────────────────────
 
-void MeshControlsWidget::on_use_scene_lights_changed(bool checked) {
+void MeshControlsWidget::on_solid_enabled_changed(bool checked) {
     auto *md = selected_mesh_data();
     if (!md) return;
-    md->render_state().use_scene_lights = checked;
-    _per_mesh_lighting_container->setVisible(!checked);
+    md->render_state().layers.solid.enabled = checked;
+    _solid_color_button->setVisible(checked);
     emit scene_changed();
 }
 
-void MeshControlsWidget::on_light_dir_changed() {
+void MeshControlsWidget::on_solid_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
-    md->render_state().light_dir[0] = static_cast<float>(_light_x_spin->value());
-    md->render_state().light_dir[1] = static_cast<float>(_light_y_spin->value());
-    md->render_state().light_dir[2] = static_cast<float>(_light_z_spin->value());
+    auto &c = md->render_state().layers.solid.color;
+    QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+    QColor chosen = QColorDialog::getColor(initial, this, "Solid Color", QColorDialog::ShowAlphaChannel);
+    if (chosen.isValid()) {
+        c[0] = static_cast<float>(chosen.redF());
+        c[1] = static_cast<float>(chosen.greenF());
+        c[2] = static_cast<float>(chosen.blueF());
+        c[3] = static_cast<float>(chosen.alphaF());
+        set_button_color(_solid_color_button, c[0], c[1], c[2], c[3]);
+        emit scene_changed();
+    }
+}
+
+void MeshControlsWidget::on_wireframe_enabled_changed(bool checked) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().layers.wireframe.enabled = checked;
+    _wireframe_color_button->setVisible(checked);
+    _wireframe_details_container->setVisible(checked);
     emit scene_changed();
 }
 
-void MeshControlsWidget::on_ambient_changed(int value) {
+void MeshControlsWidget::on_wireframe_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
-    md->render_state().ambient_strength = static_cast<float>(value) / 100.0f;
-    _ambient_label->setText(QStringLiteral("Ambient: %1").arg(md->render_state().ambient_strength, 0, 'f', 2));
+    auto &c = md->render_state().layers.wireframe.color;
+    QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+    QColor chosen = QColorDialog::getColor(initial, this, "Wireframe Color", QColorDialog::ShowAlphaChannel);
+    if (chosen.isValid()) {
+        c[0] = static_cast<float>(chosen.redF());
+        c[1] = static_cast<float>(chosen.greenF());
+        c[2] = static_cast<float>(chosen.blueF());
+        c[3] = static_cast<float>(chosen.alphaF());
+        set_button_color(_wireframe_color_button, c[0], c[1], c[2], c[3]);
+        emit scene_changed();
+    }
+}
+
+void MeshControlsWidget::on_wireframe_width_changed(int value) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    float width = static_cast<float>(value) / 10.0f;
+    md->render_state().layers.wireframe.width = width;
+    _wireframe_width_label->setText(QStringLiteral("Width: %1").arg(width, 0, 'f', 1));
     emit scene_changed();
 }
 
-void MeshControlsWidget::on_specular_changed(int value) {
+void MeshControlsWidget::on_points_enabled_changed(bool checked) {
     auto *md = selected_mesh_data();
     if (!md) return;
-    md->render_state().specular_strength = static_cast<float>(value) / 100.0f;
-    _specular_label->setText(QStringLiteral("Specular: %1").arg(md->render_state().specular_strength, 0, 'f', 2));
+    md->render_state().layers.points.enabled = checked;
+    _point_color_button->setVisible(checked);
+    _points_details_container->setVisible(checked);
     emit scene_changed();
 }
 
-void MeshControlsWidget::on_shininess_changed(int value) {
+void MeshControlsWidget::on_point_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
-    md->render_state().shininess = static_cast<float>(value);
-    _shininess_label->setText(QStringLiteral("Shininess: %1").arg(value));
+    auto &c = md->render_state().layers.points.color;
+    QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+    QColor chosen = QColorDialog::getColor(initial, this, "Point Color", QColorDialog::ShowAlphaChannel);
+    if (chosen.isValid()) {
+        c[0] = static_cast<float>(chosen.redF());
+        c[1] = static_cast<float>(chosen.greenF());
+        c[2] = static_cast<float>(chosen.blueF());
+        c[3] = static_cast<float>(chosen.alphaF());
+        set_button_color(_point_color_button, c[0], c[1], c[2], c[3]);
+        emit scene_changed();
+    }
+}
+
+void MeshControlsWidget::on_point_size_changed(int value) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    float size = static_cast<float>(value) / 10.0f;
+    md->render_state().layers.points.size = size;
+    _point_size_label->setText(QStringLiteral("Size: %1").arg(size, 0, 'f', 1));
+    emit scene_changed();
+}
+
+// ── Material slots ───────────────────────────────────────────────────
+
+void MeshControlsWidget::on_material_ambient_changed(int value) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    float v = static_cast<float>(value) / 100.0f;
+    md->render_state().material.ambient_strength = v;
+    _material_ambient_label->setText(QStringLiteral("Ambient: %1").arg(v, 0, 'f', 2));
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_material_specular_changed(int value) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    float v = static_cast<float>(value) / 100.0f;
+    md->render_state().material.specular_strength = v;
+    _material_specular_label->setText(QStringLiteral("Specular: %1").arg(v, 0, 'f', 2));
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_material_shininess_changed(int value) {
+    auto *md = selected_mesh_data();
+    if (!md) return;
+    md->render_state().material.shininess = static_cast<float>(value);
+    _material_shininess_label->setText(QStringLiteral("Shininess: %1").arg(value));
     emit scene_changed();
 }
 
@@ -880,57 +809,25 @@ void MeshControlsWidget::on_scene_light_dir_changed() {
     emit scene_changed();
 }
 
-void MeshControlsWidget::on_scene_ambient_changed(int value) {
+void MeshControlsWidget::on_scene_light_color_clicked() {
     if (!_scene) return;
-    _scene->headlight().ambient_strength = static_cast<float>(value) / 100.0f;
-    _scene_ambient_label->setText(QStringLiteral("Ambient: %1").arg(_scene->headlight().ambient_strength, 0, 'f', 2));
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_scene_specular_changed(int value) {
-    if (!_scene) return;
-    _scene->headlight().specular_strength = static_cast<float>(value) / 100.0f;
-    _scene_specular_label->setText(QStringLiteral("Specular: %1").arg(_scene->headlight().specular_strength, 0, 'f', 2));
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_scene_shininess_changed(int value) {
-    if (!_scene) return;
-    _scene->headlight().shininess = static_cast<float>(value);
-    _scene_shininess_label->setText(QStringLiteral("Shininess: %1").arg(value));
-    emit scene_changed();
-}
-
-// ── Wireframe / Points slots ─────────────────────────────────────────
-
-void MeshControlsWidget::on_wireframe_color_clicked() {
-    auto *md = selected_mesh_data();
-    if (!md) return;
-    auto &wc = md->render_state().wireframe_color;
-    QColor initial = QColor::fromRgbF(wc[0], wc[1], wc[2], wc[3]);
-    QColor chosen = QColorDialog::getColor(initial, this, "Wireframe Color", QColorDialog::ShowAlphaChannel);
+    auto &light = _scene->headlight();
+    QColor initial = QColor::fromRgbF(
+      static_cast<qreal>(light.color(0)),
+      static_cast<qreal>(light.color(1)),
+      static_cast<qreal>(light.color(2)));
+    QColor chosen = QColorDialog::getColor(initial, this, "Light Color");
     if (chosen.isValid()) {
-        wc[0] = static_cast<float>(chosen.redF());
-        wc[1] = static_cast<float>(chosen.greenF());
-        wc[2] = static_cast<float>(chosen.blueF());
-        wc[3] = static_cast<float>(chosen.alphaF());
-        set_button_color(_wireframe_color_button, wc[0], wc[1], wc[2], wc[3]);
+        light.color(0) = static_cast<float>(chosen.redF());
+        light.color(1) = static_cast<float>(chosen.greenF());
+        light.color(2) = static_cast<float>(chosen.blueF());
+        set_button_color(_scene_light_color_button,
+                         static_cast<float>(chosen.redF()),
+                         static_cast<float>(chosen.greenF()),
+                         static_cast<float>(chosen.blueF()),
+                         1.0f);
         emit scene_changed();
     }
-}
-
-void MeshControlsWidget::on_wireframe_width_changed(int value) {
-    auto *md = selected_mesh_data();
-    if (!md) return;
-    md->render_state().wireframe_width = static_cast<float>(value) / 10.0f;
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_point_size_changed(int value) {
-    auto *md = selected_mesh_data();
-    if (!md) return;
-    md->render_state().point_size = static_cast<float>(value) / 10.0f;
-    emit scene_changed();
 }
 
 // ── Object slots ─────────────────────────────────────────────────────

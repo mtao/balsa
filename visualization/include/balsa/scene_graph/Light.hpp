@@ -22,8 +22,8 @@ namespace balsa::scene_graph {
 // through the owning Object's world_transform().  This is done by
 // MeshScene::resolve_scene_lights() once per frame.
 //
-// Lighting parameters (ambient, specular, shininess) are stored here
-// so that all meshes using scene lights share the same values.
+// Material response (ambient, specular, shininess) is per-mesh via
+// scene_graph::MaterialProperties, NOT on the Light.
 
 class Light : public AbstractFeature {
   public:
@@ -43,11 +43,6 @@ class Light : public AbstractFeature {
     // attached to the camera Object — i.e. a headlight shining
     // along the view direction.
     Vec3f direction{ 0.0f, 0.0f, 1.0f };
-
-    // Lighting parameters (shared by all meshes using scene lights).
-    float ambient_strength = 0.15f;
-    float specular_strength = 0.5f;
-    float shininess = 32.0f;
 
     // Light color (white by default).
     Vec3f color{ 1.0f, 1.0f, 1.0f };

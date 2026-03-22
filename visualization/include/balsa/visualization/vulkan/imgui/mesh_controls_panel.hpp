@@ -58,9 +58,9 @@ namespace imgui {
     bool draw_render_state_controls(MeshRenderState &state);
 
     // Draw the scene-level lighting panel.  Shows controls for the
-    // scene's headlight (direction, ambient, specular, shininess)
-    // and an enabled toggle.  These values apply to all meshes that
-    // have use_scene_lights == true.
+    // scene's headlight (direction and color) and an enabled toggle.
+    // Per-mesh material response (ambient, specular, shininess) is
+    // controlled per-mesh in the Render State > Material section.
     bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state);
 
     // Convenience: draw both scene tree and property panel in one call.

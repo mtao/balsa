@@ -275,7 +275,8 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         // If the mesh has edges but no triangles, default to wireframe
         // so that edge-only meshes are visible immediately.
         if (!mesh_data->has_triangle_indices() && mesh_data->has_edge_indices()) {
-            mesh_data->render_state().render_mode = vk_viz::RenderMode::Wireframe;
+            mesh_data->render_state().layers.solid.enabled = false;
+            mesh_data->render_state().layers.wireframe.enabled = true;
         }
 
         spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",

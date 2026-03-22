@@ -71,9 +71,9 @@ class VulkanMeshDrawable : public VulkanDrawable {
 
     // Set the resolved scene-level light state for this frame.
     // Called by MeshScene::draw() before each drawable's draw().
-    // If the mesh's MeshRenderState::use_scene_lights is true,
-    // update_ubos() will pack MaterialUBO from this state instead
-    // of from the per-mesh lighting fields.
+    // upload_material_ubo_for_layer() packs MaterialUBO using
+    // this state for light direction and per-mesh MaterialProperties
+    // for material response (ambient, specular, shininess).
     void set_scene_light_state(const ResolvedLightState &state) {
         _scene_light_state = state;
     }
@@ -83,11 +83,20 @@ class VulkanMeshDrawable : public VulkanDrawable {
     // version has changed since our last sync.
     void sync_from_mesh_data(Film &film);
 
-    // Upload TransformUBO and MaterialUBO.
-    void update_ubos(const scene_graph::Camera &cam);
+    // Upload TransformUBO (model/view/projection/normal_matrix).
+    // Called once per frame.
+    void update_transform_ubo(const scene_graph::Camera &cam);
 
-    // Issue the actual Vulkan draw commands (bind pipeline, buffers,
-    // dispatch draw).
+    // Pack and upload MaterialUBO for a specific layer, filling
+    // layer_color from the layer's colour and material response
+    // from _scene_light_state + per-mesh MaterialProperties.
+    void upload_material_ubo_for_layer(const float layer_color[4],
+                                       float point_size,
+                                       const MeshRenderState &rs);
+
+    // Issue multi-layer Vulkan draw commands (solid, wireframe,
+    // points).  Each enabled layer binds its own pipeline, re-
+    // uploads the material UBO with the layer's colour, and draws.
     void record_draw_commands(Film &film);
 
     MeshPipelineManager *_manager;

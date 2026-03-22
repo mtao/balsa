@@ -6,7 +6,8 @@
 // Preprocessor defines (set by MeshShader):
 //   SHADING_FLAT / SHADING_PHONG / SHADING_GOURAUD
 //   COLOR_UNIFORM / COLOR_PER_VERTEX / COLOR_SCALAR_FIELD
-//   RENDER_WIREFRAME — bypass lighting, output wireframe_color directly
+//   RENDER_WIREFRAME — bypass lighting, output layer_color directly
+//   RENDER_POINTS    — bypass lighting, output layer_color directly
 //
 // When COLOR_SCALAR_FIELD is defined, the colormap function
 //   vec4 colormap(float x)
@@ -34,7 +35,7 @@ layout(binding = 1) uniform Material {
     vec4 u_light_dir;           // xyz = direction, w = ambient_strength
     vec4 u_specular_params;     // xyz = specular_color, w = shininess
     vec4 u_scalar_params;       // x = scalar_min, y = scalar_max, z = point_size, w = two_sided
-    vec4 u_wireframe_color;     // rgba (used when RENDER_WIREFRAME is defined)
+    vec4 u_layer_color;         // rgba — per-layer color (wireframe, point, or solid override)
 };
 
 // --- Output ---
@@ -42,9 +43,9 @@ layout(location = 0) out vec4 outColor;
 
 
 void main() {
-#if defined(RENDER_WIREFRAME)
-    // Wireframe mode: use wireframe color directly, no lighting
-    outColor = u_wireframe_color;
+#if defined(RENDER_WIREFRAME) || defined(RENDER_POINTS)
+    // Wireframe / point mode: use layer color directly, no lighting
+    outColor = u_layer_color;
 #else
     // ── 1. Determine base colour ──
     vec3 base_color;
@@ -87,5 +88,5 @@ void main() {
     outColor = vec4(base_color, u_uniform_color.a);
 #endif
 
-#endif // RENDER_WIREFRAME
+#endif // RENDER_WIREFRAME || RENDER_POINTS
 }

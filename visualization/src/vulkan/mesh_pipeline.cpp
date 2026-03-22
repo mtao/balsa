@@ -20,7 +20,7 @@ std::size_t MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noex
     std::size_t h = std::hash<uint8_t>{}(static_cast<uint8_t>(k.shading));
     h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.color_source)));
     h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.normal_source)));
-    h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.render_mode)));
+    h = hash_combine(h, std::hash<uint32_t>{}(static_cast<uint32_t>(k.topology)));
     h = hash_combine(h, std::hash<std::string>{}(k.colormap_name));
     h = hash_combine(h, std::hash<bool>{}(k.has_normals));
     h = hash_combine(h, std::hash<bool>{}(k.has_colors));
@@ -35,13 +35,14 @@ std::size_t MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noex
 // ── make_pipeline_key ────────────────────────────────────────────────
 
 MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
+                                  vk::PrimitiveTopology topology,
                                   const MeshBuffers &buffers,
                                   Film &film) {
     MeshPipelineKey key;
     key.shading = state.shading;
     key.color_source = state.color_source;
     key.normal_source = state.normal_source;
-    key.render_mode = state.render_mode;
+    key.topology = topology;
 
     // Normalise colormap name: only relevant for ScalarField
     key.colormap_name = (state.color_source == ColorSource::ScalarField)
@@ -261,12 +262,13 @@ void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
 // ── Pipeline access ──────────────────────────────────────────────────
 
 vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
+                                                vk::PrimitiveTopology topology,
                                                 const MeshBuffers &buffers,
                                                 Film &film) {
     if (!_initialized) {
         throw std::runtime_error("MeshPipelineManager: not initialized");
     }
-    auto key = make_pipeline_key(state, buffers, film);
+    auto key = make_pipeline_key(state, topology, buffers, film);
     auto it = _cache.find(key);
     if (it != _cache.end()) {
         return it->second;
@@ -279,21 +281,20 @@ vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
 // ── Pipeline creation ────────────────────────────────────────────────
 
 vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
-    spdlog::info("MeshPipelineManager: creating pipeline for shading={}, color={}, render_mode={}",
+    spdlog::info("MeshPipelineManager: creating pipeline for shading={}, color={}, topology={}",
                  static_cast<int>(key.shading),
                  static_cast<int>(key.color_source),
-                 static_cast<int>(key.render_mode));
+                 static_cast<int>(key.topology));
 
     // Build a temporary MeshRenderState from the key to drive shader compilation
     MeshRenderState temp_state;
     temp_state.shading = key.shading;
     temp_state.color_source = key.color_source;
     temp_state.normal_source = key.normal_source;
-    temp_state.render_mode = key.render_mode;
     temp_state.colormap_name = key.colormap_name;
 
     using ET3F = scene_graph::embedding_traits3F;
-    shaders::MeshShader<ET3F> shader(temp_state);
+    shaders::MeshShader<ET3F> shader(temp_state, key.topology);
     auto vert_spv = shader.vert_spirv();
     auto frag_spv = shader.frag_spirv();
 
@@ -359,18 +360,7 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     // ── Input assembly ──────────────────────────────────────────────
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly;
-    switch (key.render_mode) {
-    case RenderMode::Solid:
-    case RenderMode::SolidWireframe:
-        input_assembly.setTopology(vk::PrimitiveTopology::eTriangleList);
-        break;
-    case RenderMode::Wireframe:
-        input_assembly.setTopology(vk::PrimitiveTopology::eLineList);
-        break;
-    case RenderMode::Points:
-        input_assembly.setTopology(vk::PrimitiveTopology::ePointList);
-        break;
-    }
+    input_assembly.setTopology(key.topology);
     input_assembly.setPrimitiveRestartEnable(VK_FALSE);
 
     // ── Viewport / scissor (dynamic) ────────────────────────────────
@@ -387,7 +377,8 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     rasterization.setPolygonMode(vk::PolygonMode::eFill);
     rasterization.setCullMode(key.two_sided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eBack);
     rasterization.setFrontFace(vk::FrontFace::eCounterClockwise);
-    rasterization.setDepthBiasEnable(VK_FALSE);
+    rasterization.setDepthBiasEnable(
+      key.topology == vk::PrimitiveTopology::eTriangleList ? VK_TRUE : VK_FALSE);
     rasterization.setLineWidth(1.0f);
 
     // ── Multisample ─────────────────────────────────────────────────
@@ -431,6 +422,7 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
         vk::DynamicState::eViewport,
         vk::DynamicState::eScissor,
         vk::DynamicState::eLineWidth,
+        vk::DynamicState::eDepthBias,
     };
     vk::PipelineDynamicStateCreateInfo dynamic_state;
     dynamic_state.setDynamicStates(dynamic_states);

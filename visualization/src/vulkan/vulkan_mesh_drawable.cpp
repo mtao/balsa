@@ -71,10 +71,10 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 
     if (!_buffers.has_positions()) return;
 
-    // Update UBOs with current transforms and material.
-    update_ubos(cam);
+    // Upload transforms once per frame.
+    update_transform_ubo(cam);
 
-    // Record draw commands.
+    // Record multi-layer draw commands.
     record_draw_commands(film);
 }
 
@@ -139,12 +139,10 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     _synced_version = mesh_data->version();
 }
 
-// ── Private: UBO update ─────────────────────────────────────────────
+// ── Private: transform UBO ──────────────────────────────────────────
 
-void VulkanMeshDrawable::update_ubos(const scene_graph::Camera &cam) {
+void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam) {
     if (!_initialized) return;
-
-    auto *mesh_data = object().find_feature<scene_graph::MeshData>();
 
     // Model matrix from the scene graph Object's world transform.
     auto model_affine = object().world_transform();
@@ -153,86 +151,70 @@ void VulkanMeshDrawable::update_ubos(const scene_graph::Camera &cam) {
     auto projection = cam.projection_matrix();
 
     // Inverse-transpose of model (for transforming normals).
-    // inverse() dispatches to affine_inverse() for AffineTransform mode.
     scene_graph::Mat4f normal_matrix = model_affine.inverse().to_matrix().transpose().eval();
 
-    // TransformUBO
     TransformUBO transform;
     transform.model = model;
     transform.view = view;
     transform.projection = projection;
     transform.normal_matrix = normal_matrix;
     _transform_ubo.upload(&transform, sizeof(TransformUBO));
+}
 
-    // MaterialUBO — pack from MeshData's render_state.
-    const auto &rs = mesh_data ? mesh_data->render_state()
-                               : MeshRenderState{};
+// ── Private: per-layer material UBO ─────────────────────────────────
+
+void VulkanMeshDrawable::upload_material_ubo_for_layer(
+  const float layer_color[4],
+  float point_size,
+  const MeshRenderState &rs) {
 
     MaterialUBO material;
+
+    // Uniform color (used by COLOR_UNIFORM path in the shader).
     material.uniform_color(0) = rs.uniform_color[0];
     material.uniform_color(1) = rs.uniform_color[1];
     material.uniform_color(2) = rs.uniform_color[2];
     material.uniform_color(3) = rs.uniform_color[3];
 
-    // Lighting — use scene lights or per-mesh, depending on flag.
-    if (rs.use_scene_lights) {
-        material.light_dir(0) = _scene_light_state.light_dir[0];
-        material.light_dir(1) = _scene_light_state.light_dir[1];
-        material.light_dir(2) = _scene_light_state.light_dir[2];
-        material.light_dir(3) = _scene_light_state.ambient_strength;
+    // Lighting — scene light direction + per-mesh material response.
+    material.light_dir(0) = _scene_light_state.light_dir[0];
+    material.light_dir(1) = _scene_light_state.light_dir[1];
+    material.light_dir(2) = _scene_light_state.light_dir[2];
+    material.light_dir(3) = rs.material.ambient_strength;
 
-        material.specular_params(0) = _scene_light_state.specular_strength;
-        material.specular_params(1) = _scene_light_state.specular_strength;
-        material.specular_params(2) = _scene_light_state.specular_strength;
-        material.specular_params(3) = _scene_light_state.shininess;
-    } else {
-        material.light_dir(0) = rs.light_dir[0];
-        material.light_dir(1) = rs.light_dir[1];
-        material.light_dir(2) = rs.light_dir[2];
-        material.light_dir(3) = rs.ambient_strength;
+    material.specular_params(0) = rs.material.specular_strength;
+    material.specular_params(1) = rs.material.specular_strength;
+    material.specular_params(2) = rs.material.specular_strength;
+    material.specular_params(3) = rs.material.shininess;
 
-        material.specular_params(0) = rs.specular_strength;
-        material.specular_params(1) = rs.specular_strength;
-        material.specular_params(2) = rs.specular_strength;
-        material.specular_params(3) = rs.shininess;
-    }
-
+    // Scalar / sizing parameters.
     material.scalar_params(0) = rs.scalar_min;
     material.scalar_params(1) = rs.scalar_max;
-    material.scalar_params(2) = rs.point_size;
+    material.scalar_params(2) = point_size;
     material.scalar_params(3) = rs.two_sided ? 1.0f : 0.0f;
 
-    material.wireframe_color(0) = rs.wireframe_color[0];
-    material.wireframe_color(1) = rs.wireframe_color[1];
-    material.wireframe_color(2) = rs.wireframe_color[2];
-    material.wireframe_color(3) = rs.wireframe_color[3];
+    // Per-layer colour (consumed by RENDER_WIREFRAME / RENDER_POINTS
+    // path in mesh.frag as u_layer_color).
+    material.layer_color(0) = layer_color[0];
+    material.layer_color(1) = layer_color[1];
+    material.layer_color(2) = layer_color[2];
+    material.layer_color(3) = layer_color[3];
+
     _material_ubo.upload(&material, sizeof(MaterialUBO));
 }
 
-// ── Private: draw commands ──────────────────────────────────────────
+// ── Private: multi-layer draw commands ──────────────────────────────
 
 void VulkanMeshDrawable::record_draw_commands(Film &film) {
     auto *mesh_data = object().find_feature<scene_graph::MeshData>();
     const auto &rs = mesh_data ? mesh_data->render_state()
                                : MeshRenderState{};
-
-    // Get (or create) the pipeline for the current state.
-    auto pipeline = _manager->get_or_create(rs, _buffers, film);
-    if (!pipeline) return;
+    const auto &layers = rs.layers;
 
     auto cb = film.current_command_buffer();
 
-    // Bind pipeline.
-    cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+    // ── Shared state: viewport, scissor, descriptor set, vertex buffers ──
 
-    // Dynamic line width.
-    if (rs.render_mode == RenderMode::Wireframe || rs.render_mode == RenderMode::SolidWireframe) {
-        cb.setLineWidth(rs.wireframe_width);
-    } else {
-        cb.setLineWidth(1.0f);
-    }
-
-    // Dynamic viewport and scissor.
     auto extent = film.swapchain_image_size();
     vk::Viewport viewport;
     viewport.setX(0.0f);
@@ -241,60 +223,82 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
     viewport.setHeight(static_cast<float>(extent[1]));
     viewport.setMinDepth(0.0f);
     viewport.setMaxDepth(1.0f);
-    cb.setViewport(0, { viewport });
 
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 });
     scissor.setExtent({ extent[0], extent[1] });
-    cb.setScissor(0, { scissor });
 
-    // Bind descriptor set (set 0).
-    cb.bindDescriptorSets(
-      vk::PipelineBindPoint::eGraphics,
-      _manager->pipeline_layout(),
-      0,
-      { _descriptor_set },
-      {});
+    // Bind vertex buffers (shared across all layers).
+    auto bind_shared_state = [&](vk::Pipeline pipeline) {
+        cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+        cb.setViewport(0, { viewport });
+        cb.setScissor(0, { scissor });
 
-    // Bind vertex buffers at their correct binding indices.
-    cb.bindVertexBuffers(0, { _buffers.positions_buffer() }, { vk::DeviceSize{ 0 } });
-    if (_buffers.has_normals()) {
-        cb.bindVertexBuffers(1, { _buffers.normals_buffer() }, { vk::DeviceSize{ 0 } });
-    }
-    if (_buffers.has_colors()) {
-        cb.bindVertexBuffers(2, { _buffers.colors_buffer() }, { vk::DeviceSize{ 0 } });
-    }
-    if (_buffers.has_scalars()) {
-        cb.bindVertexBuffers(3, { _buffers.scalars_buffer() }, { vk::DeviceSize{ 0 } });
-    }
+        cb.bindDescriptorSets(
+          vk::PipelineBindPoint::eGraphics,
+          _manager->pipeline_layout(),
+          0,
+          { _descriptor_set },
+          {});
 
-    // Issue draw command based on render mode.
-    switch (rs.render_mode) {
-    case RenderMode::Solid:
-    case RenderMode::SolidWireframe:
-        if (_buffers.has_triangle_indices()) {
+        cb.bindVertexBuffers(0, { _buffers.positions_buffer() }, { vk::DeviceSize{ 0 } });
+        if (_buffers.has_normals()) {
+            cb.bindVertexBuffers(1, { _buffers.normals_buffer() }, { vk::DeviceSize{ 0 } });
+        }
+        if (_buffers.has_colors()) {
+            cb.bindVertexBuffers(2, { _buffers.colors_buffer() }, { vk::DeviceSize{ 0 } });
+        }
+        if (_buffers.has_scalars()) {
+            cb.bindVertexBuffers(3, { _buffers.scalars_buffer() }, { vk::DeviceSize{ 0 } });
+        }
+    };
+
+    // ── Layer 1: Solid (triangles) ──────────────────────────────────
+
+    if (layers.solid.enabled && _buffers.has_triangle_indices()) {
+        auto pipeline = _manager->get_or_create(
+          rs, vk::PrimitiveTopology::eTriangleList, _buffers, film);
+        if (pipeline) {
+            upload_material_ubo_for_layer(layers.solid.color, layers.points.size, rs);
+            bind_shared_state(pipeline);
+            cb.setLineWidth(1.0f);
+            // Push solid geometry slightly back so wireframe wins z-test.
+            cb.setDepthBias(1.0f, 0.0f, 1.0f);
+
             cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
-        } else {
-            cb.draw(_buffers.vertex_count(), 1, 0, 0);
         }
-        break;
+    }
 
-    case RenderMode::Wireframe:
-        if (_buffers.has_edge_indices()) {
+    // ── Layer 2: Wireframe (lines) ──────────────────────────────────
+
+    if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
+        auto pipeline = _manager->get_or_create(
+          rs, vk::PrimitiveTopology::eLineList, _buffers, film);
+        if (pipeline) {
+            upload_material_ubo_for_layer(layers.wireframe.color, layers.points.size, rs);
+            bind_shared_state(pipeline);
+            cb.setLineWidth(layers.wireframe.width);
+            cb.setDepthBias(0.0f, 0.0f, 0.0f);
+
             cb.bindIndexBuffer(_buffers.edge_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(_buffers.edge_count() * 2, 1, 0, 0, 0);
-        } else if (_buffers.has_triangle_indices()) {
-            cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
-            cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
-        } else {
+        }
+    }
+
+    // ── Layer 3: Points ─────────────────────────────────────────────
+
+    if (layers.points.enabled && _buffers.vertex_count() > 0) {
+        auto pipeline = _manager->get_or_create(
+          rs, vk::PrimitiveTopology::ePointList, _buffers, film);
+        if (pipeline) {
+            upload_material_ubo_for_layer(layers.points.color, layers.points.size, rs);
+            bind_shared_state(pipeline);
+            cb.setLineWidth(1.0f);
+            cb.setDepthBias(0.0f, 0.0f, 0.0f);
+
             cb.draw(_buffers.vertex_count(), 1, 0, 0);
         }
-        break;
-
-    case RenderMode::Points:
-        cb.draw(_buffers.vertex_count(), 1, 0, 0);
-        break;
     }
 }
 

@@ -3,6 +3,7 @@
 
 #include <string>
 #include <shaderc/shaderc.hpp>
+#include <vulkan/vulkan.hpp>
 #include "balsa/scene_graph/embedding_traits.hpp"
 #include "balsa/visualization/shaders/shader.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
@@ -12,16 +13,18 @@ namespace balsa::visualization::shaders {
 // Uber-shader for mesh rendering.
 //
 // Compiles mesh.vert and mesh.frag with #define permutations driven by
-// a MeshRenderState.  For the COLOR_SCALAR_FIELD path, the selected
-// colormap GLSL function is prepended to the fragment source.
+// a MeshRenderState and a primitive topology.  For the
+// COLOR_SCALAR_FIELD path, the selected colormap GLSL function is
+// prepended to the fragment source.
 //
 // This is a header-only template (like FlatShader) so that the
 // embedding-dimension define is preserved.
 template<scene_graph::concepts::embedding_traits ET>
 class MeshShader : public Shader<ET> {
   public:
-    explicit MeshShader(const vulkan::MeshRenderState &state)
-      : _state(&state) {}
+    MeshShader(const vulkan::MeshRenderState &state,
+               vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList)
+      : _state(&state), _topology(topology) {}
 
     void add_compile_options(shaderc::CompileOptions &opts) const override;
     std::vector<uint32_t> vert_spirv() const override;
@@ -29,6 +32,7 @@ class MeshShader : public Shader<ET> {
 
   private:
     const vulkan::MeshRenderState *_state;
+    vk::PrimitiveTopology _topology;
 };
 
 // ── Implementation ───────────────────────────────────────────────────
@@ -68,9 +72,12 @@ void MeshShader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
         opts.AddMacroDefinition("HAS_NORMALS");
     }
 
-    // Render mode — wireframe uses unlit wireframe color
-    if (_state->render_mode == vulkan::RenderMode::Wireframe) {
+    // Topology-based defines — wireframe and point passes bypass lighting
+    if (_topology == vk::PrimitiveTopology::eLineList) {
         opts.AddMacroDefinition("RENDER_WIREFRAME");
+    }
+    if (_topology == vk::PrimitiveTopology::ePointList) {
+        opts.AddMacroDefinition("RENDER_POINTS");
     }
 }
 

@@ -28,8 +28,13 @@ namespace balsa::visualization::qt {
 // ── MeshControlsWidget ──────────────────────────────────────────────
 //
 // Qt control panel for mesh-specific properties.  Shows shading, color,
-// lighting, wireframe, and point size controls for the currently
-// selected mesh Object.
+// render layers (solid/wireframe/points), material, and scene lighting
+// controls for the currently selected mesh Object.
+//
+// Render layers replace the old RenderMode enum: each layer (solid,
+// wireframe, points) has an independent enable toggle and color.
+// Material properties (ambient/specular/shininess) are per-mesh;
+// the light source (direction, color) is scene-global.
 //
 // Does NOT contain scene tree / outliner controls — those belong in
 // SceneGraphWidget.  The host application wires them together:
@@ -61,7 +66,6 @@ class MeshControlsWidget : public QWidget {
 
     // Render state
     void on_shading_changed(int index);
-    void on_render_mode_changed(int index);
     void on_color_source_changed(int index);
     void on_normal_source_changed(int index);
     void on_two_sided_changed(bool checked);
@@ -74,24 +78,25 @@ class MeshControlsWidget : public QWidget {
     void on_scalar_max_changed(double value);
     void on_scalar_range_reset();
 
-    // Lighting
-    void on_use_scene_lights_changed(bool checked);
-    void on_light_dir_changed();
-    void on_ambient_changed(int value);
-    void on_specular_changed(int value);
-    void on_shininess_changed(int value);
+    // Render layers
+    void on_solid_enabled_changed(bool checked);
+    void on_solid_color_clicked();
+    void on_wireframe_enabled_changed(bool checked);
+    void on_wireframe_color_clicked();
+    void on_wireframe_width_changed(int value);
+    void on_points_enabled_changed(bool checked);
+    void on_point_color_clicked();
+    void on_point_size_changed(int value);
+
+    // Material
+    void on_material_ambient_changed(int value);
+    void on_material_specular_changed(int value);
+    void on_material_shininess_changed(int value);
 
     // Scene lighting
     void on_scene_light_enabled_changed(bool checked);
     void on_scene_light_dir_changed();
-    void on_scene_ambient_changed(int value);
-    void on_scene_specular_changed(int value);
-    void on_scene_shininess_changed(int value);
-
-    // Wireframe / Points
-    void on_wireframe_color_clicked();
-    void on_wireframe_width_changed(int value);
-    void on_point_size_changed(int value);
+    void on_scene_light_color_clicked();
 
     // Object
     void on_name_edited(const QString &text);
@@ -101,10 +106,9 @@ class MeshControlsWidget : public QWidget {
     void build_property_panel(QWidget *parent);
     void build_render_state_group(QWidget *parent);
     void build_color_group(QWidget *parent);
-    void build_lighting_group(QWidget *parent);
+    void build_layers_group(QWidget *parent);
+    void build_material_group(QWidget *parent);
     void build_scene_lighting_group(QWidget *parent);
-    void build_wireframe_group(QWidget *parent);
-    void build_points_group(QWidget *parent);
     void build_object_group(QWidget *parent);
 
     // Populate widgets from the currently-selected object's state.
@@ -131,7 +135,6 @@ class MeshControlsWidget : public QWidget {
     // ── Render state group ───────────────────────────────────────────
     QGroupBox *_render_state_group = nullptr;
     QComboBox *_shading_combo = nullptr;
-    QComboBox *_render_mode_combo = nullptr;
     QComboBox *_normal_source_combo = nullptr;
     QCheckBox *_two_sided_check = nullptr;
 
@@ -148,19 +151,32 @@ class MeshControlsWidget : public QWidget {
     QWidget *_uniform_color_container = nullptr;
     QWidget *_scalar_field_container = nullptr;
 
-    // ── Lighting group ───────────────────────────────────────────────
-    QGroupBox *_lighting_group = nullptr;
-    QCheckBox *_use_scene_lights_check = nullptr;
-    QWidget *_per_mesh_lighting_container = nullptr;
-    QDoubleSpinBox *_light_x_spin = nullptr;
-    QDoubleSpinBox *_light_y_spin = nullptr;
-    QDoubleSpinBox *_light_z_spin = nullptr;
-    QSlider *_ambient_slider = nullptr;
-    QSlider *_specular_slider = nullptr;
-    QSlider *_shininess_slider = nullptr;
-    QLabel *_ambient_label = nullptr;
-    QLabel *_specular_label = nullptr;
-    QLabel *_shininess_label = nullptr;
+    // ── Render layers group ──────────────────────────────────────────
+    QGroupBox *_layers_group = nullptr;
+    // Solid
+    QCheckBox *_solid_enabled_check = nullptr;
+    QPushButton *_solid_color_button = nullptr;
+    // Wireframe
+    QCheckBox *_wireframe_enabled_check = nullptr;
+    QPushButton *_wireframe_color_button = nullptr;
+    QSlider *_wireframe_width_slider = nullptr;
+    QLabel *_wireframe_width_label = nullptr;
+    QWidget *_wireframe_details_container = nullptr;
+    // Points
+    QCheckBox *_points_enabled_check = nullptr;
+    QPushButton *_point_color_button = nullptr;
+    QSlider *_point_size_slider = nullptr;
+    QLabel *_point_size_label = nullptr;
+    QWidget *_points_details_container = nullptr;
+
+    // ── Material group ───────────────────────────────────────────────
+    QGroupBox *_material_group = nullptr;
+    QSlider *_material_ambient_slider = nullptr;
+    QSlider *_material_specular_slider = nullptr;
+    QSlider *_material_shininess_slider = nullptr;
+    QLabel *_material_ambient_label = nullptr;
+    QLabel *_material_specular_label = nullptr;
+    QLabel *_material_shininess_label = nullptr;
 
     // ── Scene lighting group ─────────────────────────────────────────
     QGroupBox *_scene_lighting_group = nullptr;
@@ -168,21 +184,7 @@ class MeshControlsWidget : public QWidget {
     QDoubleSpinBox *_scene_light_x_spin = nullptr;
     QDoubleSpinBox *_scene_light_y_spin = nullptr;
     QDoubleSpinBox *_scene_light_z_spin = nullptr;
-    QSlider *_scene_ambient_slider = nullptr;
-    QSlider *_scene_specular_slider = nullptr;
-    QSlider *_scene_shininess_slider = nullptr;
-    QLabel *_scene_ambient_label = nullptr;
-    QLabel *_scene_specular_label = nullptr;
-    QLabel *_scene_shininess_label = nullptr;
-
-    // ── Wireframe group ──────────────────────────────────────────────
-    QGroupBox *_wireframe_group = nullptr;
-    QPushButton *_wireframe_color_button = nullptr;
-    QSlider *_wireframe_width_slider = nullptr;
-
-    // ── Points group ─────────────────────────────────────────────────
-    QGroupBox *_points_group = nullptr;
-    QSlider *_point_size_slider = nullptr;
+    QPushButton *_scene_light_color_button = nullptr;
 };
 
 }// namespace balsa::visualization::qt

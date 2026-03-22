@@ -223,9 +223,9 @@ ResolvedLightState MeshScene::resolve_scene_lights() const {
     state.light_dir[0] = world_dir(0);
     state.light_dir[1] = world_dir(1);
     state.light_dir[2] = world_dir(2);
-    state.ambient_strength = light->ambient_strength;
-    state.specular_strength = light->specular_strength;
-    state.shininess = light->shininess;
+    state.light_color[0] = light->color(0);
+    state.light_color[1] = light->color(1);
+    state.light_color[2] = light->color(2);
 
     return state;
 }

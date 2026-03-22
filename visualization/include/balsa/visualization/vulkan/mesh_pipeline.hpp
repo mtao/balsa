@@ -26,7 +26,10 @@ struct MeshPipelineKey {
     ShadingModel shading = ShadingModel::Phong;
     ColorSource color_source = ColorSource::Uniform;
     NormalSource normal_source = NormalSource::FromAttribute;
-    RenderMode render_mode = RenderMode::Solid;
+
+    // Primitive topology — one pipeline per topology (triangles, lines,
+    // points).  Replaces the old RenderMode enum.
+    vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
 
     // Colormap name — only meaningful when color_source == ScalarField.
     // Normalised to "" for other color sources so that keys compare equal
@@ -53,9 +56,10 @@ struct MeshPipelineKeyHash {
     std::size_t operator()(const MeshPipelineKey &k) const noexcept;
 };
 
-// Build a MeshPipelineKey from the current render state, buffer
-// contents, and film configuration.
+// Build a MeshPipelineKey from the current render state, topology,
+// buffer contents, and film configuration.
 MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
+                                  vk::PrimitiveTopology topology,
                                   const MeshBuffers &buffers,
                                   Film &film);
 
@@ -88,10 +92,11 @@ class MeshPipelineManager {
 
     // ── Pipeline access ─────────────────────────────────────────────
 
-    // Get (or lazily create) the pipeline matching the given state and
-    // buffer configuration.  The Film is queried for render-pass /
-    // MSAA / depth-stencil info.
+    // Get (or lazily create) the pipeline matching the given state,
+    // topology, and buffer configuration.  The Film is queried for
+    // render-pass / MSAA / depth-stencil info.
     vk::Pipeline get_or_create(const MeshRenderState &state,
+                               vk::PrimitiveTopology topology,
                                const MeshBuffers &buffers,
                                Film &film);
 

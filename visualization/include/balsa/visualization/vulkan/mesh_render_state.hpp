@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include "balsa/scene_graph/render_layers.hpp"
+
 namespace balsa::visualization::vulkan {
 
 // Shading model determines how lighting is evaluated.
@@ -14,16 +16,6 @@ namespace balsa::visualization::vulkan {
 enum class ShadingModel : uint8_t { Flat,
                                     Gouraud,
                                     Phong };
-
-// How geometry is rasterized.
-//   Solid:          filled triangles
-//   Wireframe:      edge-only (line draw with edge index buffer)
-//   Points:         point cloud
-//   SolidWireframe: solid + wireframe overlay via geometry shader (future)
-enum class RenderMode : uint8_t { Solid,
-                                  Wireframe,
-                                  Points,
-                                  SolidWireframe };
 
 // Where fragment color comes from.
 //   Uniform:     single color for the whole mesh (from uniform_color)
@@ -45,9 +37,19 @@ enum class NormalSource : uint8_t { FromAttribute,
 // Read/written by both ImGui and Qt UI panels.
 struct MeshRenderState {
     ShadingModel shading = ShadingModel::Phong;
-    RenderMode render_mode = RenderMode::Solid;
     ColorSource color_source = ColorSource::Uniform;
     NormalSource normal_source = NormalSource::FromAttribute;
+
+    // ── Render layers ───────────────────────────────────────────────
+    // Three composable layers (solid, wireframe, points), each with
+    // independent enable flag and color.  Default: solid + wireframe
+    // enabled, points disabled.
+    scene_graph::RenderLayers layers;
+
+    // ── Material ────────────────────────────────────────────────────
+    // Per-mesh material response to scene lighting.  The light
+    // source (direction, color) comes from the scene's Light feature.
+    scene_graph::MaterialProperties material;
 
     // Uniform color (when color_source == Uniform).  RGBA.
     float uniform_color[4] = { 0.8f, 0.8f, 0.8f, 1.0f };
@@ -57,42 +59,22 @@ struct MeshRenderState {
     float scalar_min = 0.0f;
     float scalar_max = 1.0f;
 
-    // Directional light (world-space, should be normalised).
-    float light_dir[3] = { 0.577f, 0.577f, 0.577f };
-    float ambient_strength = 0.15f;
-    float specular_strength = 0.5f;
-    float shininess = 32.0f;
-
-    // Wireframe overlay / standalone wireframe colour.
-    float wireframe_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    float wireframe_width = 1.5f;
-
-    // Point rendering size.
-    float point_size = 3.0f;
-
     // Light both sides of faces.
     bool two_sided = true;
-
-    // When true, lighting comes from the scene's Light features
-    // (resolved by MeshScene) rather than the per-mesh fields above.
-    // The per-mesh light_dir / ambient / specular / shininess are
-    // ignored when this is true.
-    bool use_scene_lights = true;
 };
 
 // ── ResolvedLightState ──────────────────────────────────────────────
 //
 // World-space lighting parameters resolved once per frame by
 // MeshScene from the scene graph's Light features.  Passed to each
-// VulkanMeshDrawable so that meshes with use_scene_lights == true
-// pack their MaterialUBO from this instead of per-mesh values.
+// VulkanMeshDrawable so that meshes pack their MaterialUBO from
+// both scene lighting and per-mesh MaterialProperties.
 
 struct ResolvedLightState {
     // World-space light direction (normalised).
     float light_dir[3] = { 0.577f, 0.577f, 0.577f };
-    float ambient_strength = 0.15f;
-    float specular_strength = 0.5f;
-    float shininess = 32.0f;
+    // Light color (multiplied with diffuse/specular).
+    float light_color[3] = { 1.0f, 1.0f, 1.0f };
 };
 
 }// namespace balsa::visualization::vulkan

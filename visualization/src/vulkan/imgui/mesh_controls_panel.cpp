@@ -1,6 +1,7 @@
 #include "balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/visualization/colormap_list.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
@@ -14,132 +15,9 @@
 
 namespace balsa::visualization::vulkan::imgui {
 
-// ── Colormap list ────────────────────────────────────────────────────
-// Full list of available colormaps from the colormap_shaders subproject.
-// Grouped by family for the UI combo box.
-
-static constexpr const char *k_colormap_names[] = {
-    // MATLAB family
-    "MATLAB_jet",
-    "MATLAB_parula",
-    "MATLAB_hot",
-    "MATLAB_cool",
-    "MATLAB_spring",
-    "MATLAB_summer",
-    "MATLAB_autumn",
-    "MATLAB_winter",
-    "MATLAB_bone",
-    "MATLAB_copper",
-    "MATLAB_pink",
-    "MATLAB_hsv",
-    // transform family
-    "transform_rainbow",
-    "transform_seismic",
-    "transform_hot_metal",
-    "transform_grayscale_banded",
-    "transform_space",
-    "transform_supernova",
-    "transform_ether",
-    "transform_malachite",
-    "transform_morning_glory",
-    "transform_peanut_butter_and_jerry",
-    "transform_purple_haze",
-    "transform_rose",
-    "transform_saturn",
-    "transform_lava_waves",
-    "transform_apricot",
-    "transform_carnation",
-    // IDL ColorBrewer (sequential / diverging)
-    "IDL_CB-Blues",
-    "IDL_CB-Greens",
-    "IDL_CB-Greys",
-    "IDL_CB-Oranges",
-    "IDL_CB-Purples",
-    "IDL_CB-Reds",
-    "IDL_CB-BuGn",
-    "IDL_CB-BuPu",
-    "IDL_CB-GnBu",
-    "IDL_CB-OrRd",
-    "IDL_CB-PuBu",
-    "IDL_CB-PuBuGn",
-    "IDL_CB-PuOr",
-    "IDL_CB-PuRd",
-    "IDL_CB-RdBu",
-    "IDL_CB-RdGy",
-    "IDL_CB-RdPu",
-    "IDL_CB-RdYiBu",
-    "IDL_CB-RdYiGn",
-    "IDL_CB-BrBG",
-    "IDL_CB-PiYG",
-    "IDL_CB-PRGn",
-    "IDL_CB-Spectral",
-    "IDL_CB-YIGn",
-    "IDL_CB-YIGnBu",
-    "IDL_CB-YIOrBr",
-    // IDL ColorBrewer (qualitative)
-    "IDL_CB-Accent",
-    "IDL_CB-Dark2",
-    "IDL_CB-Paired",
-    "IDL_CB-Pastel1",
-    "IDL_CB-Pastel2",
-    "IDL_CB-Set1",
-    "IDL_CB-Set2",
-    "IDL_CB-Set3",
-    // IDL classic
-    "IDL_Rainbow",
-    "IDL_Rainbow_2",
-    "IDL_Rainbow_18",
-    "IDL_Rainbow+Black",
-    "IDL_Rainbow+White",
-    "IDL_Blue-Red",
-    "IDL_Blue-Red_2",
-    "IDL_Blue-White_Linear",
-    "IDL_Blue-Green-Red-Yellow",
-    "IDL_Blue-Pastel-Red",
-    "IDL_Blue_Waves",
-    "IDL_Green-Pink",
-    "IDL_Green-Red-Blue-White",
-    "IDL_Green-White_Exponential",
-    "IDL_Green-White_Linear",
-    "IDL_Red-Purple",
-    "IDL_Red_Temperature",
-    "IDL_Black-White_Linear",
-    "IDL_16_Level",
-    "IDL_Beach",
-    "IDL_Eos_A",
-    "IDL_Eos_B",
-    "IDL_Hardcandy",
-    "IDL_Haze",
-    "IDL_Hue_Sat_Lightness_1",
-    "IDL_Hue_Sat_Lightness_2",
-    "IDL_Hue_Sat_Value_1",
-    "IDL_Hue_Sat_Value_2",
-    "IDL_Mac_Style",
-    "IDL_Nature",
-    "IDL_Ocean",
-    "IDL_Pastels",
-    "IDL_Peppermint",
-    "IDL_Plasma",
-    "IDL_Prism",
-    "IDL_Purple-Red+Stripes",
-    "IDL_Standard_Gamma-II",
-    "IDL_Steps",
-    "IDL_Stern_Special",
-    "IDL_Volcano",
-    "IDL_Waves",
-    // Other
-    "gnuplot",
-    "kbinani_altitude",
-};
-static constexpr int k_colormap_count = static_cast<int>(std::size(k_colormap_names));
-
-// Find the index of a colormap name in the list, or -1 if not found.
-static int find_colormap_index(const std::string &name) {
-    for (int i = 0; i < k_colormap_count; ++i) {
-        if (name == k_colormap_names[i]) return i;
-    }
-    return -1;
-}
+using visualization::k_colormap_names;
+using visualization::k_colormap_count;
+using visualization::find_colormap_index;
 
 // ── Enum combo helpers ───────────────────────────────────────────────
 
@@ -148,16 +26,6 @@ static bool combo_shading_model(const char *label, ShadingModel &value) {
     int current = static_cast<int>(value);
     if (ImGui::Combo(label, &current, items, 3)) {
         value = static_cast<ShadingModel>(current);
-        return true;
-    }
-    return false;
-}
-
-static bool combo_render_mode(const char *label, RenderMode &value) {
-    static constexpr const char *items[] = { "Solid", "Wireframe", "Points", "Solid + Wireframe" };
-    int current = static_cast<int>(value);
-    if (ImGui::Combo(label, &current, items, 4)) {
-        value = static_cast<RenderMode>(current);
         return true;
     }
     return false;
@@ -240,9 +108,42 @@ bool draw_render_state_controls(MeshRenderState &state) {
     // ── Shading & Rendering ─────────────────────────────────────────
     if (ImGui::CollapsingHeader("Shading & Rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= combo_shading_model("Shading Model", state.shading);
-        changed |= combo_render_mode("Render Mode", state.render_mode);
         changed |= combo_normal_source("Normal Source", state.normal_source);
         changed |= ImGui::Checkbox("Two-Sided Lighting", &state.two_sided);
+    }
+
+    // ── Render Layers ───────────────────────────────────────────────
+    if (ImGui::CollapsingHeader("Render Layers", ImGuiTreeNodeFlags_DefaultOpen)) {
+        auto &layers = state.layers;
+
+        // Solid layer
+        ImGui::PushID("solid");
+        changed |= ImGui::Checkbox("Solid", &layers.solid.enabled);
+        if (layers.solid.enabled) {
+            ImGui::SameLine();
+            changed |= ImGui::ColorEdit4("##solid_color", layers.solid.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+        }
+        ImGui::PopID();
+
+        // Wireframe layer
+        ImGui::PushID("wireframe");
+        changed |= ImGui::Checkbox("Wireframe", &layers.wireframe.enabled);
+        if (layers.wireframe.enabled) {
+            ImGui::SameLine();
+            changed |= ImGui::ColorEdit4("##wire_color", layers.wireframe.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+            changed |= ImGui::SliderFloat("Wire Width", &layers.wireframe.width, 0.5f, 5.0f);
+        }
+        ImGui::PopID();
+
+        // Point layer
+        ImGui::PushID("points");
+        changed |= ImGui::Checkbox("Points", &layers.points.enabled);
+        if (layers.points.enabled) {
+            ImGui::SameLine();
+            changed |= ImGui::ColorEdit4("##point_color", layers.points.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+            changed |= ImGui::SliderFloat("Point Size", &layers.points.size, 1.0f, 20.0f);
+        }
+        ImGui::PopID();
     }
 
     // ── Color ───────────────────────────────────────────────────────
@@ -288,32 +189,12 @@ bool draw_render_state_controls(MeshRenderState &state) {
         }
     }
 
-    // ── Lighting ────────────────────────────────────────────────────
-    if (ImGui::CollapsingHeader("Lighting")) {
-        changed |= ImGui::Checkbox("Use Scene Lights", &state.use_scene_lights);
-
-        if (state.use_scene_lights) {
-            ImGui::TextDisabled("Per-mesh lighting disabled (using scene lights)");
-        } else {
-            changed |= ImGui::DragFloat3("Light Direction", state.light_dir, 0.01f, -1.0f, 1.0f);
-            changed |= ImGui::SliderFloat("Ambient", &state.ambient_strength, 0.0f, 1.0f);
-            changed |= ImGui::SliderFloat("Specular", &state.specular_strength, 0.0f, 2.0f);
-            changed |= ImGui::SliderFloat("Shininess", &state.shininess, 1.0f, 256.0f, "%.0f");
-        }
-    }
-
-    // ── Wireframe / Points ──────────────────────────────────────────
-    if (state.render_mode == RenderMode::Wireframe || state.render_mode == RenderMode::SolidWireframe) {
-        if (ImGui::CollapsingHeader("Wireframe", ImGuiTreeNodeFlags_DefaultOpen)) {
-            changed |= ImGui::ColorEdit4("Wire Color", state.wireframe_color);
-            changed |= ImGui::SliderFloat("Wire Width", &state.wireframe_width, 0.5f, 5.0f);
-        }
-    }
-
-    if (state.render_mode == RenderMode::Points) {
-        if (ImGui::CollapsingHeader("Points", ImGuiTreeNodeFlags_DefaultOpen)) {
-            changed |= ImGui::SliderFloat("Point Size", &state.point_size, 1.0f, 20.0f);
-        }
+    // ── Material ────────────────────────────────────────────────────
+    if (ImGui::CollapsingHeader("Material")) {
+        auto &mat = state.material;
+        changed |= ImGui::SliderFloat("Ambient", &mat.ambient_strength, 0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Specular", &mat.specular_strength, 0.0f, 2.0f);
+        changed |= ImGui::SliderFloat("Shininess", &mat.shininess, 1.0f, 256.0f, "%.0f");
     }
 
     return changed;
@@ -725,17 +606,26 @@ bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state) {
             ImGui::SameLine();
             ImGui::TextDisabled("(camera-local)");
 
-            changed |= ImGui::SliderFloat("Ambient##scene", &light.ambient_strength, 0.0f, 1.0f);
-            changed |= ImGui::SliderFloat("Specular##scene", &light.specular_strength, 0.0f, 2.0f);
-            changed |= ImGui::SliderFloat("Shininess##scene", &light.shininess, 1.0f, 256.0f, "%.0f");
+            // Light color
+            float col[3] = {
+                static_cast<float>(light.color(0)),
+                static_cast<float>(light.color(1)),
+                static_cast<float>(light.color(2))
+            };
+            if (ImGui::ColorEdit3("Light Color", col)) {
+                light.color(0) = col[0];
+                light.color(1) = col[1];
+                light.color(2) = col[2];
+                changed = true;
+            }
 
             if (ImGui::Button("Reset to Default")) {
                 light.direction(0) = 0.0f;
                 light.direction(1) = 0.0f;
                 light.direction(2) = 1.0f;
-                light.ambient_strength = 0.15f;
-                light.specular_strength = 0.5f;
-                light.shininess = 32.0f;
+                light.color(0) = 1.0f;
+                light.color(1) = 1.0f;
+                light.color(2) = 1.0f;
                 changed = true;
             }
         }

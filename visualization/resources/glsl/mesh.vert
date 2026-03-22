@@ -83,6 +83,6 @@ void main() {
     v_color = u_uniform_color.rgb;
 #endif
 
-    // Point size (for RenderMode::Points)
+    // Point size (for point layer pass)
     gl_PointSize = u_scalar_params.z;
 }
