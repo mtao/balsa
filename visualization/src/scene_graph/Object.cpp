@@ -1,7 +1,7 @@
 #include "balsa/scene_graph/Object.hpp"
 
 #include <algorithm>
-#include <cmath>
+#include <numbers>
 
 #include <zipper/transform/decompose.hpp>
 #include <zipper/transform/quaternion_transform.hpp>
@@ -86,30 +86,17 @@ Vec3f Object::rotation_euler() const {
 }
 
 void Object::set_rotation_euler(const Vec3f &degrees) {
-    // Convert degrees to radians.
-    float pitch = degrees(0) * k_deg2rad;// X
-    float yaw = degrees(1) * k_deg2rad;// Y
-    float roll = degrees(2) * k_deg2rad;// Z
-
-    // Tait-Bryan ZYX intrinsic: q = qZ * qY * qX
-    // (matches euler_angles() convention in zipper)
-    float cx = std::cos(pitch * 0.5f), sx = std::sin(pitch * 0.5f);
-    float cy = std::cos(yaw * 0.5f), sy = std::sin(yaw * 0.5f);
-    float cz = std::cos(roll * 0.5f), sz = std::sin(roll * 0.5f);
-
-    _rotation = Quaternionf(
-      cx * cy * cz + sx * sy * sz,// w
-      sx * cy * cz - cx * sy * sz,// x
-      cx * sy * cz + sx * cy * sz,// y
-      cx * cy * sz - sx * sy * cz);// z
+    Vec3f radians;
+    radians(0) = degrees(0) * k_deg2rad;
+    radians(1) = degrees(1) * k_deg2rad;
+    radians(2) = degrees(2) * k_deg2rad;
+    _rotation = ::zipper::transform::from_euler_angles(radians);
 }
 
 // ── Convenience mutators ────────────────────────────────────────────
 
 void Object::translate(const Vec3f &delta) {
-    _translation(0) = static_cast<float>(_translation(0)) + static_cast<float>(delta(0));
-    _translation(1) = static_cast<float>(_translation(1)) + static_cast<float>(delta(1));
-    _translation(2) = static_cast<float>(_translation(2)) + static_cast<float>(delta(2));
+    _translation = (_translation + delta).eval();
 }
 
 void Object::rotate(const Quaternionf &q) {

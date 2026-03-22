@@ -154,13 +154,7 @@ void VulkanMeshDrawable::update_ubos(const scene_graph::Camera &cam) {
 
     // Inverse-transpose of model (for transforming normals).
     // inverse() dispatches to affine_inverse() for AffineTransform mode.
-    auto model_inv = model_affine.inverse().to_matrix();
-    scene_graph::Mat4f normal_matrix;
-    for (int r = 0; r < 4; ++r) {
-        for (int c = 0; c < 4; ++c) {
-            normal_matrix(r, c) = model_inv(c, r);
-        }
-    }
+    scene_graph::Mat4f normal_matrix = model_affine.inverse().to_matrix().transpose().eval();
 
     // TransformUBO
     TransformUBO transform;

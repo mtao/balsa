@@ -5,7 +5,6 @@
 
 #include <zipper/transform/view.hpp>
 #include <algorithm>
-#include <cmath>
 #include <spdlog/spdlog.h>
 
 namespace balsa::visualization::vulkan {
@@ -218,28 +217,12 @@ ResolvedLightState MeshScene::resolve_scene_lights() const {
     // The direction is a vector (not a point), so we use the linear
     // part (upper-left 3x3) of the world transform, ignoring translation.
     auto world_xf = obj->world_transform();
-    auto world_mat = world_xf.to_matrix();
+    scene_graph::Rotation3f lin(world_xf.linear());
+    auto world_dir = (lin * light->direction).normalized();
 
-    // Extract 3x3 rotation/scale block and transform direction.
-    float dx = light->direction(0);
-    float dy = light->direction(1);
-    float dz = light->direction(2);
-
-    float wx = world_mat(0, 0) * dx + world_mat(0, 1) * dy + world_mat(0, 2) * dz;
-    float wy = world_mat(1, 0) * dx + world_mat(1, 1) * dy + world_mat(1, 2) * dz;
-    float wz = world_mat(2, 0) * dx + world_mat(2, 1) * dy + world_mat(2, 2) * dz;
-
-    // Normalise.
-    float len = std::sqrt(wx * wx + wy * wy + wz * wz);
-    if (len > 1e-6f) {
-        wx /= len;
-        wy /= len;
-        wz /= len;
-    }
-
-    state.light_dir[0] = wx;
-    state.light_dir[1] = wy;
-    state.light_dir[2] = wz;
+    state.light_dir[0] = world_dir(0);
+    state.light_dir[1] = world_dir(1);
+    state.light_dir[2] = world_dir(2);
     state.ambient_strength = light->ambient_strength;
     state.specular_strength = light->specular_strength;
     state.shininess = light->shininess;
