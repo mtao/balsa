@@ -1,7 +1,7 @@
 #if !defined(BALSA_GEOMETRY_POINT_CLOUD_SMALLEST_ENCLOSING_SPHERE_WELZL_H)
 #define BALSA_GEOMETRY_POINT_CLOUD_SMALLEST_ENCLOSING_SPHERE_WELZL_H
 
-#include "balsa/geometry/simplex/point_in_circumcircle.hpp"
+#include "balsa/geometry/simplex/circumcenter.hpp"
 #include "balsa/zipper/types.hpp"
 #include <zipper/expression/nullary/Constant.hpp>
 #include <zipper/utils/extents/extent_arithmetic.hpp>

@@ -1,6 +1,5 @@
 #if !defined(BALSA_GEOMETRY_ACCELERATION_ALTERNATING_DIGITAL_TREE_HPP)
 #define BALSA_GEOMETRY_ACCELERATION_ALTERNATING_DIGITAL_TREE_HPP
-#include "balsa/eigen/shape_checks.hpp"
 #include "balsa/geometry/BoundingBox.hpp"
 #include <memory>
 

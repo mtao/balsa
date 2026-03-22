@@ -2,8 +2,8 @@
 #if !defined(BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H)
 #define BALSA_GEOMETRY_POLYGON_MESH_READ_OBJ_IMPL_H
 #include "balsa/geometry/polygon_mesh/read_obj.hpp"
-#include "balsa/zipper/stl2zipper.hpp"
 #include "balsa/zipper/types.hpp"
+#include <zipper/MatrixBase.hpp>
 #include <balsa/data_structures/container_of_containers_to_stacked_contiguous_buffer.hpp>
 #include <fstream>
 #include <optional>
@@ -159,17 +159,17 @@ OBJMesh<Scalar, D> read_obj(const std::filesystem::path &filename) {
 
 
     PolygonMesh<Scalar, D> pos{
-        ColVectors<Scalar, D>((zipper::stl2zipper(v))),//
+        ColVectors<Scalar, D>(::zipper::MatrixBase(v).transpose()),//
         PolygonBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(vi) },//
         PLCurveBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(vl) },//
     };//
     PolygonMesh<Scalar, 2> tex{
-        ColVectors<Scalar, 2>(zipper::stl2zipper(t)),//
+        ColVectors<Scalar, 2>(::zipper::MatrixBase(t).transpose()),//
         PolygonBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(ti) },//
         PLCurveBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(tl) },//
     };
     PolygonMesh<Scalar, D> nor{
-        ColVectors<Scalar, D>(zipper::stl2zipper(n)),//
+        ColVectors<Scalar, D>(::zipper::MatrixBase(n).transpose()),//
         PolygonBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(ni) },//
         PLCurveBuffer<index_type>{ data_structures::container_of_containers_to_stacked_contiguous_buffer<index_type>(nl) },//
     };

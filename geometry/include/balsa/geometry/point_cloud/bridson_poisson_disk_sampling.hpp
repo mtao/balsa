@@ -9,8 +9,6 @@
 // TODO: Port mtao::geometry::grid::{Grid, GridData, utils::multi_loop} to
 // balsa::geometry::grid, then rewrite this file to use balsa:: types.
 
-#include <Eigen/Geometry>
-
 namespace balsa::geometry::point_cloud {
 
 // Generates blue-noise distributed points within a bounding box using
