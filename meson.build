@@ -31,6 +31,18 @@ if get_option('embree')
   embree_dep = dependency('embree3')
 endif
 
+if get_option('openvdb')
+  # OpenVDB lacks a .pc file and its FindOpenVDB.cmake is hard for Meson to
+  # consume (transitive Boost/TBB find-modules).  Since it's a shared library
+  # with its transitive deps already linked in, a simple find_library suffices.
+  _openvdb_lib = cc.find_library('openvdb')
+  # TBB headers are required at compile time (OpenVDB headers pull them in).
+  _tbb_dep = dependency('tbb')
+  openvdb_dep = declare_dependency(
+    dependencies: [_openvdb_lib, _tbb_dep],
+  )
+endif
+
 if get_option('qt')
   qt = import('qt6')
   qt_required_modules = ['Core']

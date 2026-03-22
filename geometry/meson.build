@@ -44,11 +44,11 @@ if get_option('partio')
   geometry_sources += 'src/point_cloud/partio_loader.cpp'
 endif
 
+if get_option('openvdb')
+  geometry_required_deps += openvdb_dep
+endif
 
-
-# Removed stale geometry_headers list — it referenced files in a mesh/
-# directory that no longer exists and was never passed to any Meson function.
-# If a mesh/ module is added in the future, recreate this list then.
+geometry_sources += 'src/point_cloud/write_xyz.cpp'
 
 geometry_required_deps += core_dep
 

@@ -8,67 +8,91 @@
 #include <string>
 
 namespace balsa::geometry::point_cloud {
-template<typename T>
-std::array<balsa::ColVectors<T, 3>, 2> read_xyz(const std::string &filename) {
-    std::vector<std::array<T, 6>> lines;
 
+namespace {
+    // Parse a single XYZ data line: "<species> x y z [vx vy vz]"
+    // Returns the species string and up to 6 numeric values.
+    struct ParsedLine {
+        std::string species;
+        std::array<double, 6> values;
+    };
 
-    std::ifstream ifs(filename);
+    ParsedLine parse_xyz_line(const std::string &line) {
+        ParsedLine result;
+        result.values.fill(0.0);
 
-
-    std::string line;
-    int count = 0;
-    std::getline(ifs, line);
-    count = std::stof(line);
-    // comment line
-    std::getline(ifs, line);
-    lines.resize(count);
-
-
-    auto file_lines_transform = [](const std::string &line) {
         auto toks = line | std::views::split(' ') | std::views::filter([](const auto &rng) {
                         return !rng.empty();
                     });
-        // TODO: we might want to use the individual species somewhere
-        // auto front = toks.front();
-        auto nums = toks | std::views::drop(1) | std::views::transform([](const auto &v) {
-                        T value;
-                        auto s = v | std::ranges::to<std::string>();
-                        std::from_chars(s.data(), s.data() + s.size(), value);
-                        return value;
-                    });
-        std::array<T, 6> ret;
-        auto inp = std::views::concat(nums, std::views::repeat(T(0))) | std::views::take(6);
-        std::ranges::copy(inp, ret.begin());
-        return ret;
-    };
 
+        auto it = toks.begin();
+        if (it == toks.end()) {
+            return result;
+        }
 
-    balsa::ColVectors<T, 6> D(6, count);
+        // First token is the species
+        result.species = *it | std::ranges::to<std::string>();
+        ++it;
+
+        // Remaining tokens are numeric values
+        int idx = 0;
+        for (; it != toks.end() && idx < 6; ++it, ++idx) {
+            auto s = *it | std::ranges::to<std::string>();
+            std::from_chars(s.data(), s.data() + s.size(), result.values[idx]);
+        }
+
+        return result;
+    }
+}// namespace
+
+XYZData read_xyzD(const std::string &filename) {
+    std::ifstream ifs(filename);
+    if (!ifs) {
+        throw std::runtime_error("Failed to open XYZ file: " + filename);
+    }
+
+    XYZData data;
+
+    // Line 1: atom count
+    std::string line;
+    std::getline(ifs, line);
+    int count = std::stoi(line);
+
+    // Line 2: comment
+    std::getline(ifs, line);
+    data.comment = line;
+
+    // Parse atom lines
+    data.species.reserve(count);
+    balsa::ColVectors<double, 6> D(6, count);
 
     int col = 0;
     while (std::getline(ifs, line) && col < count) {
-        auto arr = file_lines_transform(line);
-        ::zipper::VectorBase r = arr;
-        D.col(col) = r;
+        auto parsed = parse_xyz_line(line);
+        data.species.push_back(std::move(parsed.species));
+        for (int r = 0; r < 6; ++r) {
+            D(r, col) = parsed.values[r];
+        }
         ++col;
     }
 
+    data.positions = D.template topRows<3>();
 
-    if (D.bottomRows(3).as_array().abs().sum() == 0) {
-        balsa::ColVectors<T, 3> U = D.template topRows<3>();
-        return { { U, {} } };
-    } else {
-        balsa::ColVectors<T, 3> U = D.template topRows<3>();
-        balsa::ColVectors<T, 3> L = D.template bottomRows<3>();
-        return { { U, L } };
+    if (D.bottomRows(3).as_array().abs().sum() != 0) {
+        data.extra = D.template bottomRows<3>();
     }
+
+    return data;
 }
 
 std::array<balsa::ColVectors<float, 3>, 2> read_xyzF(const std::string &filename) {
-    return read_xyz<float>(filename);
+    auto data = read_xyzD(filename);
+    std::array<balsa::ColVectors<float, 3>, 2> result;
+    result[0] = data.positions.template cast<float>();
+    if (data.extra.cols() > 0) {
+        result[1] = data.extra.template cast<float>();
+    }
+    return result;
 }
-std::array<balsa::ColVectors<double, 3>, 2> read_xyzD(const std::string &filename) {
-    return read_xyz<double>(filename);
-}
+
 }// namespace balsa::geometry::point_cloud
