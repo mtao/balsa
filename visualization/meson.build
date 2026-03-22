@@ -60,22 +60,16 @@ visualization_sources = [
 ]
 
 if get_option('qt')
-  gl_dep = dependency('gl')
   visualization_public_deps += qt_dep
-  visualization_private_deps += gl_dep
   visualization_qt_sources = [
     'src/qt/vulkan/film.cpp',
     'src/qt/vulkan/window.cpp',
-    'src/qt/mesh_viewer/main_window.cpp',
-    'src/qt/mesh_viewer/widget.cpp',
     'src/qt/mesh_controls_widget.cpp',
     'src/qt/SceneGraphModel.cpp',
     'src/qt/SceneGraphWidget.cpp',
     ]
 
   visualization_moc_headers = [
-    'include/balsa/visualization/qt/mesh_viewer/main_window.hpp',
-    'include/balsa/visualization/qt/mesh_viewer/widget.hpp',
     'include/balsa/visualization/qt/mesh_controls_widget.hpp',
     'include/balsa/visualization/qt/SceneGraphModel.hpp',
     'include/balsa/visualization/qt/SceneGraphWidget.hpp',
@@ -87,15 +81,8 @@ if get_option('qt')
     dependencies: qt_dep
     )
 
-  shader_resource_files = ['src/qt/mesh_viewer/shaders/shaders.qrc']
-
-  visualization_qt_rcced = []
-
-  subdir('src/qt/mesh_viewer/shaders/')
-
   visualization_sources += visualization_qt_sources
   visualization_sources += visualization_qt_mocced
-  visualization_sources += visualization_qt_rcced
 endif
 visualization_sources += glsl_resource_sources
 

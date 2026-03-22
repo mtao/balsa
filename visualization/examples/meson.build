@@ -6,8 +6,6 @@ executable('vulkan_window_glfw', 'vulkan_window_glfw.cpp', dependencies: [visual
 
 cli11_dep = dependency('CLI11', required: false, allow_fallback: true)
 
-executable('mesh_viewer', 'mesh_viewer.cpp', dependencies: [visualization_dep])
-
 mesh_viewer_glfw_deps = [visualization_dep]
 mesh_viewer_glfw_args = []
 if cli11_dep.found()
@@ -27,3 +25,15 @@ endif
 executable('mesh_viewer_qt', 'mesh_viewer_qt.cpp',
   dependencies: mesh_viewer_qt_deps,
   cpp_args: mesh_viewer_qt_args)
+
+if get_option('quiver')
+  bvh_viewer_glfw_deps = [visualization_dep, quiver_dep]
+  bvh_viewer_glfw_args = []
+  if cli11_dep.found()
+    bvh_viewer_glfw_deps += cli11_dep
+    bvh_viewer_glfw_args += '-DBALSA_HAS_CLI11=1'
+  endif
+  executable('bvh_viewer_glfw', 'bvh_viewer_glfw.cpp',
+    dependencies: bvh_viewer_glfw_deps,
+    cpp_args: bvh_viewer_glfw_args)
+endif
