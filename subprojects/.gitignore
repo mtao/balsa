@@ -1,7 +1,8 @@
 */
 !patches/
 
-# Auto-generated wrap-redirects from quiver's transitive deps
+# Auto-generated wrap-redirects from transitive deps
 lua.wrap
+mdspan.wrap
 mshio.wrap
 sol2.wrap
