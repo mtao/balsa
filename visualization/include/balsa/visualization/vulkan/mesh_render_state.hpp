@@ -10,8 +10,7 @@ namespace balsa::visualization::vulkan {
 
 // Shading model determines how lighting is evaluated.
 //   Flat:    provoking-vertex normal used for entire triangle (flat interpolation)
-//   Gouraud: lighting computed per-vertex, color interpolated across face
-//            (currently degrades to Phong; vertex-shader lighting is a future addition)
+//   Gouraud: lighting computed per-vertex, interpolated color across face
 //   Phong:   normal interpolated across face, lighting evaluated per-fragment
 enum class ShadingModel : uint8_t { Flat,
                                     Gouraud,
@@ -26,12 +25,20 @@ enum class ColorSource : uint8_t { Uniform,
                                    ScalarField };
 
 // Where surface normals come from.
-//   FromAttribute:    per-vertex normal attribute
-//   ComputedInShader: geometry shader computes flat face normals on GPU (future)
-//   None:             no normals — shading disabled
+//   FromAttribute:    per-vertex normal attribute (smooth shading)
+//   ComputedInShader: flat normals computed from dFdx/dFdy in fragment shader
+//   None:             no normals — shading disabled (unlit)
 enum class NormalSource : uint8_t { FromAttribute,
                                     ComputedInShader,
                                     None };
+
+// Which faces the rasterizer discards.
+//   None:  draw all faces (default — no culling)
+//   Back:  cull back faces (show exterior only)
+//   Front: cull front faces (show interior only)
+enum class CullMode : uint8_t { None,
+                                Back,
+                                Front };
 
 // Shared source of truth for mesh rendering parameters.
 // Read/written by both ImGui and Qt UI panels.
@@ -39,6 +46,9 @@ struct MeshRenderState {
     ShadingModel shading = ShadingModel::Phong;
     ColorSource color_source = ColorSource::Uniform;
     NormalSource normal_source = NormalSource::FromAttribute;
+
+    // Face culling (rasterizer).
+    CullMode cull_mode = CullMode::None;
 
     // ── Render layers ───────────────────────────────────────────────
     // Three composable layers (solid, wireframe, points), each with

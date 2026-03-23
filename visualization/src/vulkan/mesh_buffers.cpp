@@ -43,11 +43,11 @@ void MeshBuffers::upload_normals(Film &film, std::span<const float> data) {
 }
 
 void MeshBuffers::upload_colors(Film &film, std::span<const float> data) {
-    if (data.size() < static_cast<size_t>(_vertex_count) * 3) {
+    if (data.size() < static_cast<size_t>(_vertex_count) * 4) {
         throw std::runtime_error("MeshBuffers::upload_colors: data too small for vertex_count (upload positions first)");
     }
     _colors = make_device_buffer(
-      film, data.data(), static_cast<vk::DeviceSize>(_vertex_count) * 3 * sizeof(float), vk::BufferUsageFlagBits::eVertexBuffer);
+      film, data.data(), static_cast<vk::DeviceSize>(_vertex_count) * 4 * sizeof(float), vk::BufferUsageFlagBits::eVertexBuffer);
 }
 
 void MeshBuffers::upload_scalars(Film &film, std::span<const float> data) {
@@ -129,7 +129,7 @@ std::vector<vk::VertexInputBindingDescription> MeshBuffers::binding_descriptions
     }
     // binding 2: colors
     if (has_colors()) {
-        bindings.push_back({ 2, sizeof(float) * 3, vk::VertexInputRate::eVertex });
+        bindings.push_back({ 2, sizeof(float) * 4, vk::VertexInputRate::eVertex });
     }
     // binding 3: scalars
     if (has_scalars()) {
@@ -150,9 +150,9 @@ std::vector<vk::VertexInputAttributeDescription> MeshBuffers::attribute_descript
     if (has_normals()) {
         attrs.push_back({ 1, 1, vk::Format::eR32G32B32Sfloat, 0 });
     }
-    // location 2, binding 2: inColor (vec3)
+    // location 2, binding 2: inColor (vec4)
     if (has_colors()) {
-        attrs.push_back({ 2, 2, vk::Format::eR32G32B32Sfloat, 0 });
+        attrs.push_back({ 2, 2, vk::Format::eR32G32B32A32Sfloat, 0 });
     }
     // location 3, binding 3: inScalar (float)
     if (has_scalars()) {

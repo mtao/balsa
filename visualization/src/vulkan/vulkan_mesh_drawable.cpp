@@ -33,13 +33,22 @@ void VulkanMeshDrawable::init(Film &film) {
       vk::BufferUsageFlagBits::eUniformBuffer,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
+    // Material UBO: allocate k_max_material_layers aligned slots so
+    // each layer (solid, wireframe, points) writes to its own region.
+    // This prevents the last upload_material_ubo_for_layer() from
+    // overwriting earlier layers' data before the GPU executes deferred
+    // draw commands.
+    auto min_align = film.physical_device_properties().limits.minUniformBufferOffsetAlignment;
+    _material_ubo_stride = material_ubo_aligned_size(min_align);
+
     _material_ubo = VulkanBuffer(
       film,
-      sizeof(MaterialUBO),
+      _material_ubo_stride * k_max_material_layers,
       vk::BufferUsageFlagBits::eUniformBuffer,
       vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-    // Allocate and write descriptor set.
+    // Allocate and write descriptor set.  The material range covers
+    // a single slot; the dynamic offset selects which slot to read.
     _descriptor_set = _manager->allocate_descriptor_set();
     _manager->write_descriptor_set(
       _descriptor_set,
@@ -55,6 +64,14 @@ void VulkanMeshDrawable::release() {
     _buffers.release();
     _transform_ubo.release();
     _material_ubo.release();
+
+    // Return descriptor set to the pool so it can be reused (e.g. when
+    // BVH overlays are rebuilt repeatedly).  The caller must ensure the
+    // GPU is idle before calling release() — MeshScene::remove_mesh()
+    // handles this by calling device.waitIdle() first.
+    if (_descriptor_set && _manager) {
+        _manager->free_descriptor_set(_descriptor_set);
+    }
     _descriptor_set = vk::DescriptorSet{};
     _synced_version = 0;
     _initialized = false;
@@ -104,17 +121,13 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
         _buffers.upload_normals(film, float_span);
     }
 
-    // Upload per-vertex colors (Vec4f → 4 floats, but MeshBuffers
-    // expects 3 floats per vertex for colors).  We strip alpha here.
+    // Upload per-vertex colors (Vec4f → 4 floats, RGBA).
     if (mesh_data->has_vertex_colors()) {
         auto colors = mesh_data->vertex_colors();
-        std::vector<float> rgb(colors.size() * 3);
-        for (std::size_t i = 0; i < colors.size(); ++i) {
-            rgb[i * 3 + 0] = colors[i](0);
-            rgb[i * 3 + 1] = colors[i](1);
-            rgb[i * 3 + 2] = colors[i](2);
-        }
-        _buffers.upload_colors(film, rgb);
+        auto float_span = std::span<const float>(
+          reinterpret_cast<const float *>(colors.data()),
+          colors.size() * 4);
+        _buffers.upload_colors(film, float_span);
     }
 
     // Upload scalar field.
@@ -153,17 +166,26 @@ void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam) {
     // Inverse-transpose of model (for transforming normals).
     scene_graph::Mat4f normal_matrix = model_affine.inverse().to_matrix().transpose().eval();
 
+    // Camera world-space position (for specular view vector).
+    auto cam_world = cam.object().world_transform();
+    auto cam_translation = cam_world.translation();
+
     TransformUBO transform;
     transform.model = model;
     transform.view = view;
     transform.projection = projection;
     transform.normal_matrix = normal_matrix;
+    transform.camera_pos(0) = static_cast<float>(cam_translation(0));
+    transform.camera_pos(1) = static_cast<float>(cam_translation(1));
+    transform.camera_pos(2) = static_cast<float>(cam_translation(2));
+    transform.camera_pos(3) = 0.0f;// pad
     _transform_ubo.upload(&transform, sizeof(TransformUBO));
 }
 
 // ── Private: per-layer material UBO ─────────────────────────────────
 
 void VulkanMeshDrawable::upload_material_ubo_for_layer(
+  uint32_t layer_slot,
   const float layer_color[4],
   float point_size,
   const MeshRenderState &rs) {
@@ -171,16 +193,31 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
     MaterialUBO material;
 
     // Uniform color (used by COLOR_UNIFORM path in the shader).
-    material.uniform_color(0) = rs.uniform_color[0];
-    material.uniform_color(1) = rs.uniform_color[1];
-    material.uniform_color(2) = rs.uniform_color[2];
-    material.uniform_color(3) = rs.uniform_color[3];
+    // For the solid layer (slot 0), override with the layer's own color
+    // so that each layer independently controls its base color.
+    if (layer_slot == 0 && rs.color_source == ColorSource::Uniform) {
+        material.uniform_color(0) = layer_color[0];
+        material.uniform_color(1) = layer_color[1];
+        material.uniform_color(2) = layer_color[2];
+        material.uniform_color(3) = layer_color[3];
+    } else {
+        material.uniform_color(0) = rs.uniform_color[0];
+        material.uniform_color(1) = rs.uniform_color[1];
+        material.uniform_color(2) = rs.uniform_color[2];
+        material.uniform_color(3) = rs.uniform_color[3];
+    }
 
     // Lighting — scene light direction + per-mesh material response.
     material.light_dir(0) = _scene_light_state.light_dir[0];
     material.light_dir(1) = _scene_light_state.light_dir[1];
     material.light_dir(2) = _scene_light_state.light_dir[2];
     material.light_dir(3) = rs.material.ambient_strength;
+
+    // Light color (from scene light) + diffuse strength in .w.
+    material.light_color(0) = _scene_light_state.light_color[0];
+    material.light_color(1) = _scene_light_state.light_color[1];
+    material.light_color(2) = _scene_light_state.light_color[2];
+    material.light_color(3) = rs.material.diffuse_strength;
 
     material.specular_params(0) = rs.material.specular_strength;
     material.specular_params(1) = rs.material.specular_strength;
@@ -194,13 +231,31 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
     material.scalar_params(3) = rs.two_sided ? 1.0f : 0.0f;
 
     // Per-layer colour (consumed by RENDER_WIREFRAME / RENDER_POINTS
-    // path in mesh.frag as u_layer_color).
+    // path in mesh.frag as u_layer_color, and by solid layer when
+    // color_source is Uniform via the override above).
     material.layer_color(0) = layer_color[0];
     material.layer_color(1) = layer_color[1];
     material.layer_color(2) = layer_color[2];
     material.layer_color(3) = layer_color[3];
 
-    _material_ubo.upload(&material, sizeof(MaterialUBO));
+    // Write to the slot's aligned offset within the multi-slot buffer.
+    vk::DeviceSize offset = static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride;
+    _material_ubo.upload(&material, sizeof(MaterialUBO), offset);
+}
+
+// ── Private: bind descriptor set with dynamic offset ────────────────
+
+void VulkanMeshDrawable::bind_descriptor_set_for_layer(
+  vk::CommandBuffer cb,
+  uint32_t layer_slot) {
+    uint32_t dynamic_offset = static_cast<uint32_t>(
+      static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride);
+    cb.bindDescriptorSets(
+      vk::PipelineBindPoint::eGraphics,
+      _manager->pipeline_layout(),
+      0,
+      { _descriptor_set },
+      { dynamic_offset });
 }
 
 // ── Private: multi-layer draw commands ──────────────────────────────
@@ -213,7 +268,8 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
 
     auto cb = film.current_command_buffer();
 
-    // ── Shared state: viewport, scissor, descriptor set, vertex buffers ──
+    // ── Shared state: viewport, scissor, vertex buffers ─────────────
+    // Note: descriptor set is bound per-layer with a dynamic offset.
 
     auto extent = film.swapchain_image_size();
     vk::Viewport viewport;
@@ -228,18 +284,13 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
     scissor.setOffset({ 0, 0 });
     scissor.setExtent({ extent[0], extent[1] });
 
-    // Bind vertex buffers (shared across all layers).
+    // Bind pipeline + viewport/scissor + vertex buffers (shared across
+    // all layers).  Does NOT bind the descriptor set — that happens
+    // per-layer via bind_descriptor_set_for_layer().
     auto bind_shared_state = [&](vk::Pipeline pipeline) {
         cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         cb.setViewport(0, { viewport });
         cb.setScissor(0, { scissor });
-
-        cb.bindDescriptorSets(
-          vk::PipelineBindPoint::eGraphics,
-          _manager->pipeline_layout(),
-          0,
-          { _descriptor_set },
-          {});
 
         cb.bindVertexBuffers(0, { _buffers.positions_buffer() }, { vk::DeviceSize{ 0 } });
         if (_buffers.has_normals()) {
@@ -253,17 +304,37 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         }
     };
 
+    // Upload all enabled layers' material data BEFORE recording any
+    // draw commands.  Each layer writes to its own aligned slot in
+    // _material_ubo, so the writes don't interfere with each other.
+    // Layer slots: 0 = solid, 1 = wireframe, 2 = points.
+    if (layers.solid.enabled && _buffers.has_triangle_indices()) {
+        upload_material_ubo_for_layer(0, layers.solid.color, layers.points.size, rs);
+    }
+    if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
+        upload_material_ubo_for_layer(1, layers.wireframe.color, layers.points.size, rs);
+    }
+    if (layers.points.enabled && _buffers.vertex_count() > 0) {
+        upload_material_ubo_for_layer(2, layers.points.color, layers.points.size, rs);
+    }
+
     // ── Layer 1: Solid (triangles) ──────────────────────────────────
 
     if (layers.solid.enabled && _buffers.has_triangle_indices()) {
         auto pipeline = _manager->get_or_create(
           rs, vk::PrimitiveTopology::eTriangleList, _buffers, film);
         if (pipeline) {
-            upload_material_ubo_for_layer(layers.solid.color, layers.points.size, rs);
             bind_shared_state(pipeline);
+            bind_descriptor_set_for_layer(cb, 0);
             cb.setLineWidth(1.0f);
-            // Push solid geometry slightly back so wireframe wins z-test.
-            cb.setDepthBias(1.0f, 0.0f, 1.0f);
+            // Push solid geometry slightly back so wireframe wins z-test,
+            // but only when wireframe is actually being drawn — the slope
+            // bias can cause flickering on its own.
+            if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
+                cb.setDepthBias(1.0f, 0.0f, 1.0f);
+            } else {
+                cb.setDepthBias(0.0f, 0.0f, 0.0f);
+            }
 
             cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
@@ -276,8 +347,8 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         auto pipeline = _manager->get_or_create(
           rs, vk::PrimitiveTopology::eLineList, _buffers, film);
         if (pipeline) {
-            upload_material_ubo_for_layer(layers.wireframe.color, layers.points.size, rs);
             bind_shared_state(pipeline);
+            bind_descriptor_set_for_layer(cb, 1);
             cb.setLineWidth(layers.wireframe.width);
             cb.setDepthBias(0.0f, 0.0f, 0.0f);
 
@@ -292,8 +363,8 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         auto pipeline = _manager->get_or_create(
           rs, vk::PrimitiveTopology::ePointList, _buffers, film);
         if (pipeline) {
-            upload_material_ubo_for_layer(layers.points.color, layers.points.size, rs);
             bind_shared_state(pipeline);
+            bind_descriptor_set_for_layer(cb, 2);
             cb.setLineWidth(1.0f);
             cb.setDepthBias(0.0f, 0.0f, 0.0f);
 

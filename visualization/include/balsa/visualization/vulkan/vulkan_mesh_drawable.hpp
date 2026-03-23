@@ -87,24 +87,31 @@ class VulkanMeshDrawable : public VulkanDrawable {
     // Called once per frame.
     void update_transform_ubo(const scene_graph::Camera &cam);
 
-    // Pack and upload MaterialUBO for a specific layer, filling
+    // Pack and upload MaterialUBO for a specific layer slot, filling
     // layer_color from the layer's colour and material response
     // from _scene_light_state + per-mesh MaterialProperties.
-    void upload_material_ubo_for_layer(const float layer_color[4],
+    // layer_slot: 0 = solid, 1 = wireframe, 2 = points.
+    void upload_material_ubo_for_layer(uint32_t layer_slot,
+                                       const float layer_color[4],
                                        float point_size,
                                        const MeshRenderState &rs);
 
+    // Bind the descriptor set with dynamic offset for the given layer.
+    void bind_descriptor_set_for_layer(vk::CommandBuffer cb, uint32_t layer_slot);
+
     // Issue multi-layer Vulkan draw commands (solid, wireframe,
-    // points).  Each enabled layer binds its own pipeline, re-
-    // uploads the material UBO with the layer's colour, and draws.
+    // points).  Each enabled layer uploads to its own material UBO
+    // slot and binds with a dynamic offset, so all layers read
+    // independent data even though the command buffer is deferred.
     void record_draw_commands(Film &film);
 
     MeshPipelineManager *_manager;
     MeshBuffers _buffers;
 
     VulkanBuffer _transform_ubo;
-    VulkanBuffer _material_ubo;
+    VulkanBuffer _material_ubo;// sized for k_max_material_layers aligned slots
     vk::DescriptorSet _descriptor_set;
+    vk::DeviceSize _material_ubo_stride = 0;// aligned size per layer slot
 
     ResolvedLightState _scene_light_state;
     uint64_t _synced_version = 0;

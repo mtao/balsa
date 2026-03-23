@@ -42,7 +42,7 @@ struct MeshPipelineKey {
     bool has_scalars = false;
 
     // Rasterization state
-    bool two_sided = true;// false = cull back faces
+    CullMode cull_mode = CullMode::None;// which faces to discard
 
     // Render-pass-dependent state (queried from Film)
     uint32_t msaa_samples = 1;// underlying value of VkSampleCountFlagBits
@@ -116,6 +116,11 @@ class MeshPipelineManager {
                               vk::DeviceSize transform_size,
                               vk::Buffer material_buffer,
                               vk::DeviceSize material_size);
+
+    // Free a descriptor set back to the pool.  The caller must ensure
+    // the descriptor set is no longer in use by any command buffer
+    // (call device.waitIdle() first).  Safe to call with a null set.
+    void free_descriptor_set(vk::DescriptorSet ds);
 
     // ── Lifecycle ───────────────────────────────────────────────────
 

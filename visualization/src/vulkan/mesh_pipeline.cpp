@@ -25,7 +25,7 @@ std::size_t MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noex
     h = hash_combine(h, std::hash<bool>{}(k.has_normals));
     h = hash_combine(h, std::hash<bool>{}(k.has_colors));
     h = hash_combine(h, std::hash<bool>{}(k.has_scalars));
-    h = hash_combine(h, std::hash<bool>{}(k.two_sided));
+    h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
     h = hash_combine(h, std::hash<uint32_t>{}(k.msaa_samples));
     h = hash_combine(h, std::hash<uint64_t>{}(k.render_pass));
     h = hash_combine(h, std::hash<bool>{}(k.depth_test));
@@ -53,7 +53,7 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
     key.has_colors = buffers.has_colors();
     key.has_scalars = buffers.has_scalars();
 
-    key.two_sided = state.two_sided;
+    key.cull_mode = state.cull_mode;
 
     key.msaa_samples = static_cast<uint32_t>(film.sample_count());
     key.render_pass = reinterpret_cast<uint64_t>(static_cast<VkRenderPass>(film.default_render_pass()));
@@ -169,19 +169,20 @@ void MeshPipelineManager::invalidate_pipelines() {
 // ── Descriptor set layout / pipeline layout / descriptor pool ────────
 
 void MeshPipelineManager::create_descriptor_set_layout() {
-    // binding 0: TransformUBO (vertex shader only)
-    // binding 1: MaterialUBO  (vertex + fragment shader)
+    // binding 0: TransformUBO (vertex shader only) — static uniform buffer
+    // binding 1: MaterialUBO  (vertex + fragment shader) — dynamic uniform
+    //            buffer so each layer can bind at a different offset.
     std::array<vk::DescriptorSetLayoutBinding, 2> bindings;
 
     auto &transform_binding = bindings[0];
     transform_binding.setBinding(0);
     transform_binding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
     transform_binding.setDescriptorCount(1);
-    transform_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex);
+    transform_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
 
     auto &material_binding = bindings[1];
     material_binding.setBinding(1);
-    material_binding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    material_binding.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic);
     material_binding.setDescriptorCount(1);
     material_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
 
@@ -198,19 +199,22 @@ void MeshPipelineManager::create_pipeline_layout() {
 }
 
 void MeshPipelineManager::create_descriptor_pool(uint32_t max_sets) {
-    // Each set has 2 uniform buffer descriptors
-    vk::DescriptorPoolSize pool_size;
-    pool_size.setType(vk::DescriptorType::eUniformBuffer);
-    pool_size.setDescriptorCount(max_sets * 2);
+    // Each set has 1 static uniform buffer (TransformUBO) and
+    // 1 dynamic uniform buffer (MaterialUBO).
+    std::array<vk::DescriptorPoolSize, 2> pool_sizes;
+    pool_sizes[0].setType(vk::DescriptorType::eUniformBuffer);
+    pool_sizes[0].setDescriptorCount(max_sets);// 1 per set
+    pool_sizes[1].setType(vk::DescriptorType::eUniformBufferDynamic);
+    pool_sizes[1].setDescriptorCount(max_sets);// 1 per set
 
     vk::DescriptorPoolCreateInfo ci;
     ci.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
     ci.setMaxSets(max_sets);
-    ci.setPoolSizes(pool_size);
+    ci.setPoolSizes(pool_sizes);
     _descriptor_pool = _device.createDescriptorPool(ci);
 }
 
-// ── Descriptor set allocation / writing ──────────────────────────────
+// ── Descriptor set allocation / writing / freeing ────────────────────
 
 vk::DescriptorSet MeshPipelineManager::allocate_descriptor_set() {
     if (!_initialized) {
@@ -233,6 +237,9 @@ void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
     transform_info.setOffset(0);
     transform_info.setRange(transform_size);
 
+    // For the dynamic UBO, 'range' is the size of a single slot
+    // (one MaterialUBO).  The actual offset within the buffer is
+    // provided at bind time via the dynamic offset.
     vk::DescriptorBufferInfo material_info;
     material_info.setBuffer(material_buffer);
     material_info.setOffset(0);
@@ -252,11 +259,16 @@ void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
     w1.setDstSet(ds);
     w1.setDstBinding(1);
     w1.setDstArrayElement(0);
-    w1.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    w1.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic);
     w1.setDescriptorCount(1);
     w1.setPBufferInfo(&material_info);
 
     _device.updateDescriptorSets(writes, {});
+}
+
+void MeshPipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
+    if (!_initialized || !ds) return;
+    _device.freeDescriptorSets(_descriptor_pool, { ds });
 }
 
 // ── Pipeline access ──────────────────────────────────────────────────
@@ -330,7 +342,7 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     // matching the layout in mesh.vert:
     //   binding 0: vec3 position  (location 0)
     //   binding 1: vec3 normal    (location 1)  — if has_normals
-    //   binding 2: vec3 color     (location 2)  — if has_colors
+    //   binding 2: vec4 color     (location 2)  — if has_colors
     //   binding 3: float scalar   (location 3)  — if has_scalars
 
     std::vector<vk::VertexInputBindingDescription> binding_descs;
@@ -345,8 +357,8 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
         attrib_descs.push_back({ 1, 1, vk::Format::eR32G32B32Sfloat, 0 });
     }
     if (key.has_colors) {
-        binding_descs.push_back({ 2, sizeof(float) * 3, vk::VertexInputRate::eVertex });
-        attrib_descs.push_back({ 2, 2, vk::Format::eR32G32B32Sfloat, 0 });
+        binding_descs.push_back({ 2, sizeof(float) * 4, vk::VertexInputRate::eVertex });
+        attrib_descs.push_back({ 2, 2, vk::Format::eR32G32B32A32Sfloat, 0 });
     }
     if (key.has_scalars) {
         binding_descs.push_back({ 3, sizeof(float), vk::VertexInputRate::eVertex });
@@ -375,7 +387,17 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     rasterization.setDepthClampEnable(VK_FALSE);
     rasterization.setRasterizerDiscardEnable(VK_FALSE);
     rasterization.setPolygonMode(vk::PolygonMode::eFill);
-    rasterization.setCullMode(key.two_sided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eBack);
+    switch (key.cull_mode) {
+    case CullMode::None:
+        rasterization.setCullMode(vk::CullModeFlagBits::eNone);
+        break;
+    case CullMode::Back:
+        rasterization.setCullMode(vk::CullModeFlagBits::eBack);
+        break;
+    case CullMode::Front:
+        rasterization.setCullMode(vk::CullModeFlagBits::eFront);
+        break;
+    }
     rasterization.setFrontFace(vk::FrontFace::eCounterClockwise);
     rasterization.setDepthBiasEnable(
       key.topology == vk::PrimitiveTopology::eTriangleList ? VK_TRUE : VK_FALSE);
