@@ -27,3 +27,9 @@ if get_option('quiver')
     dependencies: [geometry_dep, catch2_with_main_dep])
   test('quiver bridge test', test_quiver_bridge)
 endif
+
+test_extxyz = executable('test_extxyz',
+  'test_extxyz.cpp',
+  dependencies: [geometry_dep, catch2_with_main_dep],
+  cpp_args: '-DBALSA_TEST_ASSET_PATH="'+test_asset_dir+'"')
+test('extxyz test', test_extxyz)

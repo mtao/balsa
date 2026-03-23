@@ -1,4 +1,5 @@
 #include "balsa/geometry/point_cloud/read_xyz.hpp"
+#include "balsa/geometry/point_cloud/extxyz.hpp"
 #include <charconv>
 #include <fstream>
 #include <ranges>
@@ -46,6 +47,45 @@ namespace {
 }// namespace
 
 XYZData read_xyzD(const std::string &filename) {
+    // Peek at the comment line to check for Extended XYZ format.
+    {
+        std::ifstream ifs(filename);
+        if (!ifs) {
+            throw std::runtime_error("Failed to open XYZ file: " + filename);
+        }
+        std::string line;
+        std::getline(ifs, line);// atom count
+        std::getline(ifs, line);// comment
+        if (is_extxyz_comment(line)) {
+            // Delegate to extxyz reader and convert.
+            auto frame = read_extxyz_frame(filename);
+            XYZData data;
+            data.positions = frame.positions();
+            data.species = frame.species();
+            // Store the original comment line reconstruction.
+            // Build it from info + property defs so round-tripping works.
+            data.comment = line;
+
+            // Map "extra" columns: look for velocities or forces or any
+            // 3-column real property that isn't "pos" or "species".
+            for (const auto &[name, prop] : frame.properties) {
+                if (name == "pos" || name == "species") continue;
+                if (prop.type == ExtXYZType::Real && prop.cols == 3 && prop.real_data) {
+                    // Use the first 3-column real property as extra.
+                    data.extra = balsa::ColVecs3d(3, frame.atom_count);
+                    for (size_t i = 0; i < frame.atom_count; ++i) {
+                        for (int r = 0; r < 3; ++r) {
+                            data.extra(r, i) = (*prop.real_data)(r, i);
+                        }
+                    }
+                    break;
+                }
+            }
+            return data;
+        }
+    }
+
+    // Standard XYZ format.
     std::ifstream ifs(filename);
     if (!ifs) {
         throw std::runtime_error("Failed to open XYZ file: " + filename);

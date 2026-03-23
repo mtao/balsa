@@ -1,7 +1,7 @@
 // particle_converter — Unified particle file conversion tool for balsa.
 //
-// Converts particle data between XYZ, Partio (.bgeo/.geo/.pdb/...) and
-// optionally OpenVDB (.vdb) formats.
+// Converts particle data between XYZ, Extended XYZ, Partio (.bgeo/.geo/.pdb/...)
+// and optionally OpenVDB (.vdb) formats.
 //
 // Usage:
 //   particle_converter <input> <output> [options]
@@ -12,6 +12,7 @@
 #include <CLI/CLI.hpp>
 #include <balsa/geometry/point_cloud/read_xyz.hpp>
 #include <balsa/geometry/point_cloud/write_xyz.hpp>
+#include <balsa/geometry/point_cloud/extxyz.hpp>
 #include <balsa/geometry/point_cloud/partio_loader.hpp>
 #include <format>
 #include <iostream>
@@ -29,6 +30,7 @@ namespace pc = balsa::geometry::point_cloud;
 // ── Format detection ─────────────────────────────────────────────────────
 
 enum class Format { XYZ,
+                    ExtXYZ,
                     Partio,
                     VDB,
                     Unknown };
@@ -36,6 +38,7 @@ enum class Format { XYZ,
 Format detect_format(const std::string &path) {
     auto ext = std::filesystem::path(path).extension().string();
     std::ranges::transform(ext, ext.begin(), ::tolower);
+    if (ext == ".extxyz") return Format::ExtXYZ;
     if (ext == ".xyz") return Format::XYZ;
     if (ext == ".vdb") return Format::VDB;
     // Everything else goes to Partio — it supports .bgeo, .geo, .pdb,
@@ -47,6 +50,8 @@ std::string format_name(Format f) {
     switch (f) {
     case Format::XYZ:
         return "XYZ";
+    case Format::ExtXYZ:
+        return "ExtXYZ";
     case Format::Partio:
         return "Partio";
     case Format::VDB:
@@ -61,6 +66,7 @@ std::string format_name(Format f) {
 struct ParticleData {
     balsa::ColVecs3d positions;
     std::optional<balsa::ColVecs3d> velocities;
+    std::optional<balsa::ColVecs3d> forces;
     std::optional<balsa::ColVecs4d> colors;
     std::optional<balsa::VecXd> radii;
     std::optional<balsa::VecXd> densities;
@@ -69,16 +75,23 @@ struct ParticleData {
     std::optional<balsa::ColVecs3d> extra;// XYZ second column block
     std::string comment;// XYZ comment line
 
+    // Extended XYZ metadata
+    std::optional<balsa::Mat3d> lattice;
+    std::optional<std::array<bool, 3>> pbc;
+    std::map<std::string, std::string> extxyz_info;// additional key-value pairs
+
     std::vector<std::string> available_attributes() const {
         std::vector<std::string> attrs;
         attrs.push_back("positions");
         if (velocities) attrs.push_back("velocities");
+        if (forces) attrs.push_back("forces");
         if (colors) attrs.push_back("colors");
         if (radii) attrs.push_back("radii");
         if (densities) attrs.push_back("densities");
         if (ids) attrs.push_back("ids");
         if (species) attrs.push_back("species");
         if (extra) attrs.push_back("extra");
+        if (lattice) attrs.push_back("lattice");
         return attrs;
     }
 
@@ -153,7 +166,81 @@ ParticleData read_vdb_file(const std::string &path, const std::string &grid_name
 }
 #endif
 
-// ── Writers ──────────────────────────────────────────────────────────────
+// ── ExtXYZ reader ────────────────────────────────────────────────────────
+
+ParticleData read_extxyz_file(const std::string &path) {
+    auto frame = pc::read_extxyz_frame(path);
+    ParticleData data;
+    data.positions = frame.positions();
+
+    auto sp = frame.species();
+    if (!sp.empty()) data.species = std::move(sp);
+
+    data.lattice = frame.lattice;
+    data.pbc = frame.pbc;
+    data.extxyz_info = frame.info;
+
+    // Map known extxyz property names to ParticleData fields.
+    auto get_real3 = [&](const std::string &name) -> std::optional<balsa::ColVecs3d> {
+        const auto *p = frame.property(name);
+        if (!p || p->type != pc::ExtXYZType::Real || p->cols != 3 || !p->real_data) return std::nullopt;
+        balsa::ColVecs3d result(3, frame.atom_count);
+        for (size_t i = 0; i < frame.atom_count; ++i)
+            for (int r = 0; r < 3; ++r)
+                result(r, i) = (*p->real_data)(r, i);
+        return result;
+    };
+
+    auto get_real1 = [&](const std::string &name) -> std::optional<balsa::VecXd> {
+        const auto *p = frame.property(name);
+        if (!p || p->type != pc::ExtXYZType::Real || p->cols != 1 || !p->real_data) return std::nullopt;
+        balsa::VecXd result(frame.atom_count);
+        for (size_t i = 0; i < frame.atom_count; ++i)
+            result(i) = (*p->real_data)(0, i);
+        return result;
+    };
+
+    auto get_int1 = [&](const std::string &name) -> std::optional<balsa::VecXi> {
+        const auto *p = frame.property(name);
+        if (!p || p->type != pc::ExtXYZType::Integer || p->cols != 1 || !p->int_data) return std::nullopt;
+        balsa::VecXi result(frame.atom_count);
+        for (size_t i = 0; i < frame.atom_count; ++i)
+            result(i) = (*p->int_data)(0, i);
+        return result;
+    };
+
+    // Try common names for velocities.
+    if (auto v = get_real3("velocities"))
+        data.velocities = std::move(v);
+    else if (auto v2 = get_real3("velo"))
+        data.velocities = std::move(v2);
+
+    // Forces.
+    if (auto f = get_real3("forces"))
+        data.forces = std::move(f);
+    else if (auto f2 = get_real3("force"))
+        data.forces = std::move(f2);
+
+    // Radii.
+    if (auto r = get_real1("radii"))
+        data.radii = std::move(r);
+    else if (auto r2 = get_real1("radius"))
+        data.radii = std::move(r2);
+
+    // Densities.
+    if (auto d = get_real1("densities"))
+        data.densities = std::move(d);
+    else if (auto d2 = get_real1("density"))
+        data.densities = std::move(d2);
+
+    // IDs.
+    if (auto id = get_int1("ids"))
+        data.ids = std::move(id);
+    else if (auto id2 = get_int1("id"))
+        data.ids = std::move(id2);
+
+    return data;
+}
 
 void write_xyz_file(const std::string &path, const ParticleData &data) {
     pc::write_xyz(path,
@@ -186,10 +273,93 @@ void write_vdb_file(const std::string &path, const ParticleData &data, double vo
 }
 #endif
 
-// ── Attribute filtering ──────────────────────────────────────────────────
+// ── ExtXYZ writer ────────────────────────────────────────────────────────
+
+void write_extxyz_file(const std::string &path, const ParticleData &data) {
+    pc::ExtXYZFrame frame;
+    frame.atom_count = data.particle_count();
+    frame.lattice = data.lattice;
+    frame.pbc = data.pbc;
+    frame.info = data.extxyz_info;
+
+    auto add_string_prop = [&](const std::string &name, const std::vector<std::string> &vals) {
+        pc::ExtXYZProperty prop;
+        prop.type = pc::ExtXYZType::String;
+        prop.cols = 1;
+        prop.string_data = vals;
+        frame.properties.emplace_back(name, std::move(prop));
+    };
+
+    auto add_real3_prop = [&](const std::string &name, const balsa::ColVecs3d &mat) {
+        pc::ExtXYZProperty prop;
+        prop.type = pc::ExtXYZType::Real;
+        prop.cols = 3;
+        balsa::ColVectors<double, std::dynamic_extent> dyn(3, frame.atom_count);
+        for (size_t i = 0; i < frame.atom_count; ++i)
+            for (int r = 0; r < 3; ++r)
+                dyn(r, i) = mat(r, i);
+        prop.real_data = std::move(dyn);
+        frame.properties.emplace_back(name, std::move(prop));
+    };
+
+    auto add_real1_prop = [&](const std::string &name, const balsa::VecXd &vec) {
+        pc::ExtXYZProperty prop;
+        prop.type = pc::ExtXYZType::Real;
+        prop.cols = 1;
+        balsa::ColVectors<double, std::dynamic_extent> dyn(1, frame.atom_count);
+        for (size_t i = 0; i < frame.atom_count; ++i)
+            dyn(0, i) = vec(i);
+        prop.real_data = std::move(dyn);
+        frame.properties.emplace_back(name, std::move(prop));
+    };
+
+    auto add_int1_prop = [&](const std::string &name, const balsa::VecXi &vec) {
+        pc::ExtXYZProperty prop;
+        prop.type = pc::ExtXYZType::Integer;
+        prop.cols = 1;
+        balsa::ColVectors<int, std::dynamic_extent> dyn(1, frame.atom_count);
+        for (size_t i = 0; i < frame.atom_count; ++i)
+            dyn(0, i) = vec(i);
+        prop.int_data = std::move(dyn);
+        frame.properties.emplace_back(name, std::move(prop));
+    };
+
+    // Species first (convention).
+    if (data.species) {
+        add_string_prop("species", *data.species);
+    } else {
+        // Default species column with "X".
+        std::vector<std::string> default_species(frame.atom_count, "X");
+        add_string_prop("species", default_species);
+    }
+
+    // Positions.
+    add_real3_prop("pos", data.positions);
+
+    // Optional attributes.
+    if (data.velocities) add_real3_prop("velocities", *data.velocities);
+    if (data.forces) add_real3_prop("forces", *data.forces);
+    if (data.extra) add_real3_prop("extra", *data.extra);
+    if (data.radii) add_real1_prop("radii", *data.radii);
+    if (data.densities) add_real1_prop("densities", *data.densities);
+    if (data.ids) add_int1_prop("ids", *data.ids);
+
+    pc::write_extxyz(path, frame);
+}
 
 // Supported attributes for each output format.
 static const std::set<std::string> s_xyz_attrs = { "positions", "species", "extra" };
+static const std::set<std::string> s_extxyz_attrs = {
+    "positions",
+    "species",
+    "velocities",
+    "forces",
+    "radii",
+    "densities",
+    "ids",
+    "extra",
+    "lattice"
+};
 static const std::set<std::string> s_partio_attrs = {
     "positions",
     "velocities",
@@ -211,6 +381,8 @@ const std::set<std::string> &supported_attrs(Format f) {
     switch (f) {
     case Format::XYZ:
         return s_xyz_attrs;
+    case Format::ExtXYZ:
+        return s_extxyz_attrs;
     case Format::Partio:
         return s_partio_attrs;
     case Format::VDB:
@@ -235,12 +407,14 @@ void filter_attributes(ParticleData &data,
 
     // positions are always kept
     if (!should_keep("velocities")) data.velocities.reset();
+    if (!should_keep("forces")) data.forces.reset();
     if (!should_keep("colors")) data.colors.reset();
     if (!should_keep("radii")) data.radii.reset();
     if (!should_keep("densities")) data.densities.reset();
     if (!should_keep("ids")) data.ids.reset();
     if (!should_keep("species")) data.species.reset();
     if (!should_keep("extra")) data.extra.reset();
+    if (!should_keep("lattice")) data.lattice.reset();
 }
 
 // ── Attribute renaming ───────────────────────────────────────────────────
@@ -279,6 +453,54 @@ void print_info(const std::string &path, Format format) {
         for (const auto &a : data.available_attributes()) {
             std::cout << "  - " << a << '\n';
         }
+    } else if (format == Format::ExtXYZ) {
+        auto frame = pc::read_extxyz_frame(path);
+        std::cout << std::format("Particles: {}\n", frame.atom_count);
+        if (frame.lattice) {
+            auto &L = *frame.lattice;
+            std::cout << std::format("Lattice:\n  [{:.6g} {:.6g} {:.6g}]\n  [{:.6g} {:.6g} {:.6g}]\n  [{:.6g} {:.6g} {:.6g}]\n",
+                                     L(0, 0),
+                                     L(0, 1),
+                                     L(0, 2),
+                                     L(1, 0),
+                                     L(1, 1),
+                                     L(1, 2),
+                                     L(2, 0),
+                                     L(2, 1),
+                                     L(2, 2));
+        }
+        if (frame.pbc) {
+            auto &p = *frame.pbc;
+            std::cout << std::format("PBC: {} {} {}\n",
+                                     p[0] ? "T" : "F",
+                                     p[1] ? "T" : "F",
+                                     p[2] ? "T" : "F");
+        }
+        std::cout << "Properties:\n";
+        for (const auto &[name, prop] : frame.properties) {
+            char tc = 'R';
+            switch (prop.type) {
+            case pc::ExtXYZType::String:
+                tc = 'S';
+                break;
+            case pc::ExtXYZType::Integer:
+                tc = 'I';
+                break;
+            case pc::ExtXYZType::Real:
+                tc = 'R';
+                break;
+            case pc::ExtXYZType::Logical:
+                tc = 'L';
+                break;
+            }
+            std::cout << std::format("  - {}:{}:{}\n", name, tc, prop.cols);
+        }
+        if (!frame.info.empty()) {
+            std::cout << "Info:\n";
+            for (const auto &[key, value] : frame.info) {
+                std::cout << std::format("  {}={}\n", key, value);
+            }
+        }
     } else if (format == Format::Partio) {
         pc::PartioFileReader reader(path);
         std::cout << std::format("Particles: {}\n", reader.particle_count());
@@ -301,7 +523,7 @@ void print_info(const std::string &path, Format format) {
 // ── Main ─────────────────────────────────────────────────────────────────
 
 int main(int argc, char *argv[]) {
-    CLI::App app{ "particle_converter — convert particle data between XYZ, Partio, and VDB formats" };
+    CLI::App app{ "particle_converter — convert particle data between XYZ, ExtXYZ, Partio, and VDB formats" };
 
     std::string input_path;
     std::string output_path;
@@ -318,7 +540,7 @@ int main(int argc, char *argv[]) {
 
     app.add_option("-a,--attr", attr_whitelist,
                    "Attributes to transfer (default: all). "
-                   "Can be repeated: -a positions -a velocities -a radii -a densities -a colors -a ids -a species -a extra");
+                   "Can be repeated: -a positions -a velocities -a forces -a radii -a densities -a colors -a ids -a species -a extra -a lattice");
 
     app.add_option("-r,--rename", renames_raw,
                    "Rename an attribute: -r src:dst. "
@@ -374,6 +596,9 @@ int main(int argc, char *argv[]) {
         case Format::XYZ:
             data = read_xyz_file(input_path);
             break;
+        case Format::ExtXYZ:
+            data = read_extxyz_file(input_path);
+            break;
         case Format::Partio:
             data = read_partio_file(input_path);
             break;
@@ -415,6 +640,9 @@ int main(int argc, char *argv[]) {
         switch (output_format) {
         case Format::XYZ:
             write_xyz_file(output_path, data);
+            break;
+        case Format::ExtXYZ:
+            write_extxyz_file(output_path, data);
             break;
         case Format::Partio:
             write_partio_file(output_path, data);

@@ -49,6 +49,7 @@ if get_option('openvdb')
 endif
 
 geometry_sources += 'src/point_cloud/write_xyz.cpp'
+geometry_sources += 'src/point_cloud/extxyz.cpp'
 
 geometry_required_deps += core_dep
 
