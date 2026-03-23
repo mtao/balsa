@@ -1,6 +1,7 @@
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 #include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/scene_graph/BVHData.hpp"
 #include "balsa/scene_graph/Light.hpp"
 
 #include <zipper/transform/view.hpp>
@@ -62,6 +63,90 @@ void MeshScene::draw(Film &film) {
     }
 }
 
+// ── BVH deferred update (runs before the render pass) ───────────────
+
+// Helper: release VulkanMeshDrawable on a BVH overlay child before
+// the child Object is destroyed.  This ensures the descriptor set is
+// returned to the pool while we are outside the render pass (after
+// waitIdle).
+static void release_overlay_drawable(scene_graph::Object *overlay) {
+    if (!overlay) return;
+    auto *vmd = overlay->find_feature<VulkanMeshDrawable>();
+    if (vmd) vmd->release();
+}
+
+// Helper: recursively walk the scene graph and apply pending BVHData
+// updates / removals.  For each overlay child created by BVHData,
+// ensure it has a VulkanMeshDrawable so the rendering loop picks it up.
+//
+// Must be called AFTER waitIdle — this function may destroy GPU
+// resources (overlay child Objects that hold VulkanMeshDrawables).
+static void apply_bvh_updates_recursive(
+  scene_graph::Object &obj,
+  MeshScene &scene) {
+
+    auto *bvh = obj.find_feature<scene_graph::BVHData>();
+    if (bvh) {
+        if (bvh->pending_removal()) {
+            // Release GPU resources on the overlay child before it
+            // is destroyed by remove_overlay().
+            release_overlay_drawable(bvh->overlay_object());
+            bvh->remove_overlay();
+            obj.remove_feature(bvh);
+            // bvh is now dangling — don't touch it.
+        } else if (bvh->needs_update()) {
+            auto *md = obj.find_feature<scene_graph::MeshData>();
+            if (md) {
+                // remove_overlay() will destroy the old child; release
+                // its drawable first.
+                release_overlay_drawable(bvh->overlay_object());
+                bvh->apply_pending_update(*md);
+
+                // If BVHData created an overlay child Object, ensure it
+                // has a VulkanMeshDrawable so it actually renders.
+                if (auto *overlay = bvh->overlay_object()) {
+                    scene.ensure_drawable(*overlay);
+                }
+            }
+        }
+    }
+
+    for (auto &child : obj.children()) {
+        apply_bvh_updates_recursive(*child, scene);
+    }
+}
+
+void MeshScene::begin_render_pass(Film &film) {
+    // Apply deferred BVH overlay updates before the render pass starts.
+    // BVHData::remove_overlay() destroys the child Object (and its
+    // VulkanMeshDrawable), so we must waitIdle first if any update is
+    // pending to avoid destroying in-flight GPU resources.
+    if (_initialized && _film) {
+        // Quick scan: is there anything to update or remove?
+        bool any_pending = false;
+        std::function<void(scene_graph::Object &)> scan = [&](scene_graph::Object &obj) {
+            if (auto *bvh = obj.find_feature<scene_graph::BVHData>()) {
+                if (bvh->needs_update() || bvh->pending_removal()) {
+                    any_pending = true;
+                    return;
+                }
+            }
+            for (auto &c : obj.children()) {
+                if (any_pending) return;
+                scan(*c);
+            }
+        };
+        scan(_scene_root);
+
+        if (any_pending) {
+            _film->device().waitIdle();
+            apply_bvh_updates_recursive(_scene_root, *this);
+        }
+    }
+
+    SceneBase::begin_render_pass(film);
+}
+
 void MeshScene::release_vulkan_resources() {
     if (!_initialized) return;
 
@@ -98,12 +183,34 @@ scene_graph::Object &MeshScene::add_mesh(const std::string &name) {
     return obj;
 }
 
+void MeshScene::ensure_drawable(scene_graph::Object &obj) {
+    // If the Object has a MeshData but no VulkanMeshDrawable, add one.
+    if (!obj.find_feature<scene_graph::MeshData>()) return;
+    if (obj.find_feature<VulkanMeshDrawable>()) return;
+
+    auto &vmd = obj.emplace_feature<VulkanMeshDrawable>(
+      _drawable_group, _pipeline_manager);
+
+    if (_initialized && _film) {
+        vmd.init(*_film);
+    }
+}
+
 bool MeshScene::remove_mesh(const scene_graph::Object *obj) {
     if (!obj) return false;
 
     auto &children = _scene_root.children();
     auto it = std::find_if(children.begin(), children.end(), [obj](const auto &p) { return p.get() == obj; });
     if (it == children.end()) return false;
+
+    // Wait for the GPU to finish all in-flight command buffers before
+    // releasing resources.  Without this, removing a mesh mid-frame
+    // (e.g. when the BVH overlay rebuilds during ImGui interaction)
+    // destroys buffers still referenced by queued draw commands,
+    // causing a VK_ERROR_DEVICE_LOST.
+    if (_initialized && _film) {
+        _film->device().waitIdle();
+    }
 
     // Release GPU resources before removing from scene graph.
     auto *vmd = (*it)->find_feature<VulkanMeshDrawable>();

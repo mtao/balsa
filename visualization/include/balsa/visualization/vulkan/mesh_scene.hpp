@@ -55,6 +55,9 @@ class MeshScene : public SceneBase {
     // Initialize the pipeline manager and all VulkanMeshDrawables.
     void initialize(Film &film) override;
 
+    // Apply deferred BVH overlay updates before the render pass.
+    void begin_render_pass(Film &film) override;
+
     // Draw all visible drawables.
     void draw(Film &film) override;
 
@@ -114,6 +117,14 @@ class MeshScene : public SceneBase {
 
     scene_graph::DrawableGroup &drawable_group() { return _drawable_group; }
     const scene_graph::DrawableGroup &drawable_group() const { return _drawable_group; }
+
+    // ── Drawable helpers ───────────────────────────────────────────
+
+    // Ensure an Object has a VulkanMeshDrawable.  If the Object has a
+    // MeshData feature but no VulkanMeshDrawable, one is emplaced and
+    // initialized (if the scene is already initialized).  No-op if the
+    // Object already has a VulkanMeshDrawable or has no MeshData.
+    void ensure_drawable(scene_graph::Object &obj);
 
     // ── Pipeline manager access (for advanced use) ──────────────────
 

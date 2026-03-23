@@ -56,6 +56,7 @@ visualization_sources = [
   'src/scene_graph/Object.cpp',
   'src/scene_graph/Camera.cpp',
   'src/scene_graph/MeshData.cpp',
+  'src/scene_graph/BVHData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
 ]
 
