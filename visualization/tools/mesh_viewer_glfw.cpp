@@ -7,6 +7,9 @@
 // ImGui panel for tweaking render state (shading model, color source,
 // colormaps, lighting, wireframe, etc.).
 //
+// When built with quiver, also provides BVH bounding volume
+// visualization with AABB / 9-DOP / 13-DOP modes.
+//
 // Camera: left-drag orbit, right-drag pan, scroll zoom.
 // File > Open: type a file path in the ImGui dialog to load a mesh.
 
@@ -31,6 +34,7 @@
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 #include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
+#include <balsa/visualization/vulkan/bvh_visualization.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
 
@@ -41,11 +45,12 @@
 
 namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
+namespace sg = balsa::scene_graph;
 
 // ── MeshViewerScene ─────────────────────────────────────────────────
 //
-// A MeshScene subclass that adds an ImGui overlay with mesh controls
-// and a main menu bar.
+// A MeshScene subclass that adds an ImGui overlay with mesh controls,
+// a main menu bar, and BVH bounding volume visualization.
 
 class MeshViewerScene : public vk_viz::MeshScene {
   public:
@@ -62,6 +67,14 @@ class MeshViewerScene : public vk_viz::MeshScene {
     using OpenFileCallback = std::function<void(const std::filesystem::path &)>;
     void set_open_file_callback(OpenFileCallback cb) { _open_file_cb = std::move(cb); }
 
+    // Feed triangle mesh data to the BVH overlay so it can build BVHs.
+    void set_bvh_mesh_data(
+      const std::vector<sg::Vec3f> &positions,
+      const std::vector<uint32_t> &tri_indices) {
+        _bvh.set_mesh_data(positions, tri_indices);
+        _bvh.update_overlay(*this);
+    }
+
     void draw(vk_viz::Film &film) override {
         // Draw mesh geometry first
         MeshScene::draw(film);
@@ -72,11 +85,13 @@ class MeshViewerScene : public vk_viz::MeshScene {
             draw_main_menu_bar();
             draw_open_file_dialog();
             vk_viz::imgui::draw_mesh_controls(*this, _panel_state);
+            _bvh.draw_panel(*this);
             _imgui.render(film);
         }
     }
 
     void release_vulkan_resources() override {
+        _bvh.clear(*this);
         _imgui.shutdown();
         MeshScene::release_vulkan_resources();
     }
@@ -85,6 +100,7 @@ class MeshViewerScene : public vk_viz::MeshScene {
     vk_viz::ImGuiIntegration _imgui;
     vk_viz::imgui::MeshPanelState _panel_state;
     OpenFileCallback _open_file_cb;
+    vk_viz::BVHOverlay _bvh;
 
     // ── ImGui "Open File" dialog state ───────────────────────────────
     bool _show_open_dialog = false;
@@ -100,10 +116,6 @@ class MeshViewerScene : public vk_viz::MeshScene {
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Quit", "Ctrl+Q")) {
-                    // GLFW windows can check glfwWindowShouldClose — we
-                    // just set a flag that the main loop can detect.  But
-                    // the simplest approach is std::exit; alternatively the
-                    // window could expose a close request.
                     std::exit(0);
                 }
                 ImGui::EndMenu();
@@ -111,6 +123,7 @@ class MeshViewerScene : public vk_viz::MeshScene {
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Scene Graph", nullptr, &_panel_state.show_scene_panel);
                 ImGui::MenuItem("Properties", nullptr, &_panel_state.show_property_panel);
+                ImGui::MenuItem("BVH Overlay", nullptr, &_bvh.show_panel());
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -202,9 +215,10 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
             return;
         }
 
-        spdlog::info("  {} vertices, {} triangles",
-                     pos.vertices.extent(1),
-                     pos.triangles.extent(1));
+        std::size_t n_verts = pos.vertices.extent(1);
+        std::size_t n_tris = pos.triangles.extent(1);
+
+        spdlog::info("  {} vertices, {} triangles", n_verts, n_tris);
 
         // Normalize to unit bounding box centered at origin
         balsa::ColVectors<float, 3> V = pos.vertices;
@@ -219,24 +233,20 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
         // Add a mesh Object to the scene graph
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
-        auto *mesh_data = mesh_obj.find_feature<balsa::scene_graph::MeshData>();
+        auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
 
-        // Convert positions from ColVectors (SOA row-major) to
-        // vector<Vec3f> (AOS)
-        std::size_t n_verts = V.extent(1);
-        {
-            std::vector<balsa::scene_graph::Vec3f> positions(n_verts);
-            for (std::size_t j = 0; j < n_verts; ++j) {
-                positions[j](0) = V(0, j);
-                positions[j](1) = V(1, j);
-                positions[j](2) = V(2, j);
-            }
-            mesh_data->set_positions(positions);
+        // Convert positions from ColVectors (SOA) to vector<Vec3f> (AOS)
+        std::vector<sg::Vec3f> positions(n_verts);
+        for (std::size_t j = 0; j < n_verts; ++j) {
+            positions[j](0) = V(0, j);
+            positions[j](1) = V(1, j);
+            positions[j](2) = V(2, j);
         }
+        mesh_data->set_positions(positions);
 
         // Convert and set normals if available
         if (nrm.vertices.extent(1) == pos.vertices.extent(1)) {
-            std::vector<balsa::scene_graph::Vec3f> normals(n_verts);
+            std::vector<sg::Vec3f> normals(n_verts);
             for (std::size_t j = 0; j < n_verts; ++j) {
                 normals[j](0) = nrm.vertices(0, j);
                 normals[j](1) = nrm.vertices(1, j);
@@ -250,9 +260,9 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         }
 
         // Convert triangle indices (size_t -> uint32_t)
-        if (pos.triangles.extent(1) > 0) {
-            std::size_t n_tris = pos.triangles.extent(1);
-            std::vector<uint32_t> tri_indices(n_tris * 3);
+        std::vector<uint32_t> tri_indices;
+        if (n_tris > 0) {
+            tri_indices.resize(n_tris * 3);
             for (std::size_t j = 0; j < n_tris; ++j) {
                 tri_indices[j * 3 + 0] = static_cast<uint32_t>(pos.triangles(0, j));
                 tri_indices[j * 3 + 1] = static_cast<uint32_t>(pos.triangles(1, j));
@@ -273,7 +283,6 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         }
 
         // If the mesh has edges but no triangles, default to wireframe
-        // so that edge-only meshes are visible immediately.
         if (!mesh_data->has_triangle_indices() && mesh_data->has_edge_indices()) {
             mesh_data->render_state().layers.solid.enabled = false;
             mesh_data->render_state().layers.wireframe.enabled = true;
@@ -284,11 +293,14 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
                      mesh_data->vertex_count(),
                      mesh_data->triangle_count(),
                      mesh_data->edge_count());
+
+        // Feed mesh data to the BVH overlay
+        if (!tri_indices.empty()) {
+            _scene->set_bvh_mesh_data(positions, tri_indices);
+        }
     }
 
   protected:
-    // Gate mouse events: if ImGui wants the mouse, don't forward to the
-    // orbit camera controller.
     void dispatch_mouse(const viz::MouseEvent &e) override {
         if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
             return;
@@ -296,7 +308,6 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         viz::glfw::vulkan::Window::dispatch_mouse(e);
     }
 
-    // Gate keyboard events similarly.
     void dispatch_key(const viz::KeyEvent &e) override {
         if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard) {
             return;
@@ -314,7 +325,6 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 int main(int argc, char *argv[]) {
     spdlog::set_level(spdlog::level::info);
 
-    // ── CLI argument parsing ─────────────────────────────────────────
     std::string input_path;
 #if BALSA_HAS_CLI11
     CLI::App app{ "Balsa Mesh Viewer (GLFW + Vulkan + ImGui)", "mesh_viewer_glfw" };
@@ -324,7 +334,6 @@ int main(int argc, char *argv[]) {
 
     CLI11_PARSE(app, argc, argv);
 #else
-    // Fallback: treat first argument as input file
     if (argc > 1) {
         input_path = argv[1];
     }
@@ -333,9 +342,8 @@ int main(int argc, char *argv[]) {
     glfwInit();
 
     try {
-        MeshViewerWindow window("Balsa Mesh Viewer (GLFW)", 1024, 768);
+        MeshViewerWindow window("Balsa Mesh Viewer (GLFW)", 1280, 960);
 
-        // Load mesh if path provided
         if (!input_path.empty()) {
             window.load_obj(std::filesystem::path(input_path));
         }

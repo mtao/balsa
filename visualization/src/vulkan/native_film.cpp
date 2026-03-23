@@ -1134,21 +1134,21 @@ void NativeFilm::pre_draw_hook() {
 
 
         spdlog::trace("pre_draw: acquiring image");
-        vk::ResultValue<uint32_t> res =
-          device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
-        _current_image_index = res.value;
-        if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
-            spdlog::trace("Acquired image {}", res.value);
-            frame.fence_waitable = true;
-            frame.image_semaphore_waitable = true;
-            frame.image_acquired = true;
-        } else if (res.result == vk::Result::eErrorOutOfDateKHR) {
+        try {
+            vk::ResultValue<uint32_t> res =
+              device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
+            _current_image_index = res.value;
+            if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
+                spdlog::trace("Acquired image {}", res.value);
+                frame.fence_waitable = true;
+                frame.image_semaphore_waitable = true;
+                frame.image_acquired = true;
+            }
+        } catch (vk::OutOfDateKHRError const &) {
             // Swapchain is out of date — recreate and retry acquiring
             spdlog::debug("Swapchain out of date during acquire, recreating");
             recreate_swapchain();
             return;
-        } else {// TODO if device is lost or some other issue occurs
-            spdlog::error("Failed to acquire image");
         }
     }
     spdlog::trace("pre_draw: using image {}/{}", _current_image_index, _image_resources.size());
@@ -1286,13 +1286,16 @@ void NativeFilm::post_draw_hook() {
     }
 
     spdlog::trace("post_draw: calling present");
-    vk::Result result =
-      _present_queue_raii.presentKHR(present);
-    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
-        spdlog::debug("Swapchain out of date/suboptimal during present, flagging recreation");
+    try {
+        vk::Result result =
+          _present_queue_raii.presentKHR(present);
+        if (result == vk::Result::eSuboptimalKHR) {
+            spdlog::debug("Swapchain suboptimal during present, flagging recreation");
+            _swapchain_needs_recreation = true;
+        }
+    } catch (vk::OutOfDateKHRError const &) {
+        spdlog::debug("Swapchain out of date during present, flagging recreation");
         _swapchain_needs_recreation = true;
-    } else if (result != vk::Result::eSuccess) {
-        spdlog::error("Failed to present");
     }
     frame.image_acquired = false;
     _current_frame_index = (_current_frame_index + 1) % _frame_resources.size();

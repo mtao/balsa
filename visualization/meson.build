@@ -104,6 +104,7 @@ endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
+visualization_public_deps += quiver_dep
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,
@@ -115,3 +116,4 @@ visualization_dep = declare_dependency(link_with: visualization_lib, dependencie
 
 subdir('tests')
 subdir('examples')
+subdir('tools')
