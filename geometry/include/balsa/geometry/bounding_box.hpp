@@ -18,6 +18,21 @@ auto bounding_box(const VType &V) {
     }
     return BBox{};
 }
+
+#if BALSA_HAS_QUIVER
+
+template<::zipper::concepts::Matrix VType>
+auto bounding_box(const VType &V) {
+    constexpr auto Dim = VType::extents_type::static_extent(0);
+    BoundingBox<Dim> bb;
+    for (zipper::index_type j = 0; j < V.extent(1); ++j) {
+        bb.expand(V.col(j));
+    }
+    return bb;
+}
+
+#else
+
 template<::zipper::concepts::Matrix VType>
 auto bounding_box(const VType &V) {
     BoundingBox<typename VType::value_type, VType::extents_type::static_extent(0)> bb;
@@ -26,6 +41,9 @@ auto bounding_box(const VType &V) {
     }
     return bb;
 }
+
+#endif
+
 }// namespace balsa::geometry
 
 #endif
