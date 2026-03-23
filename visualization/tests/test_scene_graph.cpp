@@ -125,6 +125,88 @@ TEST_CASE("MeshData geometry and version tracking", "[scene_graph]") {
     CHECK(md.version() > v3);
 }
 
+TEST_CASE("MeshData auto-derives edges from triangles", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshData md;
+
+    // Set triangle indices for two triangles sharing an edge:
+    //   tri 0: (0, 1, 2)
+    //   tri 1: (0, 2, 3)
+    //
+    // Expected unique edges: 0-1, 1-2, 0-2, 2-3, 0-3 = 5 edges
+    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
+    md.set_triangle_indices(tri_idx);
+
+    CHECK(md.has_triangle_indices());
+    CHECK(md.triangle_count() == 2);
+    CHECK(md.has_topology());
+
+    // Edges should be auto-derived
+    CHECK(md.has_edge_indices());
+    CHECK(md.edge_count() == 5);
+
+    // Verify edge indices are valid vertex references
+    auto edges = md.edge_indices();
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        CHECK(edges[i] < 4);
+    }
+}
+
+TEST_CASE("MeshData explicit edges override auto-derived", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshData md;
+
+    // Set triangles first (auto-derives 5 edges)
+    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
+    md.set_triangle_indices(tri_idx);
+    CHECK(md.edge_count() == 5);
+
+    // Explicitly set fewer edges — should override
+    std::vector<uint32_t> edge_idx = { 0, 1, 2, 3 };
+    md.set_edge_indices(edge_idx);
+    CHECK(md.edge_count() == 2);
+
+    // Setting triangles again should NOT override explicit edges
+    std::vector<uint32_t> tri_idx2 = { 0, 1, 2 };
+    md.set_triangle_indices(tri_idx2);
+    CHECK(md.edge_count() == 2);// Still the explicit edges
+}
+
+TEST_CASE("MeshData topology from single triangle", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshData md;
+
+    std::vector<uint32_t> tri_idx = { 0, 1, 2 };
+    md.set_triangle_indices(tri_idx);
+
+    CHECK(md.has_topology());
+    CHECK(md.triangle_count() == 1);
+    CHECK(md.edge_count() == 3);// A single triangle has 3 edges
+}
+
+TEST_CASE("MeshData no topology without triangles", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshData md;
+
+    // Only set positions and explicit edges — no topology
+    std::vector<Vec3f> positions(4);
+    for (auto &p : positions) {
+        p(0) = p(1) = p(2) = 0.0f;
+    }
+    md.set_positions(positions);
+
+    std::vector<uint32_t> edge_idx = { 0, 1, 1, 2 };
+    md.set_edge_indices(edge_idx);
+
+    CHECK_FALSE(md.has_topology());
+    CHECK(md.has_edge_indices());
+    CHECK(md.edge_count() == 2);
+}
+
 TEST_CASE("MeshData as Object feature", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
@@ -152,7 +234,7 @@ TEST_CASE("Object detach", "[scene_graph]") {
 
     Object root("root");
     auto &child1 = root.add_child("child1");
-    auto &child2 = root.add_child("child2");
+    root.add_child("child2");
     CHECK(root.children_count() == 2);
 
     // Detach child1

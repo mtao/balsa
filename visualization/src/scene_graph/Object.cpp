@@ -190,4 +190,14 @@ std::unique_ptr<Object> Object::detach() {
     return self;
 }
 
+// ── Feature removal ─────────────────────────────────────────────────
+
+bool Object::remove_feature(AbstractFeature *feature) {
+    if (!feature) return false;
+    auto it = std::find_if(_features.begin(), _features.end(), [feature](const auto &p) { return p.get() == feature; });
+    if (it == _features.end()) return false;
+    _features.erase(it);
+    return true;
+}
+
 }// namespace balsa::scene_graph

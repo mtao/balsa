@@ -134,6 +134,10 @@ class Object {
     // Access all features (for advanced iteration).
     const std::vector<std::unique_ptr<AbstractFeature>> &features() const { return _features; }
 
+    // Remove a feature by pointer.  Returns true if the feature was found
+    // and removed.  The feature is destroyed.
+    bool remove_feature(AbstractFeature *feature);
+
     // ── Identity ────────────────────────────────────────────────────
 
     std::string name;

@@ -48,6 +48,7 @@ struct RenderLayers {
 
 struct MaterialProperties {
     float ambient_strength = 0.15f;
+    float diffuse_strength = 1.0f;
     float specular_strength = 0.5f;
     float shininess = 32.0f;
 };
