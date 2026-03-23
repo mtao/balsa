@@ -21,6 +21,7 @@ struct MeshRenderState;
 namespace balsa::scene_graph {
 class Object;
 class MeshData;
+class BVHData;
 }// namespace balsa::scene_graph
 
 namespace balsa::visualization::qt {
@@ -69,6 +70,7 @@ class MeshControlsWidget : public QWidget {
     void on_color_source_changed(int index);
     void on_normal_source_changed(int index);
     void on_two_sided_changed(bool checked);
+    void on_cull_mode_changed(int index);
 
     // Color
     void on_uniform_color_clicked();
@@ -90,6 +92,7 @@ class MeshControlsWidget : public QWidget {
 
     // Material
     void on_material_ambient_changed(int value);
+    void on_material_diffuse_changed(int value);
     void on_material_specular_changed(int value);
     void on_material_shininess_changed(int value);
 
@@ -97,6 +100,14 @@ class MeshControlsWidget : public QWidget {
     void on_scene_light_enabled_changed(bool checked);
     void on_scene_light_dir_changed();
     void on_scene_light_color_clicked();
+
+    // BVH overlay
+    void on_bvh_enabled_changed(bool checked);
+    void on_bvh_kdop_changed(int index);
+    void on_bvh_strategy_changed(int index);
+    void on_bvh_leaf_size_changed(int value);
+    void on_bvh_depth_changed(int value);
+    void on_bvh_color_clicked();
 
     // Object
     void on_name_edited(const QString &text);
@@ -110,6 +121,7 @@ class MeshControlsWidget : public QWidget {
     void build_material_group(QWidget *parent);
     void build_scene_lighting_group(QWidget *parent);
     void build_object_group(QWidget *parent);
+    void build_bvh_group(QWidget *parent);
 
     // Populate widgets from the currently-selected object's state.
     // Blocks signals while setting values to avoid feedback loops.
@@ -118,6 +130,9 @@ class MeshControlsWidget : public QWidget {
 
     // Helper: get the MeshData feature from the selected Object, or nullptr.
     ::balsa::scene_graph::MeshData *selected_mesh_data();
+
+    // Helper: get the BVHData feature from the selected Object, or nullptr.
+    ::balsa::scene_graph::BVHData *selected_bvh_data();
 
     // ── State ────────────────────────────────────────────────────────
     ::balsa::visualization::vulkan::MeshScene *_scene = nullptr;
@@ -137,6 +152,8 @@ class MeshControlsWidget : public QWidget {
     QComboBox *_shading_combo = nullptr;
     QComboBox *_normal_source_combo = nullptr;
     QCheckBox *_two_sided_check = nullptr;
+    QComboBox *_cull_mode_combo = nullptr;
+    QWidget *_shading_details_container = nullptr;// shown only when lit
 
     // ── Color group ──────────────────────────────────────────────────
     QGroupBox *_color_group = nullptr;
@@ -172,9 +189,11 @@ class MeshControlsWidget : public QWidget {
     // ── Material group ───────────────────────────────────────────────
     QGroupBox *_material_group = nullptr;
     QSlider *_material_ambient_slider = nullptr;
+    QSlider *_material_diffuse_slider = nullptr;
     QSlider *_material_specular_slider = nullptr;
     QSlider *_material_shininess_slider = nullptr;
     QLabel *_material_ambient_label = nullptr;
+    QLabel *_material_diffuse_label = nullptr;
     QLabel *_material_specular_label = nullptr;
     QLabel *_material_shininess_label = nullptr;
 
@@ -185,6 +204,18 @@ class MeshControlsWidget : public QWidget {
     QDoubleSpinBox *_scene_light_y_spin = nullptr;
     QDoubleSpinBox *_scene_light_z_spin = nullptr;
     QPushButton *_scene_light_color_button = nullptr;
+
+    // ── BVH overlay group ────────────────────────────────────────────
+    QGroupBox *_bvh_group = nullptr;
+    QCheckBox *_bvh_enabled_check = nullptr;
+    QComboBox *_bvh_kdop_combo = nullptr;
+    QComboBox *_bvh_strategy_combo = nullptr;
+    QSlider *_bvh_leaf_size_slider = nullptr;
+    QLabel *_bvh_leaf_size_label = nullptr;
+    QSlider *_bvh_depth_slider = nullptr;
+    QLabel *_bvh_depth_label = nullptr;
+    QLabel *_bvh_height_label = nullptr;
+    QPushButton *_bvh_color_button = nullptr;
 };
 
 }// namespace balsa::visualization::qt

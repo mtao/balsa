@@ -2,6 +2,7 @@
 #include "balsa/visualization/qt/SceneGraphModel.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BVHData.hpp"
 
 #include <QBoxLayout>
 #include <QDoubleSpinBox>
@@ -348,12 +349,26 @@ void SceneGraphWidget::on_context_menu(const QPoint &pos) {
     QAction *rename_action = nullptr;
     QAction *delete_action = nullptr;
     QAction *duplicate_action = nullptr;
+    QAction *add_bvh_action = nullptr;
+    QAction *remove_bvh_action = nullptr;
 
     if (obj) {
         rename_action = menu.addAction("Rename");
         duplicate_action = menu.addAction("Duplicate");
         menu.addSeparator();
         delete_action = menu.addAction("Delete");
+
+        // BVH overlay (only for mesh objects with triangles)
+        auto *mesh_data = obj->find_feature<sg::MeshData>();
+        if (mesh_data && mesh_data->has_triangle_indices()) {
+            menu.addSeparator();
+            auto *bvh = obj->find_feature<sg::BVHData>();
+            if (!bvh) {
+                add_bvh_action = menu.addAction("Add BVH Overlay");
+            } else {
+                remove_bvh_action = menu.addAction("Remove BVH Overlay");
+            }
+        }
     }
 
     auto *chosen = menu.exec(_tree->viewport()->mapToGlobal(pos));
@@ -373,6 +388,16 @@ void SceneGraphWidget::on_context_menu(const QPoint &pos) {
         on_duplicate();
     } else if (chosen == delete_action && obj) {
         on_delete();
+    } else if (chosen == add_bvh_action && obj) {
+        auto &bvh = obj->emplace_feature<sg::BVHData>();
+        bvh.mark_dirty();
+        emit scene_changed();
+    } else if (chosen == remove_bvh_action && obj) {
+        auto *bvh = obj->find_feature<sg::BVHData>();
+        if (bvh) {
+            bvh->mark_for_removal();
+        }
+        emit scene_changed();
     }
 }
 

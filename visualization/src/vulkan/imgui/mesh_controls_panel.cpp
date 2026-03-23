@@ -6,6 +6,7 @@
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/scene_graph/Light.hpp"
+#include "balsa/scene_graph/BVHData.hpp"
 
 #include <imgui.h>
 #include <algorithm>
@@ -42,10 +43,20 @@ static bool combo_color_source(const char *label, ColorSource &value) {
 }
 
 static bool combo_normal_source(const char *label, NormalSource &value) {
-    static constexpr const char *items[] = { "From Attribute", "Computed in Shader", "None" };
+    static constexpr const char *items[] = { "From Attribute", "Computed (Flat)", "None (Unlit)" };
     int current = static_cast<int>(value);
     if (ImGui::Combo(label, &current, items, 3)) {
         value = static_cast<NormalSource>(current);
+        return true;
+    }
+    return false;
+}
+
+static bool combo_cull_mode(const char *label, CullMode &value) {
+    static constexpr const char *items[] = { "None (Show All)", "Back (Exterior)", "Front (Interior)" };
+    int current = static_cast<int>(value);
+    if (ImGui::Combo(label, &current, items, 3)) {
+        value = static_cast<CullMode>(current);
         return true;
     }
     return false;
@@ -57,6 +68,7 @@ static bool combo_normal_source(const char *label, NormalSource &value) {
 
 static const char *icon_for_object(const scene_graph::Object &obj) {
     if (obj.find_feature<scene_graph::Camera>()) return "[C]";
+    if (obj.find_feature<scene_graph::BVHData>()) return "[B]";
     if (obj.find_feature<scene_graph::MeshData>()) return "[M]";
     return "[O]";// Empty / generic object
 }
@@ -107,9 +119,15 @@ bool draw_render_state_controls(MeshRenderState &state) {
 
     // ── Shading & Rendering ─────────────────────────────────────────
     if (ImGui::CollapsingHeader("Shading & Rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= combo_shading_model("Shading Model", state.shading);
         changed |= combo_normal_source("Normal Source", state.normal_source);
-        changed |= ImGui::Checkbox("Two-Sided Lighting", &state.two_sided);
+
+        // Shading model and two-sided lighting are only meaningful
+        // when normals are active (i.e., lighting is enabled).
+        if (state.normal_source != NormalSource::None) {
+            changed |= combo_shading_model("Shading Model", state.shading);
+            changed |= ImGui::Checkbox("Two-Sided Lighting", &state.two_sided);
+        }
+        changed |= combo_cull_mode("Face Culling", state.cull_mode);
     }
 
     // ── Render Layers ───────────────────────────────────────────────
@@ -189,12 +207,26 @@ bool draw_render_state_controls(MeshRenderState &state) {
         }
     }
 
-    // ── Material ────────────────────────────────────────────────────
-    if (ImGui::CollapsingHeader("Material")) {
+    // ── Material Response ────────────────────────────────────────────
+    // Per-mesh: controls how this mesh responds to scene lighting.
+    // Only shown when lighting is active (normal source is not None).
+    bool is_lit = (state.normal_source != NormalSource::None);
+
+    if (is_lit && ImGui::CollapsingHeader("Material Response")) {
+        ImGui::TextDisabled("How this mesh responds to scene light");
         auto &mat = state.material;
         changed |= ImGui::SliderFloat("Ambient", &mat.ambient_strength, 0.0f, 1.0f);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Base light the mesh receives regardless of light direction");
+        changed |= ImGui::SliderFloat("Diffuse", &mat.diffuse_strength, 0.0f, 2.0f);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Intensity of the diffuse lighting response");
         changed |= ImGui::SliderFloat("Specular", &mat.specular_strength, 0.0f, 2.0f);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Intensity of the specular highlight");
         changed |= ImGui::SliderFloat("Shininess", &mat.shininess, 1.0f, 256.0f, "%.0f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Sharpness of the specular highlight (higher = tighter)");
     }
 
     return changed;
@@ -357,6 +389,25 @@ static bool draw_object_node(scene_graph::Object &obj,
             return changed;
         }
 
+        // ── BVH Overlay ─────────────────────────────────────────────
+        auto *ctx_mesh = obj.find_feature<scene_graph::MeshData>();
+        if (ctx_mesh && ctx_mesh->has_triangle_indices()) {
+            ImGui::Separator();
+            auto *existing_bvh = obj.find_feature<scene_graph::BVHData>();
+            if (!existing_bvh) {
+                if (ImGui::MenuItem("Add BVH Overlay")) {
+                    auto &bvh = obj.emplace_feature<scene_graph::BVHData>();
+                    bvh.mark_dirty();
+                    changed = true;
+                }
+            } else {
+                if (ImGui::MenuItem("Remove BVH Overlay")) {
+                    existing_bvh->mark_for_removal();
+                    changed = true;
+                }
+            }
+        }
+
         ImGui::EndPopup();
     }
 
@@ -384,11 +435,6 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
         // Toolbar row
         if (ImGui::Button("+ Empty")) {
             scene.root().add_child("Empty");
-            changed = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("+ Mesh")) {
-            scene.add_mesh("New Mesh");
             changed = true;
         }
         ImGui::SameLine();
@@ -572,6 +618,83 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                 changed |= draw_render_state_controls(mesh_data->render_state());
             }
         }
+
+        // ── BVH Overlay ─────────────────────────────────────────────
+        auto *bvh_data = obj->find_feature<scene_graph::BVHData>();
+        if (bvh_data) {
+            if (ImGui::CollapsingHeader("BVH Overlay", ImGuiTreeNodeFlags_DefaultOpen)) {
+                // Enabled toggle
+                if (ImGui::Checkbox("Show Overlay", &bvh_data->enabled)) {
+                    bvh_data->mark_overlay_dirty();
+                    changed = true;
+                }
+
+                if (bvh_data->enabled) {
+                    ImGui::Separator();
+
+                    // KDOP type selector
+                    ImGui::Text("Bounding Volume Type:");
+                    int prev_k = bvh_data->kdop_k;
+                    ImGui::RadioButton("AABB (K=3)", &bvh_data->kdop_k, 3);
+                    ImGui::SameLine();
+                    ImGui::RadioButton("9-DOP", &bvh_data->kdop_k, 9);
+                    ImGui::SameLine();
+                    ImGui::RadioButton("13-DOP", &bvh_data->kdop_k, 13);
+                    if (bvh_data->kdop_k != prev_k) {
+                        bvh_data->mark_dirty();
+                        changed = true;
+                    }
+
+                    ImGui::Separator();
+
+                    // Build strategy selector
+                    ImGui::Text("Build Strategy:");
+                    static constexpr const char *strategy_names[] = {
+                        "SAH (Best Quality)",
+                        "Object Median (Balanced)",
+                        "Spatial Median",
+                        "LBVH (Fastest)"
+                    };
+                    int strategy_idx = static_cast<int>(bvh_data->strategy);
+                    if (ImGui::Combo("##strategy", &strategy_idx, strategy_names, 4)) {
+                        bvh_data->strategy = static_cast<quiver::spatial::BVHBuildStrategy>(strategy_idx);
+                        bvh_data->mark_dirty();
+                        changed = true;
+                    }
+
+                    // Max leaf size
+                    int leaf_size = static_cast<int>(bvh_data->max_leaf_size);
+                    if (ImGui::SliderInt("Max Leaf Size", &leaf_size, 1, 32)) {
+                        bvh_data->max_leaf_size = static_cast<uint16_t>(leaf_size);
+                        bvh_data->mark_dirty();
+                        changed = true;
+                    }
+
+                    ImGui::Separator();
+
+                    // Tree depth slider
+                    if (bvh_data->is_built()) {
+                        ImGui::Text("BVH height: %d", bvh_data->bvh_height());
+                        int prev_depth = bvh_data->display_depth;
+                        ImGui::SliderInt("Display Depth", &bvh_data->display_depth, 0, bvh_data->bvh_height());
+                        if (bvh_data->display_depth != prev_depth) {
+                            bvh_data->mark_overlay_dirty();
+                            changed = true;
+                        }
+                    } else {
+                        ImGui::TextDisabled("BVH not yet built");
+                    }
+
+                    ImGui::Separator();
+
+                    // Overlay color
+                    if (ImGui::ColorEdit4("BV Color", bvh_data->color)) {
+                        bvh_data->mark_overlay_dirty();
+                        changed = true;
+                    }
+                }
+            }
+        }
     }
     ImGui::End();
 
@@ -586,6 +709,7 @@ bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state) {
     if (!state.show_lighting_panel) return false;
 
     if (ImGui::Begin("Scene Lighting", &state.show_lighting_panel)) {
+        ImGui::TextDisabled("Global light affecting all meshes");
         auto &light = scene.headlight();
 
         changed |= ImGui::Checkbox("Enabled", &light.enabled);

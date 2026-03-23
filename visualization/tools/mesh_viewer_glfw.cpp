@@ -7,8 +7,8 @@
 // ImGui panel for tweaking render state (shading model, color source,
 // colormaps, lighting, wireframe, etc.).
 //
-// When built with quiver, also provides BVH bounding volume
-// visualization with AABB / 9-DOP / 13-DOP modes.
+// BVH bounding volume visualization is available via right-click
+// context menu on mesh objects in the scene graph panel.
 //
 // Camera: left-drag orbit, right-drag pan, scroll zoom.
 // File > Open: type a file path in the ImGui dialog to load a mesh.
@@ -34,7 +34,6 @@
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 #include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
-#include <balsa/visualization/vulkan/bvh_visualization.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
 
@@ -49,8 +48,10 @@ namespace sg = balsa::scene_graph;
 
 // ── MeshViewerScene ─────────────────────────────────────────────────
 //
-// A MeshScene subclass that adds an ImGui overlay with mesh controls,
-// a main menu bar, and BVH bounding volume visualization.
+// A MeshScene subclass that adds an ImGui overlay with mesh controls
+// and a main menu bar.  BVH bounding volume visualization is handled
+// per-mesh via BVHData features in the scene graph — the base class
+// MeshScene::begin_render_pass() applies deferred updates automatically.
 
 class MeshViewerScene : public vk_viz::MeshScene {
   public:
@@ -67,14 +68,6 @@ class MeshViewerScene : public vk_viz::MeshScene {
     using OpenFileCallback = std::function<void(const std::filesystem::path &)>;
     void set_open_file_callback(OpenFileCallback cb) { _open_file_cb = std::move(cb); }
 
-    // Feed triangle mesh data to the BVH overlay so it can build BVHs.
-    void set_bvh_mesh_data(
-      const std::vector<sg::Vec3f> &positions,
-      const std::vector<uint32_t> &tri_indices) {
-        _bvh.set_mesh_data(positions, tri_indices);
-        _bvh.update_overlay(*this);
-    }
-
     void draw(vk_viz::Film &film) override {
         // Draw mesh geometry first
         MeshScene::draw(film);
@@ -85,13 +78,11 @@ class MeshViewerScene : public vk_viz::MeshScene {
             draw_main_menu_bar();
             draw_open_file_dialog();
             vk_viz::imgui::draw_mesh_controls(*this, _panel_state);
-            _bvh.draw_panel(*this);
             _imgui.render(film);
         }
     }
 
     void release_vulkan_resources() override {
-        _bvh.clear(*this);
         _imgui.shutdown();
         MeshScene::release_vulkan_resources();
     }
@@ -100,7 +91,6 @@ class MeshViewerScene : public vk_viz::MeshScene {
     vk_viz::ImGuiIntegration _imgui;
     vk_viz::imgui::MeshPanelState _panel_state;
     OpenFileCallback _open_file_cb;
-    vk_viz::BVHOverlay _bvh;
 
     // ── ImGui "Open File" dialog state ───────────────────────────────
     bool _show_open_dialog = false;
@@ -123,7 +113,7 @@ class MeshViewerScene : public vk_viz::MeshScene {
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Scene Graph", nullptr, &_panel_state.show_scene_panel);
                 ImGui::MenuItem("Properties", nullptr, &_panel_state.show_property_panel);
-                ImGui::MenuItem("BVH Overlay", nullptr, &_bvh.show_panel());
+                ImGui::MenuItem("Scene Lighting", nullptr, &_panel_state.show_lighting_panel);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -223,12 +213,15 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         // Normalize to unit bounding box centered at origin
         balsa::ColVectors<float, 3> V = pos.vertices;
         auto bb = balsa::geometry::bounding_box(V);
-        float range = ::zipper::utils::maxCoeff(bb.range());
+        auto bb_range = bb.range();
+        float range = static_cast<float>(::zipper::utils::maxCoeff(bb_range));
         if (range < 1e-8f) range = 1.0f;
-        balsa::Vector3<float> center = (bb.min() + bb.max()) / 2.0f;
+        auto bb_center = (bb.min() + bb.max()) / 2.0;
         for (::zipper::index_type j = 0; j < V.extent(1); ++j) {
             auto col = V.col(j);
-            col = (col - center) / range;
+            for (::zipper::index_type i = 0; i < 3; ++i) {
+                col(i) = static_cast<float>((static_cast<double>(col(i)) - bb_center(i)) / range);
+            }
         }
 
         // Add a mesh Object to the scene graph
@@ -255,7 +248,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
             mesh_data->set_normals(normals);
             mesh_data->render_state().normal_source = vk_viz::NormalSource::FromAttribute;
         } else {
-            mesh_data->render_state().normal_source = vk_viz::NormalSource::None;
+            mesh_data->render_state().normal_source = vk_viz::NormalSource::ComputedInShader;
             mesh_data->render_state().shading = vk_viz::ShadingModel::Flat;
         }
 
@@ -271,7 +264,9 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
             mesh_data->set_triangle_indices(tri_indices);
         }
 
-        // Convert edge indices
+        // If the OBJ has explicit edge data from 'l' lines, set those
+        // as explicit edges.  Otherwise, MeshData auto-derives edges
+        // from the triangle topology (built in set_triangle_indices).
         if (pos.edges.extent(1) > 0) {
             std::size_t n_edges = pos.edges.extent(1);
             std::vector<uint32_t> edge_indices(n_edges * 2);
@@ -293,11 +288,6 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
                      mesh_data->vertex_count(),
                      mesh_data->triangle_count(),
                      mesh_data->edge_count());
-
-        // Feed mesh data to the BVH overlay
-        if (!tri_indices.empty()) {
-            _scene->set_bvh_mesh_data(positions, tri_indices);
-        }
     }
 
   protected:

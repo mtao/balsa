@@ -174,6 +174,11 @@ class MeshViewerMainWindow : public QMainWindow {
         QMenu *view_menu = menuBar()->addMenu(tr("&View"));
         view_menu->addAction(_outliner_dock->toggleViewAction());
         view_menu->addAction(_controls_dock->toggleViewAction());
+
+        // Scene Lighting is part of the Mesh Properties dock, so we
+        // just ensure the properties dock is visible when the user
+        // wants lighting controls.  (The Scene Lighting group is
+        // always present inside MeshControlsWidget.)
     }
 
     void load_obj(const std::filesystem::path &path) {
@@ -195,12 +200,15 @@ class MeshViewerMainWindow : public QMainWindow {
         // Normalize to unit bounding box centered at origin
         balsa::ColVectors<float, 3> V = pos.vertices;
         auto bb = balsa::geometry::bounding_box(V);
-        float range = ::zipper::utils::maxCoeff(bb.range());
+        auto bb_range = bb.range();
+        float range = static_cast<float>(::zipper::utils::maxCoeff(bb_range));
         if (range < 1e-8f) range = 1.0f;
-        balsa::Vector3<float> center_pt = (bb.min() + bb.max()) / 2.0f;
+        auto bb_center = (bb.min() + bb.max()) / 2.0;
         for (::zipper::index_type j = 0; j < V.extent(1); ++j) {
             auto col = V.col(j);
-            col = (col - center_pt) / range;
+            for (::zipper::index_type i = 0; i < 3; ++i) {
+                col(i) = static_cast<float>((static_cast<double>(col(i)) - bb_center(i)) / range);
+            }
         }
 
         // Add a mesh Object to the scene graph
@@ -231,7 +239,7 @@ class MeshViewerMainWindow : public QMainWindow {
             mesh_data->set_normals(normals);
             mesh_data->render_state().normal_source = vk_viz::NormalSource::FromAttribute;
         } else {
-            mesh_data->render_state().normal_source = vk_viz::NormalSource::None;
+            mesh_data->render_state().normal_source = vk_viz::NormalSource::ComputedInShader;
             mesh_data->render_state().shading = vk_viz::ShadingModel::Flat;
         }
 
