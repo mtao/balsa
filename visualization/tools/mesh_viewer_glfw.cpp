@@ -246,11 +246,10 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
                 normals[j](2) = nrm.vertices(2, j);
             }
             mesh_data->set_normals(normals);
-            mesh_data->render_state().normal_source = vk_viz::NormalSource::FromAttribute;
-        } else {
-            mesh_data->render_state().normal_source = vk_viz::NormalSource::ComputedInShader;
-            mesh_data->render_state().shading = vk_viz::ShadingModel::Flat;
         }
+        // Apply constraints: auto-selects shading/normal_source based
+        // on whether the mesh actually has normal data.
+        mesh_data->render_state().constrain(mesh_data->has_normals());
 
         // Convert triangle indices (size_t -> uint32_t)
         std::vector<uint32_t> tri_indices;

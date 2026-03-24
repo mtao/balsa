@@ -53,9 +53,10 @@ namespace imgui {
     bool draw_property_panel(MeshScene &scene, MeshPanelState &state);
 
     // Draw render state controls for a single MeshRenderState.
-    // Useful for custom layouts or when you only have one mesh.
+    // has_normals indicates whether the mesh has per-vertex normals
+    // in its buffer — controls which shading/normal options are available.
     // Returns true if any value changed.
-    bool draw_render_state_controls(MeshRenderState &state);
+    bool draw_render_state_controls(MeshRenderState &state, bool has_normals);
 
     // Draw the scene-level lighting panel.  Shows controls for the
     // scene's headlight (direction and color) and an enabled toggle.

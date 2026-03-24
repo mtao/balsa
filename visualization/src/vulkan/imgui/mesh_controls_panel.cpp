@@ -22,12 +22,25 @@ using visualization::find_colormap_index;
 
 // ── Enum combo helpers ───────────────────────────────────────────────
 
-static bool combo_shading_model(const char *label, ShadingModel &value) {
+static bool combo_shading_model(const char *label, ShadingModel &value, NormalSource normal_source) {
     static constexpr const char *items[] = { "Flat", "Gouraud", "Phong" };
     int current = static_cast<int>(value);
-    if (ImGui::Combo(label, &current, items, 3)) {
-        value = static_cast<ShadingModel>(current);
-        return true;
+    if (ImGui::BeginCombo(label, items[current])) {
+        for (int i = 0; i < 3; ++i) {
+            // Gouraud and Phong require per-vertex normals (FromAttribute).
+            // ComputedInShader gives flat per-triangle normals via dFdx/dFdy,
+            // which makes smooth interpolation meaningless.
+            bool item_disabled = (i > 0 && normal_source != NormalSource::FromAttribute);
+            if (item_disabled) ImGui::BeginDisabled();
+            bool selected = (i == current);
+            if (ImGui::Selectable(items[i], selected)) {
+                value = static_cast<ShadingModel>(i);
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            if (item_disabled) ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+        return value != static_cast<ShadingModel>(current);
     }
     return false;
 }
@@ -42,12 +55,23 @@ static bool combo_color_source(const char *label, ColorSource &value) {
     return false;
 }
 
-static bool combo_normal_source(const char *label, NormalSource &value) {
+static bool combo_normal_source(const char *label, NormalSource &value, bool has_normals) {
     static constexpr const char *items[] = { "From Attribute", "Computed (Flat)", "None (Unlit)" };
     int current = static_cast<int>(value);
-    if (ImGui::Combo(label, &current, items, 3)) {
-        value = static_cast<NormalSource>(current);
-        return true;
+    if (ImGui::BeginCombo(label, items[current])) {
+        for (int i = 0; i < 3; ++i) {
+            // "From Attribute" requires the mesh to actually have normals.
+            bool item_disabled = (i == 0 && !has_normals);
+            if (item_disabled) ImGui::BeginDisabled();
+            bool selected = (i == current);
+            if (ImGui::Selectable(items[i], selected)) {
+                value = static_cast<NormalSource>(i);
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            if (item_disabled) ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+        return value != static_cast<NormalSource>(current);
     }
     return false;
 }
@@ -114,17 +138,27 @@ static std::unique_ptr<scene_graph::Object> deep_duplicate(
 
 // ── draw_render_state_controls ───────────────────────────────────────
 
-bool draw_render_state_controls(MeshRenderState &state) {
+bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
     bool changed = false;
+
+    // Apply constraints first — ensures UI reflects valid state
+    // even if state was mutated externally.
+    changed |= state.constrain(has_normals);
 
     // ── Shading & Rendering ─────────────────────────────────────────
     if (ImGui::CollapsingHeader("Shading & Rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= combo_normal_source("Normal Source", state.normal_source);
+        if (combo_normal_source("Normal Source", state.normal_source, has_normals)) {
+            // Re-constrain after normal source change.
+            state.constrain(has_normals);
+            changed = true;
+        }
 
         // Shading model and two-sided lighting are only meaningful
         // when normals are active (i.e., lighting is enabled).
         if (state.normal_source != NormalSource::None) {
-            changed |= combo_shading_model("Shading Model", state.shading);
+            if (combo_shading_model("Shading Model", state.shading, state.normal_source)) {
+                changed = true;
+            }
             changed |= ImGui::Checkbox("Two-Sided Lighting", &state.two_sided);
         }
         changed |= combo_cull_mode("Face Culling", state.cull_mode);
@@ -615,7 +649,7 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
         // ── Render State ────────────────────────────────────────────
         if (mesh_data) {
             if (ImGui::CollapsingHeader("Render State", ImGuiTreeNodeFlags_DefaultOpen)) {
-                changed |= draw_render_state_controls(mesh_data->render_state());
+                changed |= draw_render_state_controls(mesh_data->render_state(), mesh_data->has_normals());
             }
         }
 

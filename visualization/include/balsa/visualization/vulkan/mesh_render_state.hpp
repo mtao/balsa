@@ -71,6 +71,43 @@ struct MeshRenderState {
 
     // Light both sides of faces.
     bool two_sided = true;
+
+    // ── Constraint enforcement ──────────────────────────────────────
+    //
+    // Enforce invariants between shading model, normal source, and
+    // actual normal data availability.  Call after any mutation of
+    // shading or normal_source, and at load time.
+    //
+    // Rules:
+    //   - FromAttribute requires the mesh to actually have normals.
+    //     If !has_normals, downgrade to ComputedInShader.
+    //   - Phong and Gouraud require per-vertex normals (FromAttribute).
+    //     When normal_source != FromAttribute, downgrade to Flat.
+    //   - NormalSource::None disables lighting entirely — shading model
+    //     is ignored by the shader, so no change needed.
+    //
+    // Returns true if any field was modified.
+    bool constrain(bool has_normals) {
+        bool modified = false;
+
+        // Can't use FromAttribute without actual normal data.
+        if (normal_source == NormalSource::FromAttribute && !has_normals) {
+            normal_source = NormalSource::ComputedInShader;
+            modified = true;
+        }
+
+        // Phong/Gouraud need per-vertex normals from an attribute.
+        // ComputedInShader gives flat per-triangle normals via dFdx/dFdy,
+        // which makes Phong interpolation meaningless and Gouraud
+        // per-vertex lighting incorrect.
+        if (normal_source == NormalSource::ComputedInShader
+            && (shading == ShadingModel::Phong || shading == ShadingModel::Gouraud)) {
+            shading = ShadingModel::Flat;
+            modified = true;
+        }
+
+        return modified;
+    }
 };
 
 // ── ResolvedLightState ──────────────────────────────────────────────

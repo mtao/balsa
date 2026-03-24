@@ -1,4 +1,10 @@
 #include "balsa/visualization/qt/mesh_controls_widget.hpp"
+
+// Qt defines 'emit' as a macro, which conflicts with TBB's
+// tbb::profiling::emit().  Undefine it before pulling in headers
+// that transitively include TBB (via quiver), then restore it.
+#undef emit
+
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/visualization/colormap_list.hpp"
@@ -6,6 +12,9 @@
 #include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/BVHData.hpp"
+
+// Restore Qt's emit macro (expands to nothing, but needed for readability).
+#define emit
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -19,6 +28,7 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QStandardItemModel>
 #include <QString>
 
 namespace balsa::visualization::qt {
@@ -547,6 +557,19 @@ void MeshControlsWidget::sync_from_state() {
     _color_group->setVisible(have_mesh);
     _layers_group->setVisible(have_mesh);
 
+    // Hide mesh-specific info labels when the selected object is not a mesh.
+    _vertex_count_label->setVisible(have_mesh);
+    _triangle_count_label->setVisible(have_mesh);
+    _edge_count_label->setVisible(have_mesh);
+    _attribute_label->setVisible(have_mesh);
+
+    // Apply constraints before syncing UI — ensures widgets reflect
+    // valid state even if the render state was mutated externally.
+    bool mesh_has_normals = have_mesh && mesh_data->has_normals();
+    if (have_mesh) {
+        mesh_data->render_state().constrain(mesh_has_normals);
+    }
+
     // Material and shading-model controls are only visible when
     // lighting is active (normal source is not None).
     bool is_lit = have_mesh && mesh_data->render_state().normal_source != vulkan::NormalSource::None;
@@ -607,6 +630,23 @@ void MeshControlsWidget::sync_from_state() {
         _normal_source_combo->setCurrentIndex(static_cast<int>(s.normal_source));
         _two_sided_check->setChecked(s.two_sided);
         _cull_mode_combo->setCurrentIndex(static_cast<int>(s.cull_mode));
+
+        // Disable combo items that violate constraints.
+        // "From Attribute" (index 0) requires actual normal data.
+        if (auto *model = qobject_cast<QStandardItemModel *>(_normal_source_combo->model())) {
+            auto *item0 = model->item(0);
+            if (item0) {
+                item0->setEnabled(mesh_has_normals);
+            }
+        }
+        // "Gouraud" (1) and "Phong" (2) require FromAttribute normals.
+        if (auto *model = qobject_cast<QStandardItemModel *>(_shading_combo->model())) {
+            bool can_smooth = (s.normal_source == vulkan::NormalSource::FromAttribute);
+            for (int i = 1; i <= 2; ++i) {
+                auto *item = model->item(i);
+                if (item) item->setEnabled(can_smooth);
+            }
+        }
 
         // Color
         _color_source_combo->setCurrentIndex(static_cast<int>(s.color_source));
@@ -669,11 +709,9 @@ void MeshControlsWidget::sync_from_state() {
         _material_diffuse_label->setText(QStringLiteral("Diffuse: %1").arg(mat.diffuse_strength, 0, 'f', 2));
         _material_specular_label->setText(QStringLiteral("Specular: %1").arg(mat.specular_strength, 0, 'f', 2));
         _material_shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(mat.shininess)));
-    } else {
-        _vertex_count_label->setText("Vertices: -");
-        _triangle_count_label->setText("Triangles: -");
-        _edge_count_label->setText("Edges: -");
-        _attribute_label->setText("Attributes: -");
+    } else if (have_selection) {
+        // Non-mesh object selected: mesh info labels are already hidden
+        // via setVisible(have_mesh) above; nothing else to sync.
     }
 
     // Scene lighting (always synced, not per-mesh)
@@ -753,6 +791,8 @@ void MeshControlsWidget::on_shading_changed(int index) {
     auto *md = selected_mesh_data();
     if (!md) return;
     md->render_state().shading = static_cast<vulkan::ShadingModel>(index);
+    md->render_state().constrain(md->has_normals());
+    sync_from_state();
     emit scene_changed();
 }
 
@@ -768,11 +808,11 @@ void MeshControlsWidget::on_normal_source_changed(int index) {
     auto *md = selected_mesh_data();
     if (!md) return;
     md->render_state().normal_source = static_cast<vulkan::NormalSource>(index);
+    md->render_state().constrain(md->has_normals());
 
-    // Immediately update visibility of shading/material controls
-    bool is_lit = md->render_state().normal_source != vulkan::NormalSource::None;
-    _shading_details_container->setVisible(is_lit);
-    _material_group->setVisible(is_lit);
+    // Re-sync UI to reflect any constraint-driven changes (e.g.
+    // shading downgraded from Phong to Flat) and visibility updates.
+    sync_from_state();
 
     emit scene_changed();
 }

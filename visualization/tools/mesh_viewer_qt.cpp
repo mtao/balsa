@@ -31,6 +31,11 @@
 #include <spdlog/spdlog.h>
 #include <balsa/qt/spdlog_logger.hpp>
 
+// Qt defines 'emit' as a macro, which conflicts with TBB's
+// tbb::profiling::emit().  Undefine it before pulling in headers
+// that transitively include TBB (via quiver), then restore it.
+#undef emit
+
 #include <balsa/visualization/qt/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
@@ -42,6 +47,9 @@
 
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/geometry/bounding_box.hpp>
+
+// Restore Qt's emit macro (expands to nothing, but needed for readability).
+#define emit
 
 #include <zipper/utils/max_coeff.hpp>
 
@@ -237,11 +245,10 @@ class MeshViewerMainWindow : public QMainWindow {
                 normals[j](2) = nrm.vertices(2, j);
             }
             mesh_data->set_normals(normals);
-            mesh_data->render_state().normal_source = vk_viz::NormalSource::FromAttribute;
-        } else {
-            mesh_data->render_state().normal_source = vk_viz::NormalSource::ComputedInShader;
-            mesh_data->render_state().shading = vk_viz::ShadingModel::Flat;
         }
+        // Apply constraints: auto-selects shading/normal_source based
+        // on whether the mesh actually has normal data.
+        mesh_data->render_state().constrain(mesh_data->has_normals());
 
         // Convert triangle indices (size_t -> uint32_t)
         if (pos.triangles.extent(1) > 0) {
@@ -279,9 +286,10 @@ class MeshViewerMainWindow : public QMainWindow {
                      mesh_data->triangle_count(),
                      mesh_data->edge_count());
 
-        // Refresh the outliner and select the new mesh in the properties panel
+        // Refresh the outliner and select the new mesh (this also
+        // updates the properties panel via the object_selected signal).
         _outliner->refresh();
-        _controls->set_selected_object(&mesh_obj);
+        _outliner->select_object(&mesh_obj);
 
         // Request a redraw
         _vk_window->requestUpdate();
