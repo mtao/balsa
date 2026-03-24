@@ -1,8 +1,17 @@
 #include "balsa/visualization/qt/SceneGraphWidget.hpp"
 #include "balsa/visualization/qt/SceneGraphModel.hpp"
+
+// Qt defines 'emit' as a macro, which conflicts with TBB's
+// tbb::profiling::emit().  Undefine it before pulling in headers
+// that transitively include TBB (via quiver), then restore it.
+#undef emit
+
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/scene_graph/BVHData.hpp"
+
+// Restore Qt's emit macro (expands to nothing, but needed for readability).
+#define emit
 
 #include <QBoxLayout>
 #include <QDoubleSpinBox>
@@ -10,6 +19,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
@@ -148,6 +158,9 @@ void SceneGraphWidget::build_tree(QWidget *parent, QBoxLayout *layout) {
 
     layout->addWidget(_tree);
 
+    // Install event filter on the viewport to detect clicks on empty space.
+    _tree->viewport()->installEventFilter(this);
+
     connect(_tree->selectionModel(), &QItemSelectionModel::currentChanged, this, &SceneGraphWidget::on_selection_changed);
     connect(_tree, &QTreeView::customContextMenuRequested, this, &SceneGraphWidget::on_context_menu);
     connect(_model, &SceneGraphModel::structure_changed, this, &SceneGraphWidget::on_model_structure_changed);
@@ -232,6 +245,24 @@ void SceneGraphWidget::sync_transform_from_object() {
     _sx->setValue(static_cast<double>(static_cast<float>(s(0))));
     _sy->setValue(static_cast<double>(static_cast<float>(s(1))));
     _sz->setValue(static_cast<double>(static_cast<float>(s(2))));
+}
+
+// ── Event filter: deselect on click in empty space ──────────────────
+
+bool SceneGraphWidget::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == _tree->viewport() && event->type() == QEvent::MouseButtonPress) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        auto idx = _tree->indexAt(me->pos());
+        if (!idx.isValid()) {
+            // Clicked on empty space — clear the selection.
+            _tree->clearSelection();
+            _tree->setCurrentIndex(QModelIndex());
+            sync_transform_from_object();
+            emit object_selected(nullptr);
+            // Don't consume — let normal mouse handling proceed.
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 // ── Slots: selection ────────────────────────────────────────────────

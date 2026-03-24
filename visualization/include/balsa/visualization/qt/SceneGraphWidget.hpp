@@ -88,6 +88,10 @@ class SceneGraphWidget : public QWidget {
     // Context menu
     void on_context_menu(const QPoint &pos);
 
+  protected:
+    // Deselect when clicking empty space in the tree viewport.
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
   private:
     void build_ui();
     void build_toolbar(QWidget *parent, QBoxLayout *layout);

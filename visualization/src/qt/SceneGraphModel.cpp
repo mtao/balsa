@@ -1,7 +1,16 @@
 #include "balsa/visualization/qt/SceneGraphModel.hpp"
+
+// Qt defines 'emit' as a macro, which conflicts with TBB's
+// tbb::profiling::emit().  Undefine it before pulling in headers
+// that transitively include TBB (via quiver), then restore it.
+#undef emit
+
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
+
+// Restore Qt's emit macro.
+#define emit
 
 #include <QDataStream>
 #include <QIODevice>
