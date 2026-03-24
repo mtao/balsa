@@ -23,8 +23,9 @@ template<scene_graph::concepts::embedding_traits ET>
 class MeshShader : public Shader<ET> {
   public:
     MeshShader(const vulkan::MeshRenderState &state,
-               vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList)
-      : _state(&state), _topology(topology) {}
+               vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList,
+               bool wireframe_overlay = false)
+      : _state(&state), _topology(topology), _wireframe_overlay(wireframe_overlay) {}
 
     void add_compile_options(shaderc::CompileOptions &opts) const override;
     std::vector<uint32_t> vert_spirv() const override;
@@ -33,6 +34,7 @@ class MeshShader : public Shader<ET> {
   private:
     const vulkan::MeshRenderState *_state;
     vk::PrimitiveTopology _topology;
+    bool _wireframe_overlay;
 };
 
 // ── Implementation ───────────────────────────────────────────────────
@@ -78,6 +80,13 @@ void MeshShader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
     }
     if (_topology == vk::PrimitiveTopology::ePointList) {
         opts.AddMacroDefinition("RENDER_POINTS");
+    }
+
+    // Merged solid+wireframe overlay via VK_KHR_fragment_shader_barycentric.
+    // The fragment shader uses gl_BaryCoordEXT to detect edge proximity
+    // and blends the wireframe color over the lit solid fill.
+    if (_wireframe_overlay) {
+        opts.AddMacroDefinition("WIREFRAME_OVERLAY");
     }
 }
 

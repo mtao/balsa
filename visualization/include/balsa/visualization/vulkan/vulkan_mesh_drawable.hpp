@@ -94,7 +94,8 @@ class VulkanMeshDrawable : public VulkanDrawable {
     void upload_material_ubo_for_layer(uint32_t layer_slot,
                                        const float layer_color[4],
                                        float point_size,
-                                       const MeshRenderState &rs);
+                                       const MeshRenderState &rs,
+                                       const float *wireframe_color_override = nullptr);
 
     // Bind the descriptor set with dynamic offset for the given layer.
     void bind_descriptor_set_for_layer(vk::CommandBuffer cb, uint32_t layer_slot);

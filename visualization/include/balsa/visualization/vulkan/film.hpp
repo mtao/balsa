@@ -66,6 +66,11 @@ class Film {
     virtual void pre_draw_hook() {}
     virtual void post_draw_hook() {}
 
+    // Whether VK_KHR_fragment_shader_barycentric is enabled on this device.
+    // Used by the wireframe overlay path to access gl_BaryCoordEXT in the
+    // fragment shader.  Default: false (line-based wireframe fallback).
+    virtual bool has_fragment_shader_barycentric() const { return false; }
+
   private:
 };
 }// namespace balsa::visualization::vulkan

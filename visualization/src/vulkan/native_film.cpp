@@ -204,6 +204,23 @@ void NativeFilm::create_device() {
     });
     vk::PhysicalDeviceFeatures dev_features = _physical_device_raii.getFeatures();
 
+    // ── Check for VK_KHR_fragment_shader_barycentric support ────────
+    //
+    // This extension provides gl_BaryCoordEXT in fragment shaders,
+    // enabling triangle-based wireframe rendering without vertex
+    // duplication.  If not available, we fall back to line-based
+    // wireframe.
+    _has_fragment_shader_barycentric = false;
+    {
+        auto available_exts = _physical_device_raii.enumerateDeviceExtensionProperties();
+        for (const auto &ext : available_exts) {
+            if (std::string(ext.extensionName.data()) == VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME) {
+                _has_fragment_shader_barycentric = true;
+                break;
+            }
+        }
+    }
+
     vk::DeviceCreateInfo create_info;
     create_info.setPQueueCreateInfos(dqcis.data());
     create_info.setQueueCreateInfoCount(dqcis.size());
@@ -212,6 +229,12 @@ void NativeFilm::create_device() {
     std::vector<const char *> ext_cnames;
     {
         extension_names.insert(extension_names.end(), _device_extensions.begin(), _device_extensions.end());
+
+        // Add barycentric extension if supported
+        if (_has_fragment_shader_barycentric) {
+            extension_names.push_back(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
+            spdlog::info("NativeFilm: enabling VK_KHR_fragment_shader_barycentric");
+        }
 
         // for (auto &&extension : extension_names) {
         //     spdlog::trace("Require extension {}", extension);
@@ -223,6 +246,16 @@ void NativeFilm::create_device() {
 
 
     create_info.setPEnabledFeatures(&dev_features);
+
+    // Chain barycentric feature struct if supported.  This enables
+    // the fragmentShaderBarycentric feature on the logical device,
+    // allowing fragment shaders to use gl_BaryCoordEXT.
+    vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR bary_features;
+    if (_has_fragment_shader_barycentric) {
+        bary_features.setFragmentShaderBarycentric(VK_TRUE);
+        create_info.setPNext(&bary_features);
+    }
+
     // Note: Device-level validation layers are deprecated in Vulkan and these
     // setters are no-ops in modern Vulkan HPP. Validation layers are now
     // configured at instance level only, so we omit them here.

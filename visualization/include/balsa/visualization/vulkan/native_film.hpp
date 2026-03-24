@@ -78,6 +78,8 @@ class NativeFilm : public Film {
 
     void post_draw_hook() override;
 
+    bool has_fragment_shader_barycentric() const override { return _has_fragment_shader_barycentric; }
+
     // protected:
     //  Whatever window management tool we have is in charge of this
     virtual vk::raii::SurfaceKHR make_surface() const = 0;
@@ -213,6 +215,8 @@ class NativeFilm : public Film {
     vk::raii::Image _msaa_color_image_raii = nullptr;
     vk::raii::DeviceMemory _msaa_color_memory_raii = nullptr;
     vk::raii::ImageView _msaa_color_image_view_raii = nullptr;
+
+    bool _has_fragment_shader_barycentric = false;
 
   public:
     void set_swapchain_index(uint32_t index) { _current_image_index = index; }

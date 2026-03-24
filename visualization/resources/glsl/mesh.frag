@@ -1,5 +1,9 @@
 #version 460 core
 
+#ifdef WIREFRAME_OVERLAY
+#extension GL_EXT_fragment_shader_barycentric : require
+#endif
+
 // ──────────────────────────────────────────────────────────────────────
 // Mesh uber-fragment-shader
 //
@@ -9,6 +13,9 @@
 //   COLOR_UNIFORM / COLOR_PER_VERTEX / COLOR_SCALAR_FIELD
 //   RENDER_WIREFRAME — bypass lighting, output layer_color directly
 //   RENDER_POINTS    — bypass lighting, output layer_color directly
+//   WIREFRAME_OVERLAY — merged solid+wireframe: overlay wireframe edges
+//                       over the lit solid fill using gl_BaryCoordEXT
+//                       (requires VK_KHR_fragment_shader_barycentric)
 //
 // Normal handling:
 //   SHADING_FLAT always uses the geometric face normal computed from
@@ -157,6 +164,39 @@ void main() {
 #else
     // No shading — unlit output
     outColor = vec4(base_color, alpha);
+#endif
+
+    // ── 3. Wireframe overlay (merged solid+wireframe pass) ──
+    //
+    // When WIREFRAME_OVERLAY is defined, we have access to gl_BaryCoordEXT
+    // from VK_KHR_fragment_shader_barycentric.  This gives per-fragment
+    // barycentric coordinates without any vertex duplication.
+    //
+    // We compute the distance to the nearest triangle edge in barycentric
+    // space and blend the wireframe color over the already-computed solid
+    // color.  The result is smooth, anti-aliased wireframe lines whose
+    // width is controlled by u_scalar_params.z.
+    //
+    // UBO packing for merged pass:
+    //   u_layer_color    = wireframe color (rgba)
+    //   u_scalar_params.z = wireframe width (in approximate pixels)
+#ifdef WIREFRAME_OVERLAY
+    {
+        vec3 bary = gl_BaryCoordEXT;
+
+        // Distance to nearest edge in barycentric space
+        float d = min(min(bary.x, bary.y), bary.z);
+
+        // Use fwidth for screen-space anti-aliasing.
+        // wire_width controls how many pixels wide the wireframe lines are.
+        float wire_width = u_scalar_params.z;
+        float fw = fwidth(d);
+        float edge = smoothstep(0.0, fw * wire_width, d);
+
+        // edge = 0 on the wire, 1 in the interior.
+        // Blend wireframe color (u_layer_color) over solid color.
+        outColor = mix(u_layer_color, outColor, edge);
+    }
 #endif
 
 #endif // RENDER_WIREFRAME || RENDER_POINTS

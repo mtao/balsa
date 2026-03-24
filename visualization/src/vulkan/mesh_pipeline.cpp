@@ -26,6 +26,7 @@ std::size_t MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noex
     h = hash_combine(h, std::hash<bool>{}(k.has_colors));
     h = hash_combine(h, std::hash<bool>{}(k.has_scalars));
     h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
+    h = hash_combine(h, std::hash<bool>{}(k.wireframe_overlay));
     h = hash_combine(h, std::hash<uint32_t>{}(k.msaa_samples));
     h = hash_combine(h, std::hash<uint64_t>{}(k.render_pass));
     h = hash_combine(h, std::hash<bool>{}(k.depth_test));
@@ -37,7 +38,8 @@ std::size_t MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noex
 MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
                                   vk::PrimitiveTopology topology,
                                   const MeshBuffers &buffers,
-                                  Film &film) {
+                                  Film &film,
+                                  bool wireframe_overlay) {
     MeshPipelineKey key;
     key.shading = state.shading;
     key.color_source = state.color_source;
@@ -53,7 +55,20 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
     key.has_colors = buffers.has_colors();
     key.has_scalars = buffers.has_scalars();
 
+    // ── Safety net: enforce normal constraints ──────────────────────
+    // The UI and load-time code should already enforce these via
+    // MeshRenderState::constrain(), but clamp here as a last resort
+    // to prevent shader/vertex-layout mismatches.
+    if (key.normal_source == NormalSource::FromAttribute && !key.has_normals) {
+        key.normal_source = NormalSource::ComputedInShader;
+    }
+    if (key.normal_source == NormalSource::ComputedInShader
+        && (key.shading == ShadingModel::Phong || key.shading == ShadingModel::Gouraud)) {
+        key.shading = ShadingModel::Flat;
+    }
+
     key.cull_mode = state.cull_mode;
+    key.wireframe_overlay = wireframe_overlay;
 
     key.msaa_samples = static_cast<uint32_t>(film.sample_count());
     key.render_pass = reinterpret_cast<uint64_t>(static_cast<VkRenderPass>(film.default_render_pass()));
@@ -276,11 +291,12 @@ void MeshPipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
 vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
                                                 vk::PrimitiveTopology topology,
                                                 const MeshBuffers &buffers,
-                                                Film &film) {
+                                                Film &film,
+                                                bool wireframe_overlay) {
     if (!_initialized) {
         throw std::runtime_error("MeshPipelineManager: not initialized");
     }
-    auto key = make_pipeline_key(state, topology, buffers, film);
+    auto key = make_pipeline_key(state, topology, buffers, film, wireframe_overlay);
     auto it = _cache.find(key);
     if (it != _cache.end()) {
         return it->second;
@@ -306,7 +322,7 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     temp_state.colormap_name = key.colormap_name;
 
     using ET3F = scene_graph::embedding_traits3F;
-    shaders::MeshShader<ET3F> shader(temp_state, key.topology);
+    shaders::MeshShader<ET3F> shader(temp_state, key.topology, key.wireframe_overlay);
     auto vert_spv = shader.vert_spirv();
     auto frag_spv = shader.frag_spirv();
 

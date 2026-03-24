@@ -188,7 +188,8 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
   uint32_t layer_slot,
   const float layer_color[4],
   float point_size,
-  const MeshRenderState &rs) {
+  const MeshRenderState &rs,
+  const float *wireframe_color_override) {
 
     MaterialUBO material;
 
@@ -230,13 +231,15 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
     material.scalar_params(2) = point_size;
     material.scalar_params(3) = rs.two_sided ? 1.0f : 0.0f;
 
-    // Per-layer colour (consumed by RENDER_WIREFRAME / RENDER_POINTS
-    // path in mesh.frag as u_layer_color, and by solid layer when
-    // color_source is Uniform via the override above).
-    material.layer_color(0) = layer_color[0];
-    material.layer_color(1) = layer_color[1];
-    material.layer_color(2) = layer_color[2];
-    material.layer_color(3) = layer_color[3];
+    // Per-layer colour.  When wireframe_color_override is provided
+    // (merged solid+wireframe pass), use the wireframe color here
+    // so the fragment shader can read it from u_layer_color for the
+    // wireframe overlay blend.
+    const float *lc = wireframe_color_override ? wireframe_color_override : layer_color;
+    material.layer_color(0) = lc[0];
+    material.layer_color(1) = lc[1];
+    material.layer_color(2) = lc[2];
+    material.layer_color(3) = lc[3];
 
     // Write to the slot's aligned offset within the multi-slot buffer.
     vk::DeviceSize offset = static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride;
@@ -304,56 +307,100 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         }
     };
 
+    // ── Decide whether to merge solid + wireframe into one draw ────
+    //
+    // When the VK_KHR_fragment_shader_barycentric extension is available,
+    // both solid and wireframe are enabled, and we have triangle data,
+    // we can render both in a single eTriangleList draw call.  The
+    // fragment shader uses gl_BaryCoordEXT to overlay wireframe edges.
+    //
+    // Otherwise fall back to the existing two-pass approach: solid
+    // triangles + line-based wireframe from the edge index buffer.
+
+    const bool use_merged =
+      layers.solid.enabled
+      && layers.wireframe.enabled
+      && _buffers.has_triangle_indices()
+      && film.has_fragment_shader_barycentric();
+
     // Upload all enabled layers' material data BEFORE recording any
     // draw commands.  Each layer writes to its own aligned slot in
     // _material_ubo, so the writes don't interfere with each other.
     // Layer slots: 0 = solid, 1 = wireframe, 2 = points.
-    if (layers.solid.enabled && _buffers.has_triangle_indices()) {
-        upload_material_ubo_for_layer(0, layers.solid.color, layers.points.size, rs);
-    }
-    if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-        upload_material_ubo_for_layer(1, layers.wireframe.color, layers.points.size, rs);
+    if (use_merged) {
+        // Merged pass: slot 0 carries solid lighting + wireframe overlay.
+        //   u_uniform_color   = solid base color (slot 0 override for COLOR_UNIFORM)
+        //   u_layer_color     = wireframe color (via wireframe_color_override)
+        //   u_scalar_params.z = wireframe width (passed as point_size)
+        upload_material_ubo_for_layer(
+          0, layers.solid.color, layers.wireframe.width, rs, layers.wireframe.color);
+    } else {
+        // Separate passes.
+        if (layers.solid.enabled && _buffers.has_triangle_indices()) {
+            upload_material_ubo_for_layer(0, layers.solid.color, layers.points.size, rs);
+        }
+        if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
+            upload_material_ubo_for_layer(1, layers.wireframe.color, layers.points.size, rs);
+        }
     }
     if (layers.points.enabled && _buffers.vertex_count() > 0) {
         upload_material_ubo_for_layer(2, layers.points.color, layers.points.size, rs);
     }
 
-    // ── Layer 1: Solid (triangles) ──────────────────────────────────
+    // ── Merged solid + wireframe (barycentric overlay) ──────────────
 
-    if (layers.solid.enabled && _buffers.has_triangle_indices()) {
+    if (use_merged) {
         auto pipeline = _manager->get_or_create(
-          rs, vk::PrimitiveTopology::eTriangleList, _buffers, film);
+          rs, vk::PrimitiveTopology::eTriangleList, _buffers, film,
+          /*wireframe_overlay=*/true);
         if (pipeline) {
             bind_shared_state(pipeline);
             bind_descriptor_set_for_layer(cb, 0);
             cb.setLineWidth(1.0f);
-            // Push solid geometry slightly back so wireframe wins z-test,
-            // but only when wireframe is actually being drawn — the slope
-            // bias can cause flickering on its own.
-            if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-                cb.setDepthBias(1.0f, 0.0f, 1.0f);
-            } else {
-                cb.setDepthBias(0.0f, 0.0f, 0.0f);
-            }
+            cb.setDepthBias(0.0f, 0.0f, 0.0f);
 
             cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
         }
-    }
+    } else {
+        // ── Layer 1: Solid (triangles) ──────────────────────────────
 
-    // ── Layer 2: Wireframe (lines) ──────────────────────────────────
+        if (layers.solid.enabled && _buffers.has_triangle_indices()) {
+            auto pipeline = _manager->get_or_create(
+              rs, vk::PrimitiveTopology::eTriangleList, _buffers, film);
+            if (pipeline) {
+                bind_shared_state(pipeline);
+                bind_descriptor_set_for_layer(cb, 0);
+                cb.setLineWidth(1.0f);
+                // Push solid geometry slightly back so wireframe wins
+                // z-test, but only when line-based wireframe is also
+                // being drawn — the slope bias causes flickering on its
+                // own.
+                if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
+                    cb.setDepthBias(1.0f, 0.0f, 1.0f);
+                } else {
+                    cb.setDepthBias(0.0f, 0.0f, 0.0f);
+                }
 
-    if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-        auto pipeline = _manager->get_or_create(
-          rs, vk::PrimitiveTopology::eLineList, _buffers, film);
-        if (pipeline) {
-            bind_shared_state(pipeline);
-            bind_descriptor_set_for_layer(cb, 1);
-            cb.setLineWidth(layers.wireframe.width);
-            cb.setDepthBias(0.0f, 0.0f, 0.0f);
+                cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
+                cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
+            }
+        }
 
-            cb.bindIndexBuffer(_buffers.edge_index_buffer(), 0, vk::IndexType::eUint32);
-            cb.drawIndexed(_buffers.edge_count() * 2, 1, 0, 0, 0);
+        // ── Layer 2: Wireframe (lines) ──────────────────────────────
+
+        if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
+            auto pipeline = _manager->get_or_create(
+              rs, vk::PrimitiveTopology::eLineList, _buffers, film);
+            if (pipeline) {
+                bind_shared_state(pipeline);
+                bind_descriptor_set_for_layer(cb, 1);
+                cb.setLineWidth(layers.wireframe.width);
+                cb.setDepthBias(0.0f, 0.0f, 0.0f);
+
+                cb.bindIndexBuffer(_buffers.edge_index_buffer(), 0, vk::IndexType::eUint32);
+                cb.drawIndexed(_buffers.edge_count() * 2, 1, 0, 0, 0);
+            }
         }
     }
 

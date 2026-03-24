@@ -44,6 +44,13 @@ struct MeshPipelineKey {
     // Rasterization state
     CullMode cull_mode = CullMode::None;// which faces to discard
 
+    // Wireframe overlay — when true, the fragment shader uses
+    // gl_BaryCoordEXT (VK_KHR_fragment_shader_barycentric) to draw
+    // wireframe edges over the solid fill in a single draw call.
+    // Only set when the extension is available AND both solid +
+    // wireframe layers are enabled.
+    bool wireframe_overlay = false;
+
     // Render-pass-dependent state (queried from Film)
     uint32_t msaa_samples = 1;// underlying value of VkSampleCountFlagBits
     uint64_t render_pass = 0;// VkRenderPass cast to uint64_t for hashing
@@ -57,11 +64,14 @@ struct MeshPipelineKeyHash {
 };
 
 // Build a MeshPipelineKey from the current render state, topology,
-// buffer contents, and film configuration.
+// buffer contents, and film configuration.  When wireframe_overlay is
+// true, the pipeline will emit gl_BaryCoordEXT-based wireframe edges
+// in the fragment shader.
 MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
                                   vk::PrimitiveTopology topology,
                                   const MeshBuffers &buffers,
-                                  Film &film);
+                                  Film &film,
+                                  bool wireframe_overlay = false);
 
 // ── MeshPipelineManager ──────────────────────────────────────────────
 //
@@ -98,7 +108,8 @@ class MeshPipelineManager {
     vk::Pipeline get_or_create(const MeshRenderState &state,
                                vk::PrimitiveTopology topology,
                                const MeshBuffers &buffers,
-                               Film &film);
+                               Film &film,
+                               bool wireframe_overlay = false);
 
     // The shared pipeline layout (all mesh pipelines use the same one).
     vk::PipelineLayout pipeline_layout() const { return _pipeline_layout; }
