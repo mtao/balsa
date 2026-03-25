@@ -12,6 +12,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QGroupBox;
+class QBoxLayout;
 
 namespace balsa::visualization::vulkan {
 class MeshScene;
@@ -26,16 +27,21 @@ class BVHData;
 
 namespace balsa::visualization::qt {
 
+class VerticalTabWidget;
+
 // ── MeshControlsWidget ──────────────────────────────────────────────
 //
-// Qt control panel for mesh-specific properties.  Shows shading, color,
-// render layers (solid/wireframe/points), material, and scene lighting
-// controls for the currently selected mesh Object.
+// Qt property panel for the currently selected scene graph object.
+// Uses a VerticalTabWidget with 5 tabs:
 //
-// Render layers replace the old RenderMode enum: each layer (solid,
-// wireframe, points) has an independent enable toggle and color.
-// Material properties (ambient/specular/shininess) are per-mesh;
-// the light source (direction, color) is scene-global.
+//   1. Object   — Name, visibility, mesh info, Transform (T/R/S)
+//   2. Layers   — Solid/wireframe/points enables + colors + sizes,
+//                  Shading & Rendering, Color source
+//   3. Material — Material response (ambient, diffuse, specular,
+//                  shininess).  Placeholder for future named materials.
+//   4. BVH      — BVH overlay (enable, KDOP type, strategy, leaf size,
+//                  depth, color)
+//   5. Lighting — Scene-global light (direction, color, enable)
 //
 // Does NOT contain scene tree / outliner controls — those belong in
 // SceneGraphWidget.  The host application wires them together:
@@ -112,21 +118,38 @@ class MeshControlsWidget : public QWidget {
     // Object
     void on_name_edited(const QString &text);
 
+    // Transform
+    void on_translation_changed();
+    void on_rotation_changed();
+    void on_scale_changed();
+    void on_reset_transform();
+
   private:
     void build_ui();
-    void build_property_panel(QWidget *parent);
-    void build_render_state_group(QWidget *parent);
-    void build_color_group(QWidget *parent);
-    void build_layers_group(QWidget *parent);
-    void build_material_group(QWidget *parent);
-    void build_scene_lighting_group(QWidget *parent);
-    void build_object_group(QWidget *parent);
-    void build_bvh_group(QWidget *parent);
+
+    // Per-tab page builders.  Each returns a new QWidget to be added
+    // as a tab page in the VerticalTabWidget.
+    QWidget *build_object_page();
+    QWidget *build_layers_page();
+    QWidget *build_material_page();
+    QWidget *build_bvh_page();
+    QWidget *build_lighting_page();
+
+    // Sub-group builders (called from page builders).
+    void build_object_info(QWidget *parent, QBoxLayout *layout);
+    void build_transform_section(QWidget *parent, QBoxLayout *layout);
+    void build_render_state_group(QWidget *parent, QBoxLayout *layout);
+    void build_color_group(QWidget *parent, QBoxLayout *layout);
+    void build_layers_group(QWidget *parent, QBoxLayout *layout);
+    void build_material_group(QWidget *parent, QBoxLayout *layout);
+    void build_scene_lighting_group(QWidget *parent, QBoxLayout *layout);
+    void build_bvh_group(QWidget *parent, QBoxLayout *layout);
 
     // Populate widgets from the currently-selected object's state.
     // Blocks signals while setting values to avoid feedback loops.
     void sync_from_state();
     void sync_color_group_visibility();
+    void sync_transform_from_object();
 
     // Helper: get the MeshData feature from the selected Object, or nullptr.
     ::balsa::scene_graph::MeshData *selected_mesh_data();
@@ -138,8 +161,17 @@ class MeshControlsWidget : public QWidget {
     ::balsa::visualization::vulkan::MeshScene *_scene = nullptr;
     ::balsa::scene_graph::Object *_selected = nullptr;
 
-    // ── Object group ─────────────────────────────────────────────────
-    QGroupBox *_object_group = nullptr;
+    // ── Tab widget ───────────────────────────────────────────────────
+    VerticalTabWidget *_tabs = nullptr;
+
+    // Tab indices (for show/hide/enable)
+    int _tab_object = -1;
+    int _tab_layers = -1;
+    int _tab_material = -1;
+    int _tab_bvh = -1;
+    int _tab_lighting = -1;
+
+    // ── Object info widgets ──────────────────────────────────────────
     QLineEdit *_name_edit = nullptr;
     QCheckBox *_visible_check = nullptr;
     QLabel *_vertex_count_label = nullptr;
@@ -147,16 +179,27 @@ class MeshControlsWidget : public QWidget {
     QLabel *_edge_count_label = nullptr;
     QLabel *_attribute_label = nullptr;
 
-    // ── Render state group ───────────────────────────────────────────
-    QGroupBox *_render_state_group = nullptr;
+    // ── Transform widgets ────────────────────────────────────────────
+    QGroupBox *_transform_group = nullptr;
+    QDoubleSpinBox *_tx = nullptr;
+    QDoubleSpinBox *_ty = nullptr;
+    QDoubleSpinBox *_tz = nullptr;
+    QDoubleSpinBox *_rx = nullptr;
+    QDoubleSpinBox *_ry = nullptr;
+    QDoubleSpinBox *_rz = nullptr;
+    QDoubleSpinBox *_sx = nullptr;
+    QDoubleSpinBox *_sy = nullptr;
+    QDoubleSpinBox *_sz = nullptr;
+    QPushButton *_reset_transform_btn = nullptr;
+
+    // ── Render state widgets ─────────────────────────────────────────
     QComboBox *_shading_combo = nullptr;
     QComboBox *_normal_source_combo = nullptr;
     QCheckBox *_two_sided_check = nullptr;
     QComboBox *_cull_mode_combo = nullptr;
     QWidget *_shading_details_container = nullptr;// shown only when lit
 
-    // ── Color group ──────────────────────────────────────────────────
-    QGroupBox *_color_group = nullptr;
+    // ── Color widgets ────────────────────────────────────────────────
     QComboBox *_color_source_combo = nullptr;
     QPushButton *_uniform_color_button = nullptr;
     QComboBox *_colormap_combo = nullptr;
@@ -168,8 +211,7 @@ class MeshControlsWidget : public QWidget {
     QWidget *_uniform_color_container = nullptr;
     QWidget *_scalar_field_container = nullptr;
 
-    // ── Render layers group ──────────────────────────────────────────
-    QGroupBox *_layers_group = nullptr;
+    // ── Render layers widgets ────────────────────────────────────────
     // Solid
     QCheckBox *_solid_enabled_check = nullptr;
     QPushButton *_solid_color_button = nullptr;
@@ -186,8 +228,7 @@ class MeshControlsWidget : public QWidget {
     QLabel *_point_size_label = nullptr;
     QWidget *_points_details_container = nullptr;
 
-    // ── Material group ───────────────────────────────────────────────
-    QGroupBox *_material_group = nullptr;
+    // ── Material widgets ─────────────────────────────────────────────
     QSlider *_material_ambient_slider = nullptr;
     QSlider *_material_diffuse_slider = nullptr;
     QSlider *_material_specular_slider = nullptr;
@@ -197,16 +238,14 @@ class MeshControlsWidget : public QWidget {
     QLabel *_material_specular_label = nullptr;
     QLabel *_material_shininess_label = nullptr;
 
-    // ── Scene lighting group ─────────────────────────────────────────
-    QGroupBox *_scene_lighting_group = nullptr;
+    // ── Scene lighting widgets ───────────────────────────────────────
     QCheckBox *_scene_light_enabled_check = nullptr;
     QDoubleSpinBox *_scene_light_x_spin = nullptr;
     QDoubleSpinBox *_scene_light_y_spin = nullptr;
     QDoubleSpinBox *_scene_light_z_spin = nullptr;
     QPushButton *_scene_light_color_button = nullptr;
 
-    // ── BVH overlay group ────────────────────────────────────────────
-    QGroupBox *_bvh_group = nullptr;
+    // ── BVH overlay widgets ──────────────────────────────────────────
     QCheckBox *_bvh_enabled_check = nullptr;
     QComboBox *_bvh_kdop_combo = nullptr;
     QComboBox *_bvh_strategy_combo = nullptr;

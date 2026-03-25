@@ -1,4 +1,5 @@
 #include "balsa/visualization/qt/mesh_controls_widget.hpp"
+#include "balsa/visualization/qt/vertical_tab_widget.hpp"
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
@@ -34,6 +35,7 @@
 namespace balsa::visualization::qt {
 
 namespace vulkan = ::balsa::visualization::vulkan;
+namespace sg = ::balsa::scene_graph;
 
 using visualization::k_colormap_names;
 using visualization::k_colormap_count;
@@ -54,6 +56,19 @@ static void set_button_color(QPushButton *btn, float r, float g, float b, float 
     QColor c = QColor::fromRgbF(r, g, b, a);
     btn->setStyleSheet(
       QStringLiteral("background-color: %1; border: 1px solid gray;").arg(c.name(QColor::HexArgb)));
+}
+
+// ── Helper: make a labeled double spin box ──────────────────────────
+
+static QDoubleSpinBox *make_spin(const char *label, QWidget *parent, QHBoxLayout *row, double min, double max, double step) {
+    row->addWidget(new QLabel(label, parent));
+    auto *spin = new QDoubleSpinBox(parent);
+    spin->setRange(min, max);
+    spin->setDecimals(3);
+    spin->setSingleStep(step);
+    spin->setKeyboardTracking(false);
+    row->addWidget(spin);
+    return spin;
 }
 
 // ── Construction / Destruction ───────────────────────────────────────
@@ -78,70 +93,60 @@ void MeshControlsWidget::set_selected_object(::balsa::scene_graph::Object *obj) 
     sync_from_state();
 }
 
-// ── build_ui ─────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// build_ui — top-level layout with VerticalTabWidget
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::build_ui() {
     auto *root_layout = new QVBoxLayout(this);
-    root_layout->setContentsMargins(4, 4, 4, 4);
+    root_layout->setContentsMargins(0, 0, 0, 0);
 
-    auto *scroll = new QScrollArea(this);
-    scroll->setWidgetResizable(true);
-    auto *props_widget = new QWidget(scroll);
-    build_property_panel(props_widget);
-    scroll->setWidget(props_widget);
-    root_layout->addWidget(scroll);
+    _tabs = new VerticalTabWidget(this);
+
+    // Unicode icon characters for each tab.
+    // Using simple geometric / symbolic characters.
+    _tab_object = _tabs->addTab(build_object_page(), QStringLiteral("\u25A2"), QStringLiteral("Object"));// ▢
+    _tab_layers = _tabs->addTab(build_layers_page(), QStringLiteral("\u2630"), QStringLiteral("Layers"));// ☰
+    _tab_material = _tabs->addTab(build_material_page(), QStringLiteral("\u25CF"), QStringLiteral("Material"));// ●
+    _tab_bvh = _tabs->addTab(build_bvh_page(), QStringLiteral("\u2592"), QStringLiteral("BVH"));// ▒
+    _tab_lighting = _tabs->addTab(build_lighting_page(), QStringLiteral("\u2600"), QStringLiteral("Lighting"));// ☀
+
+    root_layout->addWidget(_tabs);
 }
 
-void MeshControlsWidget::build_property_panel(QWidget *parent) {
-    auto *layout = new QVBoxLayout(parent);
-    layout->setContentsMargins(0, 0, 0, 0);
+// ═════════════════════════════════════════════════════════════════════
+// Tab 1: Object
+// ═════════════════════════════════════════════════════════════════════
 
-    build_object_group(parent);
-    layout->addWidget(_object_group);
+QWidget *MeshControlsWidget::build_object_page() {
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
 
-    build_render_state_group(parent);
-    layout->addWidget(_render_state_group);
-
-    build_layers_group(parent);
-    layout->addWidget(_layers_group);
-
-    build_color_group(parent);
-    layout->addWidget(_color_group);
-
-    build_material_group(parent);
-    layout->addWidget(_material_group);
-
-    build_bvh_group(parent);
-    layout->addWidget(_bvh_group);
-
-    build_scene_lighting_group(parent);
-    layout->addWidget(_scene_lighting_group);
+    build_object_info(page, layout);
+    build_transform_section(page, layout);
 
     layout->addStretch();
+    return page;
 }
 
-// ── Object group ─────────────────────────────────────────────────────
-
-void MeshControlsWidget::build_object_group(QWidget *parent) {
-    _object_group = new QGroupBox("Object", parent);
-    auto *layout = new QVBoxLayout(_object_group);
-
+void MeshControlsWidget::build_object_info(QWidget *parent, QBoxLayout *layout) {
     // Name
     auto *name_row = new QHBoxLayout;
-    name_row->addWidget(new QLabel("Name:", _object_group));
-    _name_edit = new QLineEdit(_object_group);
+    name_row->addWidget(new QLabel("Name:", parent));
+    _name_edit = new QLineEdit(parent);
     name_row->addWidget(_name_edit);
     layout->addLayout(name_row);
 
     // Visibility
-    _visible_check = new QCheckBox("Visible", _object_group);
+    _visible_check = new QCheckBox("Visible", parent);
     layout->addWidget(_visible_check);
 
     // Mesh info
-    _vertex_count_label = new QLabel("Vertices: 0", _object_group);
-    _triangle_count_label = new QLabel("Triangles: 0", _object_group);
-    _edge_count_label = new QLabel("Edges: 0", _object_group);
-    _attribute_label = new QLabel("Attributes: -", _object_group);
+    _vertex_count_label = new QLabel("Vertices: 0", parent);
+    _triangle_count_label = new QLabel("Triangles: 0", parent);
+    _edge_count_label = new QLabel("Edges: 0", parent);
+    _attribute_label = new QLabel("Attributes: -", parent);
     layout->addWidget(_vertex_count_label);
     layout->addWidget(_triangle_count_label);
     layout->addWidget(_edge_count_label);
@@ -151,22 +156,159 @@ void MeshControlsWidget::build_object_group(QWidget *parent) {
     connect(_visible_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_visibility_changed);
 }
 
-// ── Render state group ───────────────────────────────────────────────
+void MeshControlsWidget::build_transform_section(QWidget *parent, QBoxLayout *layout) {
+    _transform_group = new QGroupBox("Transform", parent);
+    _transform_group->setEnabled(false);
+    auto *grp_layout = new QVBoxLayout(_transform_group);
 
-void MeshControlsWidget::build_render_state_group(QWidget *parent) {
-    _render_state_group = new QGroupBox("Shading && Rendering", parent);
-    auto *layout = new QVBoxLayout(_render_state_group);
+    // Translation
+    auto *t_row = new QHBoxLayout;
+    t_row->addWidget(new QLabel("T", _transform_group));
+    _tx = make_spin("X", _transform_group, t_row, -1e6, 1e6, 0.1);
+    _ty = make_spin("Y", _transform_group, t_row, -1e6, 1e6, 0.1);
+    _tz = make_spin("Z", _transform_group, t_row, -1e6, 1e6, 0.1);
+    grp_layout->addLayout(t_row);
+
+    // Rotation (degrees)
+    auto *r_row = new QHBoxLayout;
+    r_row->addWidget(new QLabel("R", _transform_group));
+    _rx = make_spin("X", _transform_group, r_row, -360.0, 360.0, 1.0);
+    _ry = make_spin("Y", _transform_group, r_row, -360.0, 360.0, 1.0);
+    _rz = make_spin("Z", _transform_group, r_row, -360.0, 360.0, 1.0);
+    grp_layout->addLayout(r_row);
+
+    // Scale
+    auto *s_row = new QHBoxLayout;
+    s_row->addWidget(new QLabel("S", _transform_group));
+    _sx = make_spin("X", _transform_group, s_row, -1e6, 1e6, 0.1);
+    _sy = make_spin("Y", _transform_group, s_row, -1e6, 1e6, 0.1);
+    _sz = make_spin("Z", _transform_group, s_row, -1e6, 1e6, 0.1);
+    _sx->setValue(1.0);
+    _sy->setValue(1.0);
+    _sz->setValue(1.0);
+    grp_layout->addLayout(s_row);
+
+    // Reset button
+    _reset_transform_btn = new QPushButton("Reset Transform", _transform_group);
+    grp_layout->addWidget(_reset_transform_btn);
+
+    layout->addWidget(_transform_group);
+
+    // Connect spin boxes
+    for (auto *spin : { _tx, _ty, _tz }) {
+        connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_translation_changed);
+    }
+    for (auto *spin : { _rx, _ry, _rz }) {
+        connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_rotation_changed);
+    }
+    for (auto *spin : { _sx, _sy, _sz }) {
+        connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scale_changed);
+    }
+    connect(_reset_transform_btn, &QPushButton::clicked, this, &MeshControlsWidget::on_reset_transform);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Tab 2: Layers
+// ═════════════════════════════════════════════════════════════════════
+
+QWidget *MeshControlsWidget::build_layers_page() {
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+
+    build_layers_group(page, layout);
+    build_render_state_group(page, layout);
+    build_color_group(page, layout);
+
+    layout->addStretch();
+    return page;
+}
+
+void MeshControlsWidget::build_layers_group(QWidget *parent, QBoxLayout *layout) {
+    auto *group = new QGroupBox("Render Layers", parent);
+    auto *grp_layout = new QVBoxLayout(group);
+
+    // ── Solid sub-section ───────────────────────────────────────────
+    auto *solid_row = new QHBoxLayout;
+    _solid_enabled_check = new QCheckBox("Solid", group);
+    solid_row->addWidget(_solid_enabled_check);
+    _solid_color_button = new QPushButton(group);
+    _solid_color_button->setVisible(false);// unused: solid color comes from Color section
+    auto *solid_hint = new QLabel("(color: see Color section)", group);
+    solid_hint->setStyleSheet("color: gray; font-size: 10px;");
+    solid_row->addWidget(solid_hint);
+    solid_row->addStretch();
+    grp_layout->addLayout(solid_row);
+
+    // ── Wireframe sub-section ───────────────────────────────────────
+    auto *wire_row = new QHBoxLayout;
+    _wireframe_enabled_check = new QCheckBox("Wireframe", group);
+    wire_row->addWidget(_wireframe_enabled_check);
+    _wireframe_color_button = new QPushButton(group);
+    _wireframe_color_button->setFixedSize(60, 24);
+    set_button_color(_wireframe_color_button, 0.0f, 0.0f, 0.0f, 1.0f);
+    wire_row->addWidget(_wireframe_color_button);
+    wire_row->addStretch();
+    grp_layout->addLayout(wire_row);
+
+    // Wireframe details (width slider) — visible only when enabled
+    _wireframe_details_container = new QWidget(group);
+    auto *wire_details_layout = new QHBoxLayout(_wireframe_details_container);
+    wire_details_layout->setContentsMargins(20, 0, 0, 0);// indent
+    _wireframe_width_label = new QLabel("Width: 1.5", _wireframe_details_container);
+    wire_details_layout->addWidget(_wireframe_width_label);
+    _wireframe_width_slider = make_slider(5, 50, 15, _wireframe_details_container);// *10 scale
+    wire_details_layout->addWidget(_wireframe_width_slider);
+    grp_layout->addWidget(_wireframe_details_container);
+
+    // ── Points sub-section ──────────────────────────────────────────
+    auto *point_row = new QHBoxLayout;
+    _points_enabled_check = new QCheckBox("Points", group);
+    point_row->addWidget(_points_enabled_check);
+    _point_color_button = new QPushButton(group);
+    _point_color_button->setFixedSize(60, 24);
+    set_button_color(_point_color_button, 1.0f, 0.0f, 0.0f, 1.0f);
+    point_row->addWidget(_point_color_button);
+    point_row->addStretch();
+    grp_layout->addLayout(point_row);
+
+    // Point details (size slider) — visible only when enabled
+    _points_details_container = new QWidget(group);
+    auto *point_details_layout = new QHBoxLayout(_points_details_container);
+    point_details_layout->setContentsMargins(20, 0, 0, 0);// indent
+    _point_size_label = new QLabel("Size: 3.0", _points_details_container);
+    point_details_layout->addWidget(_point_size_label);
+    _point_size_slider = make_slider(1, 200, 30, _points_details_container);// *10 scale
+    point_details_layout->addWidget(_point_size_slider);
+    grp_layout->addWidget(_points_details_container);
+
+    layout->addWidget(group);
+
+    // Connections
+    connect(_solid_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_solid_enabled_changed);
+    connect(_solid_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_solid_color_clicked);
+    connect(_wireframe_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_wireframe_enabled_changed);
+    connect(_wireframe_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_wireframe_color_clicked);
+    connect(_wireframe_width_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_wireframe_width_changed);
+    connect(_points_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_points_enabled_changed);
+    connect(_point_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_point_color_clicked);
+    connect(_point_size_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_point_size_changed);
+}
+
+void MeshControlsWidget::build_render_state_group(QWidget *parent, QBoxLayout *layout) {
+    auto *group = new QGroupBox("Shading && Rendering", parent);
+    auto *grp_layout = new QVBoxLayout(group);
 
     // Normal source (always visible — this controls whether lighting is active)
     auto *normal_row = new QHBoxLayout;
-    normal_row->addWidget(new QLabel("Normals:", _render_state_group));
-    _normal_source_combo = new QComboBox(_render_state_group);
+    normal_row->addWidget(new QLabel("Normals:", group));
+    _normal_source_combo = new QComboBox(group);
     _normal_source_combo->addItems({ "From Attribute", "Computed (Flat)", "None (Unlit)" });
     normal_row->addWidget(_normal_source_combo);
-    layout->addLayout(normal_row);
+    grp_layout->addLayout(normal_row);
 
     // Shading-dependent controls: only visible when lighting is active
-    _shading_details_container = new QWidget(_render_state_group);
+    _shading_details_container = new QWidget(group);
     auto *shading_layout = new QVBoxLayout(_shading_details_container);
     shading_layout->setContentsMargins(0, 0, 0, 0);
 
@@ -182,15 +324,17 @@ void MeshControlsWidget::build_render_state_group(QWidget *parent) {
     _two_sided_check = new QCheckBox("Two-Sided Lighting", _shading_details_container);
     shading_layout->addWidget(_two_sided_check);
 
-    layout->addWidget(_shading_details_container);
+    grp_layout->addWidget(_shading_details_container);
 
     // Face culling (always visible — useful regardless of lighting)
     auto *cull_row = new QHBoxLayout;
-    cull_row->addWidget(new QLabel("Face Culling:", _render_state_group));
-    _cull_mode_combo = new QComboBox(_render_state_group);
+    cull_row->addWidget(new QLabel("Face Culling:", group));
+    _cull_mode_combo = new QComboBox(group);
     _cull_mode_combo->addItems({ "None (Show All)", "Back (Exterior)", "Front (Interior)" });
     cull_row->addWidget(_cull_mode_combo);
-    layout->addLayout(cull_row);
+    grp_layout->addLayout(cull_row);
+
+    layout->addWidget(group);
 
     connect(_normal_source_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_normal_source_changed);
     connect(_shading_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_shading_changed);
@@ -198,93 +342,20 @@ void MeshControlsWidget::build_render_state_group(QWidget *parent) {
     connect(_cull_mode_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_cull_mode_changed);
 }
 
-// ── Render layers group ──────────────────────────────────────────────
-
-void MeshControlsWidget::build_layers_group(QWidget *parent) {
-    _layers_group = new QGroupBox("Render Layers", parent);
-    auto *layout = new QVBoxLayout(_layers_group);
-
-    // ── Solid sub-section ───────────────────────────────────────────
-    auto *solid_row = new QHBoxLayout;
-    _solid_enabled_check = new QCheckBox("Solid", _layers_group);
-    solid_row->addWidget(_solid_enabled_check);
-    _solid_color_button = new QPushButton(_layers_group);
-    _solid_color_button->setVisible(false);// unused: solid color comes from Color section
-    auto *solid_hint = new QLabel("(color: see Color section)", _layers_group);
-    solid_hint->setStyleSheet("color: gray; font-size: 10px;");
-    solid_row->addWidget(solid_hint);
-    solid_row->addStretch();
-    layout->addLayout(solid_row);
-
-    // ── Wireframe sub-section ───────────────────────────────────────
-    auto *wire_row = new QHBoxLayout;
-    _wireframe_enabled_check = new QCheckBox("Wireframe", _layers_group);
-    wire_row->addWidget(_wireframe_enabled_check);
-    _wireframe_color_button = new QPushButton(_layers_group);
-    _wireframe_color_button->setFixedSize(60, 24);
-    set_button_color(_wireframe_color_button, 0.0f, 0.0f, 0.0f, 1.0f);
-    wire_row->addWidget(_wireframe_color_button);
-    wire_row->addStretch();
-    layout->addLayout(wire_row);
-
-    // Wireframe details (width slider) — visible only when enabled
-    _wireframe_details_container = new QWidget(_layers_group);
-    auto *wire_details_layout = new QHBoxLayout(_wireframe_details_container);
-    wire_details_layout->setContentsMargins(20, 0, 0, 0);// indent
-    _wireframe_width_label = new QLabel("Width: 1.5", _wireframe_details_container);
-    wire_details_layout->addWidget(_wireframe_width_label);
-    _wireframe_width_slider = make_slider(5, 50, 15, _wireframe_details_container);// *10 scale
-    wire_details_layout->addWidget(_wireframe_width_slider);
-    layout->addWidget(_wireframe_details_container);
-
-    // ── Points sub-section ──────────────────────────────────────────
-    auto *point_row = new QHBoxLayout;
-    _points_enabled_check = new QCheckBox("Points", _layers_group);
-    point_row->addWidget(_points_enabled_check);
-    _point_color_button = new QPushButton(_layers_group);
-    _point_color_button->setFixedSize(60, 24);
-    set_button_color(_point_color_button, 1.0f, 0.0f, 0.0f, 1.0f);
-    point_row->addWidget(_point_color_button);
-    point_row->addStretch();
-    layout->addLayout(point_row);
-
-    // Point details (size slider) — visible only when enabled
-    _points_details_container = new QWidget(_layers_group);
-    auto *point_details_layout = new QHBoxLayout(_points_details_container);
-    point_details_layout->setContentsMargins(20, 0, 0, 0);// indent
-    _point_size_label = new QLabel("Size: 3.0", _points_details_container);
-    point_details_layout->addWidget(_point_size_label);
-    _point_size_slider = make_slider(1, 200, 30, _points_details_container);// *10 scale
-    point_details_layout->addWidget(_point_size_slider);
-    layout->addWidget(_points_details_container);
-
-    // Connections
-    connect(_solid_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_solid_enabled_changed);
-    connect(_solid_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_solid_color_clicked);
-    connect(_wireframe_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_wireframe_enabled_changed);
-    connect(_wireframe_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_wireframe_color_clicked);
-    connect(_wireframe_width_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_wireframe_width_changed);
-    connect(_points_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_points_enabled_changed);
-    connect(_point_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_point_color_clicked);
-    connect(_point_size_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_point_size_changed);
-}
-
-// ── Color group ──────────────────────────────────────────────────────
-
-void MeshControlsWidget::build_color_group(QWidget *parent) {
-    _color_group = new QGroupBox("Color", parent);
-    auto *layout = new QVBoxLayout(_color_group);
+void MeshControlsWidget::build_color_group(QWidget *parent, QBoxLayout *layout) {
+    auto *group = new QGroupBox("Color", parent);
+    auto *grp_layout = new QVBoxLayout(group);
 
     // Color source
     auto *src_row = new QHBoxLayout;
-    src_row->addWidget(new QLabel("Source:", _color_group));
-    _color_source_combo = new QComboBox(_color_group);
+    src_row->addWidget(new QLabel("Source:", group));
+    _color_source_combo = new QComboBox(group);
     _color_source_combo->addItems({ "Uniform Color", "Per-Vertex Color", "Scalar Field" });
     src_row->addWidget(_color_source_combo);
-    layout->addLayout(src_row);
+    grp_layout->addLayout(src_row);
 
     // Uniform color button (hidden when not Uniform)
-    _uniform_color_container = new QWidget(_color_group);
+    _uniform_color_container = new QWidget(group);
     auto *uc_layout = new QHBoxLayout(_uniform_color_container);
     uc_layout->setContentsMargins(0, 0, 0, 0);
     uc_layout->addWidget(new QLabel("Color:", _uniform_color_container));
@@ -293,10 +364,10 @@ void MeshControlsWidget::build_color_group(QWidget *parent) {
     set_button_color(_uniform_color_button, 0.8f, 0.8f, 0.8f, 1.0f);
     uc_layout->addWidget(_uniform_color_button);
     uc_layout->addStretch();
-    layout->addWidget(_uniform_color_container);
+    grp_layout->addWidget(_uniform_color_container);
 
     // Scalar field controls (hidden when not ScalarField)
-    _scalar_field_container = new QWidget(_color_group);
+    _scalar_field_container = new QWidget(group);
     auto *sf_layout = new QVBoxLayout(_scalar_field_container);
     sf_layout->setContentsMargins(0, 0, 0, 0);
 
@@ -341,7 +412,9 @@ void MeshControlsWidget::build_color_group(QWidget *parent) {
     _scalar_range_reset_button = new QPushButton("Reset Range", _scalar_field_container);
     sf_layout->addWidget(_scalar_range_reset_button);
 
-    layout->addWidget(_scalar_field_container);
+    grp_layout->addWidget(_scalar_field_container);
+
+    layout->addWidget(group);
 
     connect(_color_source_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_color_source_changed);
     connect(_uniform_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_uniform_color_clicked);
@@ -352,57 +425,78 @@ void MeshControlsWidget::build_color_group(QWidget *parent) {
     connect(_scalar_range_reset_button, &QPushButton::clicked, this, &MeshControlsWidget::on_scalar_range_reset);
 }
 
-// ── Material group ───────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Tab 3: Material
+// ═════════════════════════════════════════════════════════════════════
 
-void MeshControlsWidget::build_material_group(QWidget *parent) {
-    _material_group = new QGroupBox("Material Response", parent);
-    _material_group->setToolTip("How this mesh responds to scene light");
-    auto *layout = new QVBoxLayout(_material_group);
+QWidget *MeshControlsWidget::build_material_page() {
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+
+    build_material_group(page, layout);
+
+    // Placeholder for future named material system
+    auto *placeholder = new QLabel("Named materials coming in a future update.", page);
+    placeholder->setStyleSheet("color: gray; font-size: 10px; font-style: italic;");
+    placeholder->setWordWrap(true);
+    layout->addWidget(placeholder);
+
+    layout->addStretch();
+    return page;
+}
+
+void MeshControlsWidget::build_material_group(QWidget *parent, QBoxLayout *layout) {
+    auto *group = new QGroupBox("Material Response", parent);
+    group->setToolTip("How this mesh responds to scene light");
+    auto *grp_layout = new QVBoxLayout(group);
 
     // Subtitle
-    auto *subtitle = new QLabel("How this mesh responds to scene light", _material_group);
+    auto *subtitle = new QLabel("How this mesh responds to scene light", group);
     subtitle->setStyleSheet("color: gray; font-size: 10px;");
-    layout->addWidget(subtitle);
+    grp_layout->addWidget(subtitle);
 
     // Ambient
     auto *amb_row = new QHBoxLayout;
-    _material_ambient_label = new QLabel("Ambient: 0.15", _material_group);
+    _material_ambient_label = new QLabel("Ambient: 0.15", group);
     _material_ambient_label->setToolTip("Base light the mesh receives regardless of light direction");
     amb_row->addWidget(_material_ambient_label);
-    _material_ambient_slider = make_slider(0, 100, 15, _material_group);
+    _material_ambient_slider = make_slider(0, 100, 15, group);
     _material_ambient_slider->setToolTip("Base light the mesh receives regardless of light direction");
     amb_row->addWidget(_material_ambient_slider);
-    layout->addLayout(amb_row);
+    grp_layout->addLayout(amb_row);
 
     // Diffuse
     auto *diff_row = new QHBoxLayout;
-    _material_diffuse_label = new QLabel("Diffuse: 1.00", _material_group);
+    _material_diffuse_label = new QLabel("Diffuse: 1.00", group);
     _material_diffuse_label->setToolTip("Intensity of the diffuse lighting response");
     diff_row->addWidget(_material_diffuse_label);
-    _material_diffuse_slider = make_slider(0, 200, 100, _material_group);
+    _material_diffuse_slider = make_slider(0, 200, 100, group);
     _material_diffuse_slider->setToolTip("Intensity of the diffuse lighting response");
     diff_row->addWidget(_material_diffuse_slider);
-    layout->addLayout(diff_row);
+    grp_layout->addLayout(diff_row);
 
     // Specular
     auto *spec_row = new QHBoxLayout;
-    _material_specular_label = new QLabel("Specular: 0.50", _material_group);
+    _material_specular_label = new QLabel("Specular: 0.50", group);
     _material_specular_label->setToolTip("Intensity of the specular highlight");
     spec_row->addWidget(_material_specular_label);
-    _material_specular_slider = make_slider(0, 200, 50, _material_group);
+    _material_specular_slider = make_slider(0, 200, 50, group);
     _material_specular_slider->setToolTip("Intensity of the specular highlight");
     spec_row->addWidget(_material_specular_slider);
-    layout->addLayout(spec_row);
+    grp_layout->addLayout(spec_row);
 
     // Shininess
     auto *shin_row = new QHBoxLayout;
-    _material_shininess_label = new QLabel("Shininess: 32", _material_group);
+    _material_shininess_label = new QLabel("Shininess: 32", group);
     _material_shininess_label->setToolTip("Sharpness of the specular highlight (higher = tighter)");
     shin_row->addWidget(_material_shininess_label);
-    _material_shininess_slider = make_slider(1, 256, 32, _material_group);
+    _material_shininess_slider = make_slider(1, 256, 32, group);
     _material_shininess_slider->setToolTip("Sharpness of the specular highlight (higher = tighter)");
     shin_row->addWidget(_material_shininess_slider);
-    layout->addLayout(shin_row);
+    grp_layout->addLayout(shin_row);
+
+    layout->addWidget(group);
 
     connect(_material_ambient_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_material_ambient_changed);
     connect(_material_diffuse_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_material_diffuse_changed);
@@ -410,116 +504,81 @@ void MeshControlsWidget::build_material_group(QWidget *parent) {
     connect(_material_shininess_slider, &QSlider::valueChanged, this, &MeshControlsWidget::on_material_shininess_changed);
 }
 
-// ── Scene lighting group ─────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Tab 4: BVH
+// ═════════════════════════════════════════════════════════════════════
 
-void MeshControlsWidget::build_scene_lighting_group(QWidget *parent) {
-    _scene_lighting_group = new QGroupBox("Scene Lighting", parent);
-    auto *layout = new QVBoxLayout(_scene_lighting_group);
+QWidget *MeshControlsWidget::build_bvh_page() {
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
 
-    // Subtitle
-    auto *subtitle = new QLabel("Global light affecting all meshes", _scene_lighting_group);
-    subtitle->setStyleSheet("color: gray; font-size: 10px;");
-    layout->addWidget(subtitle);
+    build_bvh_group(page, layout);
 
-    // Enabled checkbox
-    _scene_light_enabled_check = new QCheckBox("Enabled", _scene_lighting_group);
-    _scene_light_enabled_check->setChecked(true);
-    layout->addWidget(_scene_light_enabled_check);
-
-    // Direction (camera-local)
-    auto *dir_layout = new QHBoxLayout;
-    dir_layout->addWidget(new QLabel("Dir (cam):", _scene_lighting_group));
-    _scene_light_x_spin = new QDoubleSpinBox(_scene_lighting_group);
-    _scene_light_y_spin = new QDoubleSpinBox(_scene_lighting_group);
-    _scene_light_z_spin = new QDoubleSpinBox(_scene_lighting_group);
-    for (auto *s : { _scene_light_x_spin, _scene_light_y_spin, _scene_light_z_spin }) {
-        s->setRange(-1.0, 1.0);
-        s->setDecimals(3);
-        s->setSingleStep(0.01);
-        dir_layout->addWidget(s);
-    }
-    _scene_light_x_spin->setValue(0.0);
-    _scene_light_y_spin->setValue(0.0);
-    _scene_light_z_spin->setValue(1.0);
-    layout->addLayout(dir_layout);
-
-    // Light color
-    auto *color_row = new QHBoxLayout;
-    color_row->addWidget(new QLabel("Color:", _scene_lighting_group));
-    _scene_light_color_button = new QPushButton(_scene_lighting_group);
-    _scene_light_color_button->setFixedSize(60, 24);
-    set_button_color(_scene_light_color_button, 1.0f, 1.0f, 1.0f, 1.0f);
-    color_row->addWidget(_scene_light_color_button);
-    color_row->addStretch();
-    layout->addLayout(color_row);
-
-    connect(_scene_light_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_scene_light_enabled_changed);
-    connect(_scene_light_x_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
-    connect(_scene_light_y_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
-    connect(_scene_light_z_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
-    connect(_scene_light_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_scene_light_color_clicked);
+    layout->addStretch();
+    return page;
 }
 
-// ── BVH overlay group ────────────────────────────────────────────────
-
-void MeshControlsWidget::build_bvh_group(QWidget *parent) {
-    _bvh_group = new QGroupBox("BVH Overlay", parent);
-    auto *layout = new QVBoxLayout(_bvh_group);
+void MeshControlsWidget::build_bvh_group(QWidget *parent, QBoxLayout *layout) {
+    auto *group = new QGroupBox("BVH Overlay", parent);
+    auto *grp_layout = new QVBoxLayout(group);
 
     // Enabled checkbox
-    _bvh_enabled_check = new QCheckBox("Show Overlay", _bvh_group);
+    _bvh_enabled_check = new QCheckBox("Show Overlay", group);
     _bvh_enabled_check->setChecked(true);
-    layout->addWidget(_bvh_enabled_check);
+    grp_layout->addWidget(_bvh_enabled_check);
 
     // KDOP type
     auto *kdop_row = new QHBoxLayout;
-    kdop_row->addWidget(new QLabel("Bounding Volume:", _bvh_group));
-    _bvh_kdop_combo = new QComboBox(_bvh_group);
+    kdop_row->addWidget(new QLabel("Bounding Volume:", group));
+    _bvh_kdop_combo = new QComboBox(group);
     _bvh_kdop_combo->addItems({ "AABB (K=3)", "9-DOP", "13-DOP" });
     kdop_row->addWidget(_bvh_kdop_combo);
-    layout->addLayout(kdop_row);
+    grp_layout->addLayout(kdop_row);
 
     // Build strategy
     auto *strat_row = new QHBoxLayout;
-    strat_row->addWidget(new QLabel("Strategy:", _bvh_group));
-    _bvh_strategy_combo = new QComboBox(_bvh_group);
+    strat_row->addWidget(new QLabel("Strategy:", group));
+    _bvh_strategy_combo = new QComboBox(group);
     _bvh_strategy_combo->addItems({ "SAH (Best Quality)",
                                     "Object Median (Balanced)",
                                     "Spatial Median",
                                     "LBVH (Fastest)" });
     strat_row->addWidget(_bvh_strategy_combo);
-    layout->addLayout(strat_row);
+    grp_layout->addLayout(strat_row);
 
     // Max leaf size
     auto *leaf_row = new QHBoxLayout;
-    _bvh_leaf_size_label = new QLabel("Max Leaf: 4", _bvh_group);
+    _bvh_leaf_size_label = new QLabel("Max Leaf: 4", group);
     leaf_row->addWidget(_bvh_leaf_size_label);
-    _bvh_leaf_size_slider = make_slider(1, 32, 4, _bvh_group);
+    _bvh_leaf_size_slider = make_slider(1, 32, 4, group);
     leaf_row->addWidget(_bvh_leaf_size_slider);
-    layout->addLayout(leaf_row);
+    grp_layout->addLayout(leaf_row);
 
     // BVH height info
-    _bvh_height_label = new QLabel("BVH height: -", _bvh_group);
+    _bvh_height_label = new QLabel("BVH height: -", group);
     _bvh_height_label->setStyleSheet("color: gray; font-size: 10px;");
-    layout->addWidget(_bvh_height_label);
+    grp_layout->addWidget(_bvh_height_label);
 
     // Display depth
     auto *depth_row = new QHBoxLayout;
-    _bvh_depth_label = new QLabel("Depth: 0", _bvh_group);
+    _bvh_depth_label = new QLabel("Depth: 0", group);
     depth_row->addWidget(_bvh_depth_label);
-    _bvh_depth_slider = make_slider(0, 20, 0, _bvh_group);
+    _bvh_depth_slider = make_slider(0, 20, 0, group);
     depth_row->addWidget(_bvh_depth_slider);
-    layout->addLayout(depth_row);
+    grp_layout->addLayout(depth_row);
 
     // Color
     auto *color_row = new QHBoxLayout;
-    color_row->addWidget(new QLabel("Color:", _bvh_group));
-    _bvh_color_button = new QPushButton(_bvh_group);
+    color_row->addWidget(new QLabel("Color:", group));
+    _bvh_color_button = new QPushButton(group);
     _bvh_color_button->setFixedSize(60, 24);
     set_button_color(_bvh_color_button, 0.1f, 0.8f, 0.2f, 1.0f);
     color_row->addWidget(_bvh_color_button);
     color_row->addStretch();
-    layout->addLayout(color_row);
+    grp_layout->addLayout(color_row);
+
+    layout->addWidget(group);
 
     connect(_bvh_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_bvh_enabled_changed);
     connect(_bvh_kdop_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MeshControlsWidget::on_bvh_kdop_changed);
@@ -529,19 +588,88 @@ void MeshControlsWidget::build_bvh_group(QWidget *parent) {
     connect(_bvh_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_bvh_color_clicked);
 }
 
-// ── selected_mesh_data ──────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Tab 5: Lighting
+// ═════════════════════════════════════════════════════════════════════
 
-::balsa::scene_graph::MeshData *MeshControlsWidget::selected_mesh_data() {
-    if (!_selected) return nullptr;
-    return _selected->find_feature<::balsa::scene_graph::MeshData>();
+QWidget *MeshControlsWidget::build_lighting_page() {
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+
+    build_scene_lighting_group(page, layout);
+
+    layout->addStretch();
+    return page;
 }
 
-::balsa::scene_graph::BVHData *MeshControlsWidget::selected_bvh_data() {
-    if (!_selected) return nullptr;
-    return _selected->find_feature<::balsa::scene_graph::BVHData>();
+void MeshControlsWidget::build_scene_lighting_group(QWidget *parent, QBoxLayout *layout) {
+    auto *group = new QGroupBox("Scene Lighting", parent);
+    auto *grp_layout = new QVBoxLayout(group);
+
+    // Subtitle
+    auto *subtitle = new QLabel("Global light affecting all meshes", group);
+    subtitle->setStyleSheet("color: gray; font-size: 10px;");
+    grp_layout->addWidget(subtitle);
+
+    // Enabled checkbox
+    _scene_light_enabled_check = new QCheckBox("Enabled", group);
+    _scene_light_enabled_check->setChecked(true);
+    grp_layout->addWidget(_scene_light_enabled_check);
+
+    // Direction (camera-local)
+    auto *dir_layout = new QHBoxLayout;
+    dir_layout->addWidget(new QLabel("Dir (cam):", group));
+    _scene_light_x_spin = new QDoubleSpinBox(group);
+    _scene_light_y_spin = new QDoubleSpinBox(group);
+    _scene_light_z_spin = new QDoubleSpinBox(group);
+    for (auto *s : { _scene_light_x_spin, _scene_light_y_spin, _scene_light_z_spin }) {
+        s->setRange(-1.0, 1.0);
+        s->setDecimals(3);
+        s->setSingleStep(0.01);
+        dir_layout->addWidget(s);
+    }
+    _scene_light_x_spin->setValue(0.0);
+    _scene_light_y_spin->setValue(0.0);
+    _scene_light_z_spin->setValue(1.0);
+    grp_layout->addLayout(dir_layout);
+
+    // Light color
+    auto *color_row = new QHBoxLayout;
+    color_row->addWidget(new QLabel("Color:", group));
+    _scene_light_color_button = new QPushButton(group);
+    _scene_light_color_button->setFixedSize(60, 24);
+    set_button_color(_scene_light_color_button, 1.0f, 1.0f, 1.0f, 1.0f);
+    color_row->addWidget(_scene_light_color_button);
+    color_row->addStretch();
+    grp_layout->addLayout(color_row);
+
+    layout->addWidget(group);
+
+    connect(_scene_light_enabled_check, &QCheckBox::toggled, this, &MeshControlsWidget::on_scene_light_enabled_changed);
+    connect(_scene_light_x_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
+    connect(_scene_light_y_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
+    connect(_scene_light_z_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MeshControlsWidget::on_scene_light_dir_changed);
+    connect(_scene_light_color_button, &QPushButton::clicked, this, &MeshControlsWidget::on_scene_light_color_clicked);
 }
 
-// ── sync_from_state ──────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// selected_mesh_data / selected_bvh_data
+// ═════════════════════════════════════════════════════════════════════
+
+sg::MeshData *MeshControlsWidget::selected_mesh_data() {
+    if (!_selected) return nullptr;
+    return _selected->find_feature<sg::MeshData>();
+}
+
+sg::BVHData *MeshControlsWidget::selected_bvh_data() {
+    if (!_selected) return nullptr;
+    return _selected->find_feature<sg::BVHData>();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// sync_from_state
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::sync_from_state() {
     auto *obj = _selected;
@@ -549,19 +677,12 @@ void MeshControlsWidget::sync_from_state() {
     bool have_selection = (obj != nullptr);
     bool have_mesh = (have_selection && mesh_data != nullptr);
 
-    // Show/hide groups based on selection state.
-    // Object group is visible when any object is selected.
-    // Mesh-specific groups are only visible when a mesh is selected.
-    _object_group->setVisible(have_selection);
-    _render_state_group->setVisible(have_mesh);
-    _color_group->setVisible(have_mesh);
-    _layers_group->setVisible(have_mesh);
-
-    // Hide mesh-specific info labels when the selected object is not a mesh.
-    _vertex_count_label->setVisible(have_mesh);
-    _triangle_count_label->setVisible(have_mesh);
-    _edge_count_label->setVisible(have_mesh);
-    _attribute_label->setVisible(have_mesh);
+    // Show/hide tabs based on selection state.
+    // Object tab always visible (shows "no selection" state gracefully).
+    // Layers/Material tabs only when a mesh is selected.
+    // BVH tab only when BVH data is present.
+    // Lighting tab always visible (scene-global).
+    _tabs->setTabVisible(_tab_layers, have_mesh);
 
     // Apply constraints before syncing UI — ensures widgets reflect
     // valid state even if the render state was mutated externally.
@@ -570,15 +691,25 @@ void MeshControlsWidget::sync_from_state() {
         mesh_data->render_state().constrain(mesh_has_normals);
     }
 
-    // Material and shading-model controls are only visible when
-    // lighting is active (normal source is not None).
+    // Material tab is only visible when lighting is active.
     bool is_lit = have_mesh && mesh_data->render_state().normal_source != vulkan::NormalSource::None;
-    _material_group->setVisible(is_lit);
-    _shading_details_container->setVisible(is_lit);
+    _tabs->setTabVisible(_tab_material, is_lit);
+    if (_shading_details_container) {
+        _shading_details_container->setVisible(is_lit);
+    }
 
-    // BVH group is visible only when the selected object has a BVHData feature.
-    auto *bvh_data = have_selection ? obj->find_feature<::balsa::scene_graph::BVHData>() : nullptr;
-    _bvh_group->setVisible(bvh_data != nullptr);
+    // BVH tab
+    auto *bvh_data = have_selection ? obj->find_feature<sg::BVHData>() : nullptr;
+    _tabs->setTabVisible(_tab_bvh, bvh_data != nullptr);
+
+    // Mesh info labels visibility
+    _vertex_count_label->setVisible(have_mesh);
+    _triangle_count_label->setVisible(have_mesh);
+    _edge_count_label->setVisible(have_mesh);
+    _attribute_label->setVisible(have_mesh);
+
+    // Transform group
+    _transform_group->setEnabled(have_selection);
 
     if (!obj) return;
 
@@ -611,6 +742,9 @@ void MeshControlsWidget::sync_from_state() {
     // Object info
     _name_edit->setText(QString::fromStdString(obj->name));
     _visible_check->setChecked(obj->visible);
+
+    // Sync transform
+    sync_transform_from_object();
 
     if (mesh_data) {
         _vertex_count_label->setText(QStringLiteral("Vertices: %1").arg(static_cast<quint64>(mesh_data->vertex_count())));
@@ -709,15 +843,11 @@ void MeshControlsWidget::sync_from_state() {
         _material_diffuse_label->setText(QStringLiteral("Diffuse: %1").arg(mat.diffuse_strength, 0, 'f', 2));
         _material_specular_label->setText(QStringLiteral("Specular: %1").arg(mat.specular_strength, 0, 'f', 2));
         _material_shininess_label->setText(QStringLiteral("Shininess: %1").arg(static_cast<int>(mat.shininess)));
-    } else if (have_selection) {
-        // Non-mesh object selected: mesh info labels are already hidden
-        // via setVisible(have_mesh) above; nothing else to sync.
     }
 
     // Scene lighting (always synced, not per-mesh)
     if (_scene) {
         auto &light = _scene->headlight();
-        _scene_lighting_group->setEnabled(true);
         _scene_light_enabled_check->setChecked(light.enabled);
         _scene_light_x_spin->setValue(static_cast<double>(light.direction(0)));
         _scene_light_y_spin->setValue(static_cast<double>(light.direction(1)));
@@ -727,8 +857,6 @@ void MeshControlsWidget::sync_from_state() {
                          static_cast<float>(light.color(1)),
                          static_cast<float>(light.color(2)),
                          1.0f);
-    } else {
-        _scene_lighting_group->setEnabled(false);
     }
 
     // BVH overlay
@@ -777,7 +905,35 @@ void MeshControlsWidget::sync_color_group_visibility() {
     _scalar_field_container->setVisible(src == vulkan::ColorSource::ScalarField);
 }
 
-// ── Visibility slot ──────────────────────────────────────────────────
+void MeshControlsWidget::sync_transform_from_object() {
+    auto *obj = _selected;
+    _transform_group->setEnabled(obj != nullptr);
+
+    if (!obj) return;
+
+    QSignalBlocker b1(_tx), b2(_ty), b3(_tz);
+    QSignalBlocker b4(_rx), b5(_ry), b6(_rz);
+    QSignalBlocker b7(_sx), b8(_sy), b9(_sz);
+
+    auto &t = obj->translation();
+    _tx->setValue(static_cast<double>(static_cast<float>(t(0))));
+    _ty->setValue(static_cast<double>(static_cast<float>(t(1))));
+    _tz->setValue(static_cast<double>(static_cast<float>(t(2))));
+
+    auto euler = obj->rotation_euler();
+    _rx->setValue(static_cast<double>(static_cast<float>(euler(0))));
+    _ry->setValue(static_cast<double>(static_cast<float>(euler(1))));
+    _rz->setValue(static_cast<double>(static_cast<float>(euler(2))));
+
+    auto &s = obj->scale_factors();
+    _sx->setValue(static_cast<double>(static_cast<float>(s(0))));
+    _sy->setValue(static_cast<double>(static_cast<float>(s(1))));
+    _sz->setValue(static_cast<double>(static_cast<float>(s(2))));
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Visibility
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_visibility_changed(bool checked) {
     if (!_selected) return;
@@ -785,7 +941,9 @@ void MeshControlsWidget::on_visibility_changed(bool checked) {
     emit scene_changed();
 }
 
-// ── Render state slots ───────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Render state
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_shading_changed(int index) {
     auto *md = selected_mesh_data();
@@ -831,7 +989,9 @@ void MeshControlsWidget::on_cull_mode_changed(int index) {
     emit scene_changed();
 }
 
-// ── Color slots ──────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Color
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_uniform_color_clicked() {
     auto *md = selected_mesh_data();
@@ -901,7 +1061,9 @@ void MeshControlsWidget::on_scalar_range_reset() {
     emit scene_changed();
 }
 
-// ── Render layer slots ───────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Render layers
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_solid_enabled_changed(bool checked) {
     auto *md = selected_mesh_data();
@@ -995,7 +1157,9 @@ void MeshControlsWidget::on_point_size_changed(int value) {
     emit scene_changed();
 }
 
-// ── Material slots ───────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Material
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_material_ambient_changed(int value) {
     auto *md = selected_mesh_data();
@@ -1032,7 +1196,9 @@ void MeshControlsWidget::on_material_diffuse_changed(int value) {
     emit scene_changed();
 }
 
-// ── Scene lighting slots ─────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Scene lighting
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_scene_light_enabled_changed(bool checked) {
     if (!_scene) return;
@@ -1070,7 +1236,9 @@ void MeshControlsWidget::on_scene_light_color_clicked() {
     }
 }
 
-// ── BVH overlay slots ────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: BVH overlay
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_bvh_enabled_changed(bool checked) {
     auto *bvh = selected_bvh_data();
@@ -1135,11 +1303,54 @@ void MeshControlsWidget::on_bvh_color_clicked() {
     }
 }
 
-// ── Object slots ─────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Object
+// ═════════════════════════════════════════════════════════════════════
 
 void MeshControlsWidget::on_name_edited(const QString &text) {
     if (!_selected) return;
     _selected->name = text.toStdString();
+    emit scene_changed();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Slots: Transform
+// ═════════════════════════════════════════════════════════════════════
+
+void MeshControlsWidget::on_translation_changed() {
+    if (!_selected) return;
+    sg::Vec3f t;
+    t(0) = static_cast<float>(_tx->value());
+    t(1) = static_cast<float>(_ty->value());
+    t(2) = static_cast<float>(_tz->value());
+    _selected->set_translation(t);
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_rotation_changed() {
+    if (!_selected) return;
+    sg::Vec3f euler;
+    euler(0) = static_cast<float>(_rx->value());
+    euler(1) = static_cast<float>(_ry->value());
+    euler(2) = static_cast<float>(_rz->value());
+    _selected->set_rotation_euler(euler);
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_scale_changed() {
+    if (!_selected) return;
+    sg::Vec3f s;
+    s(0) = static_cast<float>(_sx->value());
+    s(1) = static_cast<float>(_sy->value());
+    s(2) = static_cast<float>(_sz->value());
+    _selected->set_scale_factors(s);
+    emit scene_changed();
+}
+
+void MeshControlsWidget::on_reset_transform() {
+    if (!_selected) return;
+    _selected->reset_transform();
+    sync_transform_from_object();
     emit scene_changed();
 }
 

@@ -66,12 +66,14 @@ if get_option('qt')
     'src/qt/vulkan/film.cpp',
     'src/qt/vulkan/window.cpp',
     'src/qt/mesh_controls_widget.cpp',
+    'src/qt/vertical_tab_widget.cpp',
     'src/qt/SceneGraphModel.cpp',
     'src/qt/SceneGraphWidget.cpp',
     ]
 
   visualization_moc_headers = [
     'include/balsa/visualization/qt/mesh_controls_widget.hpp',
+    'include/balsa/visualization/qt/vertical_tab_widget.hpp',
     'include/balsa/visualization/qt/SceneGraphModel.hpp',
     'include/balsa/visualization/qt/SceneGraphWidget.hpp',
     ]

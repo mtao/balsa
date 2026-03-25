@@ -4,12 +4,9 @@
 #include <QWidget>
 
 class QTreeView;
-class QDoubleSpinBox;
-class QGroupBox;
 class QBoxLayout;
 class QPushButton;
 class QMenu;
-class QLabel;
 
 namespace balsa::scene_graph {
 class Object;
@@ -21,26 +18,22 @@ class SceneGraphModel;
 
 // ── SceneGraphWidget ────────────────────────────────────────────────
 //
-// A Blender-style outliner + transform panel for the scene graph.
+// A Blender-style outliner for the scene graph.
 //
-// Layout (vertical splitter):
-//   Top:    QTreeView showing the Object hierarchy via SceneGraphModel
-//           - Expand/collapse, drag-and-drop reparenting
-//           - Type icons, visibility checkboxes, selectability checkboxes
-//           - Right-click context menu (Add Child, Add Mesh, Rename,
-//             Delete, Duplicate)
-//           - Inline rename (double-click)
-//           - Toolbar: Add Empty, Add Mesh, Delete
+// Layout (simple vertical):
+//   Toolbar:  Add Empty, Add Mesh, Add Camera, Delete
+//   Tree:     QTreeView showing the Object hierarchy via SceneGraphModel
+//             - Expand/collapse, drag-and-drop reparenting
+//             - Type icons, visibility checkboxes, selectability checkboxes
+//             - Right-click context menu (Add Child, Add Mesh, Rename,
+//               Delete, Duplicate)
+//             - Inline rename (double-click)
 //
-//   Bottom: Transform panel (QGroupBox)
-//           - 3× QDoubleSpinBox for Translation (X, Y, Z)
-//           - 3× QDoubleSpinBox for Rotation (degrees, X, Y, Z)
-//           - 3× QDoubleSpinBox for Scale (X, Y, Z)
-//           - Reset Transform button
+// Transform controls have been moved to MeshControlsWidget (Object tab).
 //
 // Signals:
 //   object_selected(Object*)  -- when tree selection changes
-//   scene_changed()           -- when any transform/visibility/structure changes
+//   scene_changed()           -- when any visibility/structure changes
 
 class SceneGraphWidget : public QWidget {
     Q_OBJECT
@@ -65,9 +58,13 @@ class SceneGraphWidget : public QWidget {
     // Emitted when the tree selection changes.
     void object_selected(::balsa::scene_graph::Object *obj);
 
-    // Emitted when any scene parameter changes (transform, structure,
-    // visibility).  The host should trigger a re-render.
+    // Emitted when any scene parameter changes (structure, visibility).
+    // The host should trigger a re-render.
     void scene_changed();
+
+    // Emitted when the user requests to look through a camera Object.
+    // nullptr means revert to the default camera.
+    void camera_activated(::balsa::scene_graph::Object *cam_obj);
 
   private slots:
     void on_selection_changed();
@@ -76,14 +73,9 @@ class SceneGraphWidget : public QWidget {
     // Toolbar / context menu actions
     void on_add_empty();
     void on_add_mesh();
+    void on_add_camera();
     void on_delete();
     void on_duplicate();
-
-    // Transform spin boxes
-    void on_translation_changed();
-    void on_rotation_changed();
-    void on_scale_changed();
-    void on_reset_transform();
 
     // Context menu
     void on_context_menu(const QPoint &pos);
@@ -96,11 +88,6 @@ class SceneGraphWidget : public QWidget {
     void build_ui();
     void build_toolbar(QWidget *parent, QBoxLayout *layout);
     void build_tree(QWidget *parent, QBoxLayout *layout);
-    void build_transform_panel(QWidget *parent, QBoxLayout *layout);
-
-    // Sync spin box values from the selected Object's TRS.
-    // Blocks signals to avoid feedback loops.
-    void sync_transform_from_object();
 
     // ── Widgets ─────────────────────────────────────────────────────
 
@@ -110,24 +97,8 @@ class SceneGraphWidget : public QWidget {
     // Toolbar
     QPushButton *_add_empty_btn = nullptr;
     QPushButton *_add_mesh_btn = nullptr;
+    QPushButton *_add_camera_btn = nullptr;
     QPushButton *_delete_btn = nullptr;
-
-    // Transform panel
-    QGroupBox *_transform_group = nullptr;
-
-    QDoubleSpinBox *_tx = nullptr;
-    QDoubleSpinBox *_ty = nullptr;
-    QDoubleSpinBox *_tz = nullptr;
-
-    QDoubleSpinBox *_rx = nullptr;
-    QDoubleSpinBox *_ry = nullptr;
-    QDoubleSpinBox *_rz = nullptr;
-
-    QDoubleSpinBox *_sx = nullptr;
-    QDoubleSpinBox *_sy = nullptr;
-    QDoubleSpinBox *_sz = nullptr;
-
-    QPushButton *_reset_btn = nullptr;
 };
 
 }// namespace balsa::visualization::qt
