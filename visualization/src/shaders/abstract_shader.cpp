@@ -9,6 +9,7 @@
 
 void balsa_visualization_shaders_initialize_resources() {
     Q_INIT_RESOURCE(glsl);
+    Q_INIT_RESOURCE(shaders);
 }
 namespace balsa::visualization::shaders {
 
@@ -22,7 +23,7 @@ namespace {
             return v0;
         case AbstractShader::ShaderType::Fragment:
             return v1;
-            default:
+        default:
             return v_;
         }
     }
@@ -56,7 +57,7 @@ namespace {
             return e7;
         case shaderc_compilation_status_configuration_error:
             return e8;
-            default:
+        default:
             return v_;
         }
     }
@@ -99,11 +100,10 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
 
     return ret;
 }
-    std::string AbstractShader::read_path_to_string(const std::string& path) 
-{
+std::string AbstractShader::read_path_to_string(const std::string &path) {
     QFile file(path.c_str());
     if (!file.open(QFile::ReadOnly | QIODevice::Text)) {
-        spdlog::error("Was unable to read []", path);
+        spdlog::error("Was unable to read {}", path);
         return {};
     }
 

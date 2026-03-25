@@ -302,7 +302,9 @@ vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
         return it->second;
     }
     auto pipeline = create_pipeline(key);
-    _cache[key] = pipeline;
+    if (pipeline) {
+        _cache[key] = pipeline;
+    }
     return pipeline;
 }
 
@@ -325,6 +327,13 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     shaders::MeshShader<ET3F> shader(temp_state, key.topology, key.wireframe_overlay);
     auto vert_spv = shader.vert_spirv();
     auto frag_spv = shader.frag_spirv();
+
+    if (vert_spv.empty() || frag_spv.empty()) {
+        spdlog::error(
+          "MeshPipelineManager: shader compilation failed (empty SPIR-V), "
+          "skipping pipeline creation");
+        return vk::Pipeline{};
+    }
 
     // Create shader modules
     auto create_shader_module = [&](const std::vector<uint32_t> &spv) -> vk::ShaderModule {
