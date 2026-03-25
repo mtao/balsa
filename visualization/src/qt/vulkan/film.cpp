@@ -74,4 +74,12 @@ vk::Image Film::swapchain_image(int index) const { return _window.swapChainImage
 vk::ImageView Film::swapchain_image_view(int index) const {
     return _window.swapChainImageView(index);
 }
+
+int Film::concurrent_frame_count() const {
+    return _window.concurrentFrameCount();
+}
+
+int Film::current_frame() const {
+    return _window.currentFrame();
+}
 }// namespace balsa::visualization::qt::vulkan

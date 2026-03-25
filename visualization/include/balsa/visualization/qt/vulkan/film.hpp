@@ -54,6 +54,9 @@ class Film : public visualization::vulkan::Film {
     vk::Image swapchain_image(int index) const override;
     vk::ImageView swapchain_image_view(int index) const override;
 
+    int concurrent_frame_count() const override;
+    int current_frame() const override;
+
   private:
     QVulkanWindow &_window;
 };

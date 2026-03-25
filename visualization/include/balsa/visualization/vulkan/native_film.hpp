@@ -78,6 +78,9 @@ class NativeFilm : public Film {
 
     void post_draw_hook() override;
 
+    int concurrent_frame_count() const override { return static_cast<int>(_frame_count); }
+    int current_frame() const override { return static_cast<int>(_current_frame_index); }
+
     bool has_fragment_shader_barycentric() const override { return _has_fragment_shader_barycentric; }
 
     // protected:

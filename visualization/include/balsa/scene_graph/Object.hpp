@@ -144,6 +144,10 @@ class Object {
     bool visible = true;
     bool selectable = true;
 
+    // If true, this Object cannot be deleted or detached from its parent.
+    // Used for scene fixtures such as the default camera.
+    bool permanent = false;
+
   private:
     Vec3f _translation;// default: {0, 0, 0}
     Quaternionf _rotation{ 1, 0, 0, 0 };// identity quaternion (w=1)

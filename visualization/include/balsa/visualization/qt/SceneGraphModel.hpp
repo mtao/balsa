@@ -112,8 +112,15 @@ class SceneGraphModel : public QAbstractItemModel {
     // Get the icon for an Object based on its features.
     QIcon icon_for_object(::balsa::scene_graph::Object *obj) const;
 
-    // Get the row of an Object within its parent's children.
+    // Get the row of an Object within its parent's children,
+    // skipping permanent (hidden) children.
     int row_of(::balsa::scene_graph::Object *obj) const;
+
+    // Count only non-permanent children of obj.
+    static int visible_child_count(::balsa::scene_graph::Object *obj);
+
+    // Get the nth non-permanent child of obj (0-indexed).
+    static ::balsa::scene_graph::Object *visible_child(::balsa::scene_graph::Object *obj, int row);
 
     ::balsa::scene_graph::Object *_root = nullptr;
 };

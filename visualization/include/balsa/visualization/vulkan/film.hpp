@@ -66,6 +66,19 @@ class Film {
     virtual void pre_draw_hook() {}
     virtual void post_draw_hook() {}
 
+    // ── Frames-in-flight ────────────────────────────────────────────
+    //
+    // concurrent_frame_count() returns the number of frames the backend
+    // allows to be in-flight simultaneously (QVulkanWindow defaults to 2;
+    // NativeFilm defaults to 1).  current_frame() returns a 0-based index
+    // in [0, concurrent_frame_count()) identifying which frame slot is
+    // currently being recorded.  Per-frame GPU resources (UBOs, descriptor
+    // sets) must be duplicated for each slot so that the CPU can upload
+    // data for the current frame without clobbering data the GPU is still
+    // reading from a prior frame.
+    virtual int concurrent_frame_count() const = 0;
+    virtual int current_frame() const = 0;
+
     // Whether VK_KHR_fragment_shader_barycentric is enabled on this device.
     // Used by the wireframe overlay path to access gl_BaryCoordEXT in the
     // fragment shader.  Default: false (line-based wireframe fallback).

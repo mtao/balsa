@@ -332,9 +332,15 @@ static bool draw_object_node(scene_graph::Object &obj,
             state.renaming_object = nullptr;
         }
     } else {
-        // Normal label
+        // Normal label — append active camera indicator
         char label[256];
-        std::snprintf(label, sizeof(label), "%s %s", icon, obj.name.c_str());
+        bool is_active_cam = obj.find_feature<scene_graph::Camera>()
+                             && (&obj == &scene.active_camera_object());
+        if (is_active_cam) {
+            std::snprintf(label, sizeof(label), "%s %s (active)", icon, obj.name.c_str());
+        } else {
+            std::snprintf(label, sizeof(label), "%s %s", icon, obj.name.c_str());
+        }
         node_open = ImGui::TreeNodeEx(label, flags);
 
         // Click to select
@@ -343,8 +349,8 @@ static bool draw_object_node(scene_graph::Object &obj,
         }
     }
 
-    // ── Drag source ─────────────────────────────────────────────────
-    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+    // ── Drag source (permanent objects cannot be dragged) ──────────
+    if (!obj.permanent && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         state.drag_source = &obj;
         ImGui::SetDragDropPayload("SCENE_OBJECT", &state.drag_source, sizeof(scene_graph::Object *));
         ImGui::Text("%s %s", icon_for_object(obj), obj.name.c_str());
@@ -387,13 +393,34 @@ static bool draw_object_node(scene_graph::Object &obj,
             }
             changed = true;
         }
+        if (ImGui::MenuItem("Add Camera")) {
+            auto &cam_child = obj.add_child("Camera");
+            cam_child.emplace_feature<scene_graph::Camera>();
+            changed = true;
+        }
+
+        // "Look Through" for Camera objects
+        if (obj.find_feature<scene_graph::Camera>()) {
+            bool is_active = (&obj == &scene.active_camera_object());
+            if (is_active) {
+                if (ImGui::MenuItem("Revert to Default Camera")) {
+                    scene.set_active_camera(nullptr);
+                    changed = true;
+                }
+            } else {
+                if (ImGui::MenuItem("Look Through Camera")) {
+                    scene.set_active_camera(&obj);
+                    changed = true;
+                }
+            }
+        }
         ImGui::Separator();
-        if (ImGui::MenuItem("Rename")) {
+        if (!obj.permanent && ImGui::MenuItem("Rename")) {
             state.renaming_object = &obj;
             std::strncpy(state.rename_buf, obj.name.c_str(), sizeof(state.rename_buf) - 1);
             state.rename_buf[sizeof(state.rename_buf) - 1] = '\0';
         }
-        if (ImGui::MenuItem("Duplicate")) {
+        if (!obj.permanent && ImGui::MenuItem("Duplicate")) {
             auto *parent = obj.parent();
             if (parent) {
                 parent->add_child(deep_duplicate(obj, scene));
@@ -401,7 +428,7 @@ static bool draw_object_node(scene_graph::Object &obj,
             }
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Delete")) {
+        if (!obj.permanent && ImGui::MenuItem("Delete")) {
             // Clear selection if deleting selected
             if (state.selected_object == &obj) {
                 state.selected_object = nullptr;
@@ -449,6 +476,7 @@ static bool draw_object_node(scene_graph::Object &obj,
     if (node_open && has_children) {
         for (std::size_t i = 0; i < obj.children_count(); ++i) {
             auto &child = *obj.children()[i];
+            if (child.permanent) continue;
             changed |= draw_object_node(child, scene, state);
         }
         ImGui::TreePop();
@@ -472,7 +500,13 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
             changed = true;
         }
         ImGui::SameLine();
-        if (state.selected_object) {
+        if (ImGui::Button("+ Camera")) {
+            auto &cam_obj = scene.root().add_child("Camera");
+            cam_obj.emplace_feature<scene_graph::Camera>();
+            changed = true;
+        }
+        ImGui::SameLine();
+        if (state.selected_object && !state.selected_object->permanent) {
             if (ImGui::Button("Delete")) {
                 auto *obj = state.selected_object;
                 state.selected_object = nullptr;
@@ -503,7 +537,7 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
         for (std::size_t i = 0; i < root.children_count(); ++i) {
             auto &child = *root.children()[i];
             // Skip camera node (internal, not user-editable)
-            if (child.find_feature<scene_graph::Camera>()) continue;
+            if (child.permanent) continue;
             changed |= draw_object_node(child, scene, state);
         }
 

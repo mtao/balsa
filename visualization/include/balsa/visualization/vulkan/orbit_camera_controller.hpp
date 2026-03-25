@@ -79,6 +79,10 @@ class OrbitCameraController : public InputHandler {
             if (e.button == 0) _left_down = true;
             if (e.button == 1) _right_down = true;
             if (e.button == 2) _middle_down = true;
+            // When a non-default camera is active, snap the default
+            // camera to match it and revert to the default on first
+            // interaction.  The non-default camera acts as a bookmark.
+            snap_to_active_camera();
             break;
 
         case MouseEvent::Type::Release:
@@ -117,6 +121,8 @@ class OrbitCameraController : public InputHandler {
         }
 
         case MouseEvent::Type::Scroll: {
+            // Snap from bookmark camera on first interaction.
+            snap_to_active_camera();
             // Zoom: exponential scaling feels natural
             float factor = 1.0f - static_cast<float>(e.scroll_y) * zoom_sensitivity;
             _distance = std::max(_distance * factor, _min_distance);
@@ -163,6 +169,43 @@ class OrbitCameraController : public InputHandler {
         offset(1) = ey;
         offset(2) = ez;
         return _center + offset;
+    }
+
+    // If the active camera is not the default camera, extract orbit
+    // parameters from the active camera's world transform, copy them
+    // to the default camera, revert to the default camera, and update
+    // our spherical state so subsequent orbiting continues from there.
+    void snap_to_active_camera() {
+        if (!_scene || _scene->is_default_camera_active()) return;
+
+        // Extract eye position from the active camera's world transform.
+        auto world_xf = _scene->active_camera_object().world_transform();
+        scene_graph::Vec3f eye;
+        eye(0) = world_xf.translation()(0);
+        eye(1) = world_xf.translation()(1);
+        eye(2) = world_xf.translation()(2);
+
+        // Extract forward direction (camera looks along -Z in its local space).
+        scene_graph::Vec3f forward;
+        forward(0) = -world_xf.linear()(0, 2);
+        forward(1) = -world_xf.linear()(1, 2);
+        forward(2) = -world_xf.linear()(2, 2);
+        forward = forward.normalized();
+
+        // Derive center from eye + forward * distance.
+        _center = eye + forward * _distance;
+
+        // Compute spherical coordinates from (eye - center).
+        scene_graph::Vec3f offset = eye - _center;
+        _distance = offset.norm();
+        if (_distance < _min_distance) _distance = _min_distance;
+
+        _phi = std::asin(std::clamp(offset(1) / _distance, -1.0f, 1.0f));
+        _theta = std::atan2(offset(0), offset(2));
+
+        // Snap the default camera to this position and revert.
+        _scene->set_active_camera(nullptr);
+        apply();
     }
 
     void apply() {

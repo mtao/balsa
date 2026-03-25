@@ -16,8 +16,10 @@ MeshScene::MeshScene()
   : _scene_root("Root") {
     // Create a camera Object as a child of the root.
     auto &cam_obj = _scene_root.add_child("Camera");
-    _camera_object = &cam_obj;
-    _camera = &cam_obj.emplace_feature<scene_graph::Camera>();
+    cam_obj.permanent = true;// internal fixture — hidden from UI, cannot be deleted
+    _default_camera_object = &cam_obj;
+    _active_camera_object = &cam_obj;
+    _default_camera = &cam_obj.emplace_feature<scene_graph::Camera>();
 
     // Attach a default headlight to the camera Object.
     // Direction (0, 0, 1) in camera local space = shining along the
@@ -35,7 +37,10 @@ void MeshScene::initialize(Film &film) {
     SceneBase::initialize(film);
     _film = &film;
 
-    _pipeline_manager.init(film);
+    // Each drawable allocates concurrent_frame_count() descriptor sets
+    // (one per frame-in-flight).  Scale the pool accordingly.
+    const uint32_t max_sets = 32 * static_cast<uint32_t>(film.concurrent_frame_count());
+    _pipeline_manager.init(film, max_sets);
     _initialized = true;
 
     // Init any VulkanMeshDrawables that were added before initialize().
@@ -55,11 +60,15 @@ void MeshScene::draw(Film &film) {
     // Resolve scene-level lighting once per frame.
     auto light_state = resolve_scene_lights();
 
+    // Use the active camera for rendering.
+    auto *active_cam = _active_camera_object->find_feature<scene_graph::Camera>();
+    if (!active_cam) active_cam = _default_camera;
+
     for (auto *drawable : _drawable_group) {
         auto *vmd = dynamic_cast<VulkanMeshDrawable *>(drawable);
         if (!vmd) continue;
         vmd->set_scene_light_state(light_state);
-        vmd->draw(*_camera, film);
+        vmd->draw(*active_cam, film);
     }
 }
 
@@ -261,6 +270,39 @@ const scene_graph::Object *MeshScene::mesh_object(std::size_t index) const {
     return nullptr;
 }
 
+// ── Camera accessors ────────────────────────────────────────────────
+
+scene_graph::Camera &MeshScene::camera() {
+    auto *cam = _active_camera_object->find_feature<scene_graph::Camera>();
+    return cam ? *cam : *_default_camera;
+}
+
+const scene_graph::Camera &MeshScene::camera() const {
+    auto *cam = _active_camera_object->find_feature<scene_graph::Camera>();
+    return cam ? *cam : *_default_camera;
+}
+
+scene_graph::Object &MeshScene::camera_object() {
+    return *_active_camera_object;
+}
+
+const scene_graph::Object &MeshScene::camera_object() const {
+    return *_active_camera_object;
+}
+
+void MeshScene::set_active_camera(scene_graph::Object *cam_obj) {
+    if (!cam_obj) {
+        _active_camera_object = _default_camera_object;
+        return;
+    }
+    auto *cam = cam_obj->find_feature<scene_graph::Camera>();
+    if (!cam) {
+        spdlog::warn("set_active_camera: Object '{}' has no Camera feature", cam_obj->name);
+        return;
+    }
+    _active_camera_object = cam_obj;
+}
+
 // ── Camera helpers ───────────────────────────────────────────────────
 
 void MeshScene::look_at(const scene_graph::Vec3f &eye,
@@ -281,16 +323,16 @@ void MeshScene::look_at(const scene_graph::Vec3f &eye,
     // view_matrix() == lookAt(...).  That's correct.
     auto view = ::zipper::transform::look_at(eye, center, up);
     auto inv_view = view.inverse();
-    _camera_object->set_from_transform(
+    _default_camera_object->set_from_transform(
       scene_graph::AffineTransformf{ inv_view.to_matrix() });
 }
 
 void MeshScene::set_perspective(float fov_y, float aspect, float near, float far) {
-    _camera->set_perspective(fov_y, aspect, near, far);
+    _default_camera->set_perspective(fov_y, aspect, near, far);
 }
 
 void MeshScene::update_aspect(float aspect) {
-    _camera->update_aspect(aspect);
+    _default_camera->update_aspect(aspect);
 }
 
 // ── Scene lighting ──────────────────────────────────────────────────

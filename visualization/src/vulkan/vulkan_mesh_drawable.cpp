@@ -26,53 +26,64 @@ VulkanMeshDrawable::~VulkanMeshDrawable() {
 void VulkanMeshDrawable::init(Film &film) {
     if (_initialized) return;
 
-    // Create host-visible UBO buffers.
-    _transform_ubo = VulkanBuffer(
-      film,
-      sizeof(TransformUBO),
-      vk::BufferUsageFlagBits::eUniformBuffer,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    const int frame_count = film.concurrent_frame_count();
 
-    // Material UBO: allocate k_max_material_layers aligned slots so
-    // each layer (solid, wireframe, points) writes to its own region.
-    // This prevents the last upload_material_ubo_for_layer() from
-    // overwriting earlier layers' data before the GPU executes deferred
-    // draw commands.
+    // Material UBO alignment — shared across all frames.
     auto min_align = film.physical_device_properties().limits.minUniformBufferOffsetAlignment;
     _material_ubo_stride = material_ubo_aligned_size(min_align);
 
-    _material_ubo = VulkanBuffer(
-      film,
-      _material_ubo_stride * k_max_material_layers,
-      vk::BufferUsageFlagBits::eUniformBuffer,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    _transform_ubos.resize(frame_count);
+    _material_ubos.resize(frame_count);
+    _descriptor_sets.resize(frame_count);
 
-    // Allocate and write descriptor set.  The material range covers
-    // a single slot; the dynamic offset selects which slot to read.
-    _descriptor_set = _manager->allocate_descriptor_set();
-    _manager->write_descriptor_set(
-      _descriptor_set,
-      _transform_ubo.buffer(),
-      sizeof(TransformUBO),
-      _material_ubo.buffer(),
-      sizeof(MaterialUBO));
+    for (int i = 0; i < frame_count; ++i) {
+        // Create host-visible UBO buffers.
+        _transform_ubos[i] = VulkanBuffer(
+          film,
+          sizeof(TransformUBO),
+          vk::BufferUsageFlagBits::eUniformBuffer,
+          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+        _material_ubos[i] = VulkanBuffer(
+          film,
+          _material_ubo_stride * k_max_material_layers,
+          vk::BufferUsageFlagBits::eUniformBuffer,
+          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+        // Allocate and write descriptor set.  The material range covers
+        // a single slot; the dynamic offset selects which slot to read.
+        _descriptor_sets[i] = _manager->allocate_descriptor_set();
+        _manager->write_descriptor_set(
+          _descriptor_sets[i],
+          _transform_ubos[i].buffer(),
+          sizeof(TransformUBO),
+          _material_ubos[i].buffer(),
+          sizeof(MaterialUBO));
+    }
 
     _initialized = true;
 }
 
 void VulkanMeshDrawable::release() {
     _buffers.release();
-    _transform_ubo.release();
-    _material_ubo.release();
 
-    // Return descriptor set to the pool so it can be reused (e.g. when
-    // BVH overlays are rebuilt repeatedly).  The caller must ensure the
-    // GPU is idle before calling release() — MeshScene::remove_mesh()
+    for (auto &ubo : _transform_ubos) ubo.release();
+    _transform_ubos.clear();
+
+    for (auto &ubo : _material_ubos) ubo.release();
+    _material_ubos.clear();
+
+    // Return descriptor sets to the pool so they can be reused (e.g.
+    // when BVH overlays are rebuilt repeatedly).  The caller must ensure
+    // the GPU is idle before calling release() — MeshScene::remove_mesh()
     // handles this by calling device.waitIdle() first.
-    if (_descriptor_set && _manager) {
-        _manager->free_descriptor_set(_descriptor_set);
+    if (_manager) {
+        for (auto ds : _descriptor_sets) {
+            if (ds) _manager->free_descriptor_set(ds);
+        }
     }
-    _descriptor_set = vk::DescriptorSet{};
+    _descriptor_sets.clear();
+
     _synced_version = 0;
     _initialized = false;
 }
@@ -88,8 +99,8 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 
     if (!_buffers.has_positions()) return;
 
-    // Upload transforms once per frame.
-    update_transform_ubo(cam);
+    // Upload transforms once per frame (to current frame's UBO).
+    update_transform_ubo(cam, film);
 
     // Record multi-layer draw commands.
     record_draw_commands(film);
@@ -154,8 +165,10 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
 
 // ── Private: transform UBO ──────────────────────────────────────────
 
-void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam) {
+void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam, Film &film) {
     if (!_initialized) return;
+
+    const int fi = film.current_frame();
 
     // Model matrix from the scene graph Object's world transform.
     auto model_affine = object().world_transform();
@@ -179,17 +192,20 @@ void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam) {
     transform.camera_pos(1) = static_cast<float>(cam_translation(1));
     transform.camera_pos(2) = static_cast<float>(cam_translation(2));
     transform.camera_pos(3) = 0.0f;// pad
-    _transform_ubo.upload(&transform, sizeof(TransformUBO));
+    _transform_ubos[fi].upload(&transform, sizeof(TransformUBO));
 }
 
 // ── Private: per-layer material UBO ─────────────────────────────────
 
 void VulkanMeshDrawable::upload_material_ubo_for_layer(
+  Film &film,
   uint32_t layer_slot,
   const float layer_color[4],
   float point_size,
   const MeshRenderState &rs,
   const float *wireframe_color_override) {
+
+    const int fi = film.current_frame();
 
     MaterialUBO material;
 
@@ -243,21 +259,23 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
 
     // Write to the slot's aligned offset within the multi-slot buffer.
     vk::DeviceSize offset = static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride;
-    _material_ubo.upload(&material, sizeof(MaterialUBO), offset);
+    _material_ubos[fi].upload(&material, sizeof(MaterialUBO), offset);
 }
 
 // ── Private: bind descriptor set with dynamic offset ────────────────
 
 void VulkanMeshDrawable::bind_descriptor_set_for_layer(
+  Film &film,
   vk::CommandBuffer cb,
   uint32_t layer_slot) {
+    const int fi = film.current_frame();
     uint32_t dynamic_offset = static_cast<uint32_t>(
       static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride);
     cb.bindDescriptorSets(
       vk::PipelineBindPoint::eGraphics,
       _manager->pipeline_layout(),
       0,
-      { _descriptor_set },
+      { _descriptor_sets[fi] },
       { dynamic_offset });
 }
 
@@ -325,7 +343,8 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
 
     // Upload all enabled layers' material data BEFORE recording any
     // draw commands.  Each layer writes to its own aligned slot in
-    // _material_ubo, so the writes don't interfere with each other.
+    // the current frame's _material_ubo, so the writes don't interfere
+    // with each other.
     // Layer slots: 0 = solid, 1 = wireframe, 2 = points.
     if (use_merged) {
         // Merged pass: slot 0 carries solid lighting + wireframe overlay.
@@ -333,18 +352,18 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         //   u_layer_color     = wireframe color (via wireframe_color_override)
         //   u_scalar_params.z = wireframe width (passed as point_size)
         upload_material_ubo_for_layer(
-          0, layers.solid.color, layers.wireframe.width, rs, layers.wireframe.color);
+          film, 0, layers.solid.color, layers.wireframe.width, rs, layers.wireframe.color);
     } else {
         // Separate passes.
         if (layers.solid.enabled && _buffers.has_triangle_indices()) {
-            upload_material_ubo_for_layer(0, layers.solid.color, layers.points.size, rs);
+            upload_material_ubo_for_layer(film, 0, layers.solid.color, layers.points.size, rs);
         }
         if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-            upload_material_ubo_for_layer(1, layers.wireframe.color, layers.points.size, rs);
+            upload_material_ubo_for_layer(film, 1, layers.wireframe.color, layers.points.size, rs);
         }
     }
     if (layers.points.enabled && _buffers.vertex_count() > 0) {
-        upload_material_ubo_for_layer(2, layers.points.color, layers.points.size, rs);
+        upload_material_ubo_for_layer(film, 2, layers.points.color, layers.points.size, rs);
     }
 
     // ── Merged solid + wireframe (barycentric overlay) ──────────────
@@ -355,7 +374,7 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
           /*wireframe_overlay=*/true);
         if (pipeline) {
             bind_shared_state(pipeline);
-            bind_descriptor_set_for_layer(cb, 0);
+            bind_descriptor_set_for_layer(film, cb, 0);
             cb.setLineWidth(1.0f);
             cb.setDepthBias(0.0f, 0.0f, 0.0f);
 
@@ -370,7 +389,7 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
               rs, vk::PrimitiveTopology::eTriangleList, _buffers, film);
             if (pipeline) {
                 bind_shared_state(pipeline);
-                bind_descriptor_set_for_layer(cb, 0);
+                bind_descriptor_set_for_layer(film, cb, 0);
                 cb.setLineWidth(1.0f);
                 // Push solid geometry slightly back so wireframe wins
                 // z-test, but only when line-based wireframe is also
@@ -394,7 +413,7 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
               rs, vk::PrimitiveTopology::eLineList, _buffers, film);
             if (pipeline) {
                 bind_shared_state(pipeline);
-                bind_descriptor_set_for_layer(cb, 1);
+                bind_descriptor_set_for_layer(film, cb, 1);
                 cb.setLineWidth(layers.wireframe.width);
                 cb.setDepthBias(0.0f, 0.0f, 0.0f);
 
@@ -411,7 +430,7 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
           rs, vk::PrimitiveTopology::ePointList, _buffers, film);
         if (pipeline) {
             bind_shared_state(pipeline);
-            bind_descriptor_set_for_layer(cb, 2);
+            bind_descriptor_set_for_layer(film, cb, 2);
             cb.setLineWidth(1.0f);
             cb.setDepthBias(0.0f, 0.0f, 0.0f);
 

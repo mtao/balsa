@@ -2,6 +2,7 @@
 #define BALSA_VISUALIZATION_VULKAN_VULKAN_MESH_DRAWABLE_HPP
 
 #include <cstdint>
+#include <vector>
 #include <vulkan/vulkan.hpp>
 
 #include "balsa/visualization/vulkan/buffer.hpp"
@@ -84,21 +85,27 @@ class VulkanMeshDrawable : public VulkanDrawable {
     void sync_from_mesh_data(Film &film);
 
     // Upload TransformUBO (model/view/projection/normal_matrix).
-    // Called once per frame.
-    void update_transform_ubo(const scene_graph::Camera &cam);
+    // Called once per frame.  Uses film.current_frame() to select
+    // the correct per-frame UBO buffer.
+    void update_transform_ubo(const scene_graph::Camera &cam, Film &film);
 
     // Pack and upload MaterialUBO for a specific layer slot, filling
     // layer_color from the layer's colour and material response
     // from _scene_light_state + per-mesh MaterialProperties.
     // layer_slot: 0 = solid, 1 = wireframe, 2 = points.
-    void upload_material_ubo_for_layer(uint32_t layer_slot,
+    // Uses film.current_frame() to select the correct per-frame UBO.
+    void upload_material_ubo_for_layer(Film &film,
+                                       uint32_t layer_slot,
                                        const float layer_color[4],
                                        float point_size,
                                        const MeshRenderState &rs,
                                        const float *wireframe_color_override = nullptr);
 
     // Bind the descriptor set with dynamic offset for the given layer.
-    void bind_descriptor_set_for_layer(vk::CommandBuffer cb, uint32_t layer_slot);
+    // Uses film.current_frame() to select the correct per-frame set.
+    void bind_descriptor_set_for_layer(Film &film,
+                                       vk::CommandBuffer cb,
+                                       uint32_t layer_slot);
 
     // Issue multi-layer Vulkan draw commands (solid, wireframe,
     // points).  Each enabled layer uploads to its own material UBO
@@ -109,9 +116,13 @@ class VulkanMeshDrawable : public VulkanDrawable {
     MeshPipelineManager *_manager;
     MeshBuffers _buffers;
 
-    VulkanBuffer _transform_ubo;
-    VulkanBuffer _material_ubo;// sized for k_max_material_layers aligned slots
-    vk::DescriptorSet _descriptor_set;
+    // Per-frame UBO buffers and descriptor sets — one per concurrent
+    // frame slot — so the CPU can upload data for the current frame
+    // without clobbering data the GPU is still reading from a prior
+    // frame.  Sized by film.concurrent_frame_count() in init().
+    std::vector<VulkanBuffer> _transform_ubos;
+    std::vector<VulkanBuffer> _material_ubos;// each sized for k_max_material_layers aligned slots
+    std::vector<vk::DescriptorSet> _descriptor_sets;
     vk::DeviceSize _material_ubo_stride = 0;// aligned size per layer slot
 
     ResolvedLightState _scene_light_state;

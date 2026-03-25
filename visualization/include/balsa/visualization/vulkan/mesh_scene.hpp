@@ -90,16 +90,32 @@ class MeshScene : public SceneBase {
 
     // ── Camera ──────────────────────────────────────────────────────
 
-    // The scene's camera feature (on the camera Object).
-    scene_graph::Camera &camera() { return *_camera; }
-    const scene_graph::Camera &camera() const { return *_camera; }
+    // The active camera's Camera feature.
+    scene_graph::Camera &camera();
+    const scene_graph::Camera &camera() const;
 
-    // The scene's camera Object (for setting position/orientation).
-    scene_graph::Object &camera_object() { return *_camera_object; }
-    const scene_graph::Object &camera_object() const { return *_camera_object; }
+    // The active camera Object (for reading position/orientation).
+    scene_graph::Object &camera_object();
+    const scene_graph::Object &camera_object() const;
+
+    // The default (permanent, hidden) camera Object.
+    scene_graph::Object &default_camera_object() { return *_default_camera_object; }
+    const scene_graph::Object &default_camera_object() const { return *_default_camera_object; }
+
+    // The active camera Object (may differ from the default).
+    // Returns the default camera if no other camera has been activated.
+    scene_graph::Object &active_camera_object() { return *_active_camera_object; }
+    const scene_graph::Object &active_camera_object() const { return *_active_camera_object; }
+
+    // Set the active camera.  Pass nullptr to revert to the default.
+    // The Object must have a Camera feature.
+    void set_active_camera(scene_graph::Object *cam_obj);
+
+    // Returns true if the active camera is the default camera.
+    bool is_default_camera_active() const { return _active_camera_object == _default_camera_object; }
 
     // Convenience: set camera position via look_at parameters.
-    // Sets the camera Object's local_transform to the lookAt matrix.
+    // Always operates on the **default** camera Object.
     void look_at(const scene_graph::Vec3f &eye,
                  const scene_graph::Vec3f &center,
                  const scene_graph::Vec3f &up);
@@ -147,8 +163,9 @@ class MeshScene : public SceneBase {
   private:
     // Scene graph
     scene_graph::Object _scene_root;
-    scene_graph::Object *_camera_object = nullptr;
-    scene_graph::Camera *_camera = nullptr;
+    scene_graph::Object *_default_camera_object = nullptr;
+    scene_graph::Object *_active_camera_object = nullptr;
+    scene_graph::Camera *_default_camera = nullptr;
     scene_graph::Light *_headlight = nullptr;
     scene_graph::DrawableGroup _drawable_group;
 

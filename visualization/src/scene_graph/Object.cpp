@@ -178,6 +178,7 @@ Object &Object::add_child(std::unique_ptr<Object> child) {
 
 std::unique_ptr<Object> Object::detach() {
     if (!_parent) return nullptr;
+    if (permanent) return nullptr;// permanent objects cannot be detached
 
     auto &siblings = _parent->_children;
     auto it = std::find_if(siblings.begin(), siblings.end(), [this](const auto &p) { return p.get() == this; });

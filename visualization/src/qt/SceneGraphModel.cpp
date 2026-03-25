@@ -52,10 +52,10 @@ QModelIndex SceneGraphModel::index(int row, int column, const QModelIndex &paren
                                : _root;
 
     if (!parent_obj) return {};
-    auto &children = parent_obj->children();
-    if (row < 0 || row >= static_cast<int>(children.size())) return {};
+    auto *child = visible_child(parent_obj, row);
+    if (!child) return {};
 
-    return createIndex(row, column, children[static_cast<std::size_t>(row)].get());
+    return createIndex(row, column, child);
 }
 
 QModelIndex SceneGraphModel::parent(const QModelIndex &index) const {
@@ -80,7 +80,7 @@ int SceneGraphModel::rowCount(const QModelIndex &parent) const {
                         ? static_cast<sg::Object *>(parent.internalPointer())
                         : _root;
     if (!obj) return 0;
-    return static_cast<int>(obj->children_count());
+    return visible_child_count(obj);
 }
 
 int SceneGraphModel::columnCount(const QModelIndex & /*parent*/) const {
@@ -173,8 +173,15 @@ Qt::ItemFlags SceneGraphModel::flags(const QModelIndex &index) const {
         return Qt::ItemIsDropEnabled;
     }
 
+    auto *obj = static_cast<sg::Object *>(index.internalPointer());
+
     Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable
-                      | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
+                      | Qt::ItemIsDropEnabled;
+
+    // Permanent objects cannot be dragged or edited.
+    if (!obj || obj->permanent) return f;
+
+    f |= Qt::ItemIsDragEnabled;
 
     switch (index.column()) {
     case ColName:
@@ -256,6 +263,7 @@ bool SceneGraphModel::dropMimeData(const QMimeData *data,
         stream >> ptr;
         auto *obj = reinterpret_cast<sg::Object *>(ptr);
         if (!obj || obj == _root || obj == new_parent) continue;
+        if (obj->permanent) continue;
 
         // Prevent reparenting an ancestor under itself.
         bool is_ancestor = false;
@@ -277,7 +285,7 @@ bool SceneGraphModel::dropMimeData(const QMimeData *data,
                                        ? QModelIndex{}
                                        : index_for_object(new_parent);
 
-        int dest_row = (row >= 0) ? row : static_cast<int>(new_parent->children_count());
+        int dest_row = (row >= 0) ? row : visible_child_count(new_parent);
 
         // Adjust dest_row if moving within the same parent.
         if (old_parent == new_parent && old_row < dest_row) {
@@ -290,9 +298,9 @@ bool SceneGraphModel::dropMimeData(const QMimeData *data,
 
         if (!owned) continue;
 
-        int insert_row = (row >= 0 && row <= static_cast<int>(new_parent->children_count()))
+        int insert_row = (row >= 0 && row <= visible_child_count(new_parent))
                            ? row
-                           : static_cast<int>(new_parent->children_count());
+                           : visible_child_count(new_parent);
 
         beginInsertRows(new_parent_idx, insert_row, insert_row);
         new_parent->add_child(std::move(owned));
@@ -323,9 +331,12 @@ int SceneGraphModel::row_of(sg::Object *obj) const {
     auto *par = obj->parent();
     if (!par) return -1;
 
+    int visible_row = 0;
     auto &siblings = par->children();
     for (std::size_t i = 0; i < siblings.size(); ++i) {
-        if (siblings[i].get() == obj) return static_cast<int>(i);
+        if (siblings[i]->permanent) continue;
+        if (siblings[i].get() == obj) return visible_row;
+        ++visible_row;
     }
     return -1;
 }
@@ -353,6 +364,26 @@ QIcon SceneGraphModel::icon_for_object(sg::Object *obj) const {
     return QIcon::fromTheme(QStringLiteral("folder"));
 }
 
+int SceneGraphModel::visible_child_count(sg::Object *obj) {
+    if (!obj) return 0;
+    int count = 0;
+    for (auto &child : obj->children()) {
+        if (!child->permanent) ++count;
+    }
+    return count;
+}
+
+sg::Object *SceneGraphModel::visible_child(sg::Object *obj, int row) {
+    if (!obj || row < 0) return nullptr;
+    int visible_row = 0;
+    for (auto &child : obj->children()) {
+        if (child->permanent) continue;
+        if (visible_row == row) return child.get();
+        ++visible_row;
+    }
+    return nullptr;
+}
+
 // ── Structural mutation ─────────────────────────────────────────────
 
 sg::Object *SceneGraphModel::add_child(sg::Object *parent_obj,
@@ -364,7 +395,7 @@ sg::Object *SceneGraphModel::add_child(sg::Object *parent_obj,
                                ? QModelIndex{}
                                : index_for_object(parent_obj);
 
-    int row = static_cast<int>(parent_obj->children_count());
+    int row = visible_child_count(parent_obj);
     beginInsertRows(parent_idx, row, row);
     auto &child = parent_obj->add_child(name);
     endInsertRows();
@@ -375,6 +406,7 @@ sg::Object *SceneGraphModel::add_child(sg::Object *parent_obj,
 
 bool SceneGraphModel::remove_object(sg::Object *obj) {
     if (!obj || !_root || obj == _root) return false;
+    if (obj->permanent) return false;
 
     auto *par = obj->parent();
     if (!par) return false;
@@ -396,6 +428,7 @@ bool SceneGraphModel::remove_object(sg::Object *obj) {
 
 sg::Object *SceneGraphModel::duplicate_object(sg::Object *obj) {
     if (!obj || !_root || obj == _root) return nullptr;
+    if (obj->permanent) return nullptr;
 
     auto *par = obj->parent();
     if (!par) return nullptr;
@@ -404,7 +437,7 @@ sg::Object *SceneGraphModel::duplicate_object(sg::Object *obj) {
                                ? QModelIndex{}
                                : index_for_object(par);
 
-    int row = static_cast<int>(par->children_count());
+    int row = visible_child_count(par);
     beginInsertRows(parent_idx, row, row);
     auto &dup = par->add_child(obj->name + " copy");
     dup.set_translation(obj->translation());

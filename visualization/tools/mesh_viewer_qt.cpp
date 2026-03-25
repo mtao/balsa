@@ -119,6 +119,12 @@ class MeshViewerMainWindow : public QMainWindow {
         connect(_controls, &viz::qt::MeshControlsWidget::scene_changed, _vk_window, [this]() { _vk_window->requestUpdate(); });
         connect(_outliner, &viz::qt::SceneGraphWidget::scene_changed, _vk_window, [this]() { _vk_window->requestUpdate(); });
 
+        // Camera activation from the outliner
+        connect(_outliner, &viz::qt::SceneGraphWidget::camera_activated, this, [this](balsa::scene_graph::Object *cam_obj) {
+            _scene->set_active_camera(cam_obj);
+            _vk_window->requestUpdate();
+        });
+
         // ── Create menus ─────────────────────────────────────────────
         create_menus();
 
