@@ -6,7 +6,7 @@ cc = meson.get_compiler('cpp')
 dl_lib = cc.find_library('dl')
 
 # ── Core dependencies (system or WrapDB subproject fallback) ──────────────
-spdlog_dep = dependency('spdlog', version: '>=1.9.2')
+spdlog_dep = dependency('spdlog', version: '>=1.9.2', default_options: ['tests=disabled'])
 eigen_dep  = dependency('eigen3', version: '>=3.4.0')
 
 zipper_proj = subproject('zipper', default_options: {'testing': false})

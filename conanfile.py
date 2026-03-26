@@ -48,7 +48,7 @@ def dependencies(config):
 
 
 class Balsa(ConanFile):
-    settings = "os", "compiler", "build_type"
+    settings = "os", "compiler", "build_type", "arch"
     options = __OPTIONS__
     default_options = __DEFAULT_OPTIONS__
     generators = "PkgConfigDeps"

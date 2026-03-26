@@ -117,6 +117,10 @@ visualization_lib = library('balsaVisualization', visualization_sources,
 # For consumers: propagate public deps (including imgui shared library).
 visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir)
 
-subdir('tests')
-subdir('examples')
+if get_option('testing')
+  subdir('tests')
+endif
+if get_option('examples')
+  subdir('examples')
+endif
 subdir('tools')

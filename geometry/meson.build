@@ -62,5 +62,7 @@ include_dir = [include_directories('include')]
 geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)
 geometry_dep = declare_dependency(link_with: geometry_lib, dependencies: geometry_required_deps, include_directories: include_dir)
 
-subdir('tests')
+if get_option('testing')
+  subdir('tests')
+endif
 subdir('tools')

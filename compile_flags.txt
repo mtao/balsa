@@ -1,3 +1,2 @@
--std=c++20
--I./include
-
+-std=c++26
+-Iinclude
