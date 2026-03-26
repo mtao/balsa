@@ -111,7 +111,7 @@ void MeshControlsWidget::build_ui() {
     _tab_bvh = _tabs->addTab(build_bvh_page(), QStringLiteral("\u2592"), QStringLiteral("BVH"));// ▒
     _tab_lighting = _tabs->addTab(build_lighting_page(), QStringLiteral("\u2600"), QStringLiteral("Lighting"));// ☀
 
-    root_layout->addWidget(_tabs);
+    root_layout->addWidget(_tabs, 1);
 }
 
 // ═════════════════════════════════════════════════════════════════════

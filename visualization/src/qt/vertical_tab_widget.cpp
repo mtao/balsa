@@ -3,6 +3,7 @@
 #include <QBoxLayout>
 #include <QPainter>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStyleOptionTab>
 
@@ -18,9 +19,11 @@ static constexpr int k_icon_font_size = 20;
 static constexpr int k_label_font_size = 9;
 
 VerticalTabBar::VerticalTabBar(QWidget *parent) : QTabBar(parent) {
+    setShape(QTabBar::RoundedWest);
     setDrawBase(false);
     setExpanding(false);
     setElideMode(Qt::ElideNone);
+    setUsesScrollButtons(true);
 }
 
 VerticalTabBar::~VerticalTabBar() = default;
@@ -92,10 +95,12 @@ VerticalTabWidget::VerticalTabWidget(QWidget *parent) : QWidget(parent) {
     _tab_bar = new VerticalTabBar(this);
     _stack = new QStackedWidget(this);
 
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
     auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    layout->addWidget(_tab_bar);
+    layout->addWidget(_tab_bar, 0);
     layout->addWidget(_stack, 1);
 
     connect(_tab_bar, &QTabBar::currentChanged, this, [this](int idx) {
