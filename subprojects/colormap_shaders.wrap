@@ -3,4 +3,4 @@ url = https://github.com/mtao/colormap-shaders.git
 revision = 142a208adf287335d53d368aa5dea6ec708a8aef
 
 [provide]
-dependency_names = colormap_shaders
+colormap_shaders = colormap_shaders_dep

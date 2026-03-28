@@ -1,3 +1,6 @@
 [wrap-git]
 url = git@github.com:mtao/quiver.git
 revision = main
+
+[provide]
+quiver = quiver_dep

@@ -1,15 +1,12 @@
 option('testing', type: 'boolean', value: true, description: 'enable unit testing')
 option('examples', type: 'boolean', value: true, description: 'enable example targets')
 
-option('eltopo', type : 'boolean', value : false, description : 'Should we build the el topo submodule')
 option('embree', type: 'boolean', value: false, description: 'Use embree')
 option('openvdb', type : 'boolean', value : false, description : 'Build openvdb stuff')
-option('pngpp', type : 'boolean', value : false, description : 'Use PNG++ for screenshots')
 option('json', type : 'boolean', value : true, description : 'Use json')
 option('protobuf', type : 'boolean', value : false, description : 'Use protobuf')
 option('partio', type : 'boolean', value : false, description : 'Use partio')
 option('imgui', type : 'boolean', value : true, description : 'Use imgui')
-option('igl', type : 'boolean', value : false, description : 'Use libigl')
 option('alembic', type : 'boolean', value : false, description : 'Use alembic')
 option('perfetto', type : 'boolean', value : false, description : 'Use perfetto')
 
