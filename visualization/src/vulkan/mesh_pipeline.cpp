@@ -1,8 +1,8 @@
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
+#include "balsa/scene_graph/embedding_traits.hpp"
+#include "balsa/visualization/shaders/mesh_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 #include "balsa/visualization/vulkan/mesh_buffers.hpp"
-#include "balsa/visualization/shaders/mesh_shader.hpp"
-#include "balsa/scene_graph/embedding_traits.hpp"
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
@@ -16,16 +16,23 @@ static std::size_t hash_combine(std::size_t seed, std::size_t v) {
     return seed;
 }
 
-std::size_t MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noexcept {
+std::size_t
+    MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noexcept {
     std::size_t h = std::hash<uint8_t>{}(static_cast<uint8_t>(k.shading));
-    h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.color_source)));
-    h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.normal_source)));
-    h = hash_combine(h, std::hash<uint32_t>{}(static_cast<uint32_t>(k.topology)));
+    h = hash_combine(
+        h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.color_source)));
+    h = hash_combine(
+        h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.normal_source)));
+    h = hash_combine(h,
+                     std::hash<uint32_t>{}(static_cast<uint32_t>(k.topology)));
     h = hash_combine(h, std::hash<std::string>{}(k.colormap_name));
     h = hash_combine(h, std::hash<bool>{}(k.has_normals));
     h = hash_combine(h, std::hash<bool>{}(k.has_colors));
     h = hash_combine(h, std::hash<bool>{}(k.has_scalars));
-    h = hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
+    h = hash_combine(h, std::hash<uint8_t>{}(k.position_components));
+    h = hash_combine(h, std::hash<uint8_t>{}(k.normal_components));
+    h = hash_combine(h,
+                     std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
     h = hash_combine(h, std::hash<bool>{}(k.wireframe_overlay));
     h = hash_combine(h, std::hash<uint32_t>{}(k.msaa_samples));
     h = hash_combine(h, std::hash<uint64_t>{}(k.render_pass));
@@ -48,12 +55,14 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
 
     // Normalise colormap name: only relevant for ScalarField
     key.colormap_name = (state.color_source == ColorSource::ScalarField)
-                          ? state.colormap_name
-                          : std::string{};
+                            ? state.colormap_name
+                            : std::string{};
 
     key.has_normals = buffers.has_normals();
     key.has_colors = buffers.has_colors();
     key.has_scalars = buffers.has_scalars();
+    key.position_components = buffers.position_components();
+    key.normal_components = buffers.normal_components();
 
     // ── Safety net: enforce normal constraints ──────────────────────
     // The UI and load-time code should already enforce these via
@@ -63,7 +72,8 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
         key.normal_source = NormalSource::ComputedInShader;
     }
     if (key.normal_source == NormalSource::ComputedInShader
-        && (key.shading == ShadingModel::Phong || key.shading == ShadingModel::Gouraud)) {
+        && (key.shading == ShadingModel::Phong
+            || key.shading == ShadingModel::Gouraud)) {
         key.shading = ShadingModel::Flat;
     }
 
@@ -71,7 +81,8 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
     key.wireframe_overlay = wireframe_overlay;
 
     key.msaa_samples = static_cast<uint32_t>(film.sample_count());
-    key.render_pass = reinterpret_cast<uint64_t>(static_cast<VkRenderPass>(film.default_render_pass()));
+    key.render_pass = reinterpret_cast<uint64_t>(
+        static_cast<VkRenderPass>(film.default_render_pass()));
     key.depth_test = film.has_depth_stencil();
 
     return key;
@@ -79,18 +90,13 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
 
 // ── MeshPipelineManager lifecycle ────────────────────────────────────
 
-MeshPipelineManager::~MeshPipelineManager() {
-    release();
-}
+MeshPipelineManager::~MeshPipelineManager() { release(); }
 
 MeshPipelineManager::MeshPipelineManager(MeshPipelineManager &&o) noexcept
-  : _device(o._device),
-    _film(o._film),
+  : _device(o._device), _film(o._film),
     _descriptor_set_layout(o._descriptor_set_layout),
-    _pipeline_layout(o._pipeline_layout),
-    _descriptor_pool(o._descriptor_pool),
-    _cache(std::move(o._cache)),
-    _initialized(o._initialized) {
+    _pipeline_layout(o._pipeline_layout), _descriptor_pool(o._descriptor_pool),
+    _cache(std::move(o._cache)), _initialized(o._initialized) {
     o._device = vk::Device{};
     o._film = nullptr;
     o._descriptor_set_layout = vk::DescriptorSetLayout{};
@@ -99,7 +105,8 @@ MeshPipelineManager::MeshPipelineManager(MeshPipelineManager &&o) noexcept
     o._initialized = false;
 }
 
-MeshPipelineManager &MeshPipelineManager::operator=(MeshPipelineManager &&o) noexcept {
+MeshPipelineManager &
+    MeshPipelineManager::operator=(MeshPipelineManager &&o) noexcept {
     if (this != &o) {
         release();
         _device = o._device;
@@ -120,9 +127,7 @@ MeshPipelineManager &MeshPipelineManager::operator=(MeshPipelineManager &&o) noe
 }
 
 void MeshPipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
-    if (_initialized) {
-        release();
-    }
+    if (_initialized) { release(); }
     _film = &film;
     _device = film.device();
 
@@ -135,17 +140,13 @@ void MeshPipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
 }
 
 void MeshPipelineManager::release() {
-    if (!_initialized) {
-        return;
-    }
+    if (!_initialized) { return; }
     if (_device) {
         _device.waitIdle();
 
         // Destroy cached pipelines
         for (auto &[key, pipe] : _cache) {
-            if (pipe) {
-                _device.destroyPipeline(pipe);
-            }
+            if (pipe) { _device.destroyPipeline(pipe); }
         }
         _cache.clear();
 
@@ -172,9 +173,7 @@ void MeshPipelineManager::invalidate_pipelines() {
     if (_device) {
         _device.waitIdle();
         for (auto &[key, pipe] : _cache) {
-            if (pipe) {
-                _device.destroyPipeline(pipe);
-            }
+            if (pipe) { _device.destroyPipeline(pipe); }
         }
     }
     _cache.clear();
@@ -193,13 +192,16 @@ void MeshPipelineManager::create_descriptor_set_layout() {
     transform_binding.setBinding(0);
     transform_binding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
     transform_binding.setDescriptorCount(1);
-    transform_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+    transform_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex
+                                    | vk::ShaderStageFlagBits::eFragment);
 
     auto &material_binding = bindings[1];
     material_binding.setBinding(1);
-    material_binding.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic);
+    material_binding.setDescriptorType(
+        vk::DescriptorType::eUniformBufferDynamic);
     material_binding.setDescriptorCount(1);
-    material_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+    material_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex
+                                   | vk::ShaderStageFlagBits::eFragment);
 
     vk::DescriptorSetLayoutCreateInfo ci;
     ci.setBindings(bindings);
@@ -218,9 +220,9 @@ void MeshPipelineManager::create_descriptor_pool(uint32_t max_sets) {
     // 1 dynamic uniform buffer (MaterialUBO).
     std::array<vk::DescriptorPoolSize, 2> pool_sizes;
     pool_sizes[0].setType(vk::DescriptorType::eUniformBuffer);
-    pool_sizes[0].setDescriptorCount(max_sets);// 1 per set
+    pool_sizes[0].setDescriptorCount(max_sets); // 1 per set
     pool_sizes[1].setType(vk::DescriptorType::eUniformBufferDynamic);
-    pool_sizes[1].setDescriptorCount(max_sets);// 1 per set
+    pool_sizes[1].setDescriptorCount(max_sets); // 1 per set
 
     vk::DescriptorPoolCreateInfo ci;
     ci.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
@@ -283,7 +285,7 @@ void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
 
 void MeshPipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
     if (!_initialized || !ds) return;
-    _device.freeDescriptorSets(_descriptor_pool, { ds });
+    _device.freeDescriptorSets(_descriptor_pool, {ds});
 }
 
 // ── Pipeline access ──────────────────────────────────────────────────
@@ -296,27 +298,27 @@ vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
     if (!_initialized) {
         throw std::runtime_error("MeshPipelineManager: not initialized");
     }
-    auto key = make_pipeline_key(state, topology, buffers, film, wireframe_overlay);
+    auto key =
+        make_pipeline_key(state, topology, buffers, film, wireframe_overlay);
     auto it = _cache.find(key);
-    if (it != _cache.end()) {
-        return it->second;
-    }
+    if (it != _cache.end()) { return it->second; }
     auto pipeline = create_pipeline(key);
-    if (pipeline) {
-        _cache[key] = pipeline;
-    }
+    if (pipeline) { _cache[key] = pipeline; }
     return pipeline;
 }
 
 // ── Pipeline creation ────────────────────────────────────────────────
 
 vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
-    spdlog::info("MeshPipelineManager: creating pipeline for shading={}, color={}, topology={}",
-                 static_cast<int>(key.shading),
-                 static_cast<int>(key.color_source),
-                 static_cast<int>(key.topology));
+    spdlog::info(
+        "MeshPipelineManager: creating pipeline for shading={}, color={}, "
+        "topology={}",
+        static_cast<int>(key.shading),
+        static_cast<int>(key.color_source),
+        static_cast<int>(key.topology));
 
-    // Build a temporary MeshRenderState from the key to drive shader compilation
+    // Build a temporary MeshRenderState from the key to drive shader
+    // compilation
     MeshRenderState temp_state;
     temp_state.shading = key.shading;
     temp_state.color_source = key.color_source;
@@ -324,19 +326,21 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     temp_state.colormap_name = key.colormap_name;
 
     using ET3F = scene_graph::embedding_traits3F;
-    shaders::MeshShader<ET3F> shader(temp_state, key.topology, key.wireframe_overlay);
+    shaders::MeshShader<ET3F> shader(
+        temp_state, key.topology, key.wireframe_overlay);
     auto vert_spv = shader.vert_spirv();
     auto frag_spv = shader.frag_spirv();
 
     if (vert_spv.empty() || frag_spv.empty()) {
         spdlog::error(
-          "MeshPipelineManager: shader compilation failed (empty SPIR-V), "
-          "skipping pipeline creation");
+            "MeshPipelineManager: shader compilation failed (empty SPIR-V), "
+            "skipping pipeline creation");
         return vk::Pipeline{};
     }
 
     // Create shader modules
-    auto create_shader_module = [&](const std::vector<uint32_t> &spv) -> vk::ShaderModule {
+    auto create_shader_module =
+        [&](const std::vector<uint32_t> &spv) -> vk::ShaderModule {
         vk::ShaderModuleCreateInfo ci;
         ci.setCodeSize(sizeof(uint32_t) * spv.size());
         ci.setPCode(spv.data());
@@ -363,31 +367,58 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
 
     // ── Vertex input ────────────────────────────────────────────────
     //
-    // Build binding/attribute descriptions from the key's attribute flags,
-    // matching the layout in mesh.vert:
-    //   binding 0: vec3 position  (location 0)
-    //   binding 1: vec3 normal    (location 1)  — if has_normals
-    //   binding 2: vec4 color     (location 2)  — if has_colors
-    //   binding 3: float scalar   (location 3)  — if has_scalars
+    // Build binding/attribute descriptions from the key's attribute flags
+    // and component counts, matching the layout in mesh.vert:
+    //   binding 0: position   (vec2/vec3, location 0)  — format from
+    //   key.position_components binding 1: normal     (vec2/vec3, location 1)
+    //   — format from key.normal_components, if has_normals binding 2: color
+    //   (vec4,      location 2)  — if has_colors binding 3: scalar     (float,
+    //   location 3)  — if has_scalars
+    //
+    // Vulkan auto-fills missing components in the shader: a R32G32_SFLOAT
+    // attribute read as vec3 gets (x, y, 0.0).
+
+    auto float_format = [](uint8_t components) -> vk::Format {
+        switch (components) {
+        case 1:
+            return vk::Format::eR32Sfloat;
+        case 2:
+            return vk::Format::eR32G32Sfloat;
+        case 3:
+            return vk::Format::eR32G32B32Sfloat;
+        case 4:
+            return vk::Format::eR32G32B32A32Sfloat;
+        default:
+            return vk::Format::eR32G32B32Sfloat;
+        }
+    };
 
     std::vector<vk::VertexInputBindingDescription> binding_descs;
     std::vector<vk::VertexInputAttributeDescription> attrib_descs;
 
     // Positions always present
-    binding_descs.push_back({ 0, sizeof(float) * 3, vk::VertexInputRate::eVertex });
-    attrib_descs.push_back({ 0, 0, vk::Format::eR32G32B32Sfloat, 0 });
+    binding_descs.push_back(
+        {0,
+         static_cast<uint32_t>(sizeof(float) * key.position_components),
+         vk::VertexInputRate::eVertex});
+    attrib_descs.push_back({0, 0, float_format(key.position_components), 0});
 
     if (key.has_normals) {
-        binding_descs.push_back({ 1, sizeof(float) * 3, vk::VertexInputRate::eVertex });
-        attrib_descs.push_back({ 1, 1, vk::Format::eR32G32B32Sfloat, 0 });
+        binding_descs.push_back(
+            {1,
+             static_cast<uint32_t>(sizeof(float) * key.normal_components),
+             vk::VertexInputRate::eVertex});
+        attrib_descs.push_back({1, 1, float_format(key.normal_components), 0});
     }
     if (key.has_colors) {
-        binding_descs.push_back({ 2, sizeof(float) * 4, vk::VertexInputRate::eVertex });
-        attrib_descs.push_back({ 2, 2, vk::Format::eR32G32B32A32Sfloat, 0 });
+        binding_descs.push_back(
+            {2, sizeof(float) * 4, vk::VertexInputRate::eVertex});
+        attrib_descs.push_back({2, 2, vk::Format::eR32G32B32A32Sfloat, 0});
     }
     if (key.has_scalars) {
-        binding_descs.push_back({ 3, sizeof(float), vk::VertexInputRate::eVertex });
-        attrib_descs.push_back({ 3, 3, vk::Format::eR32Sfloat, 0 });
+        binding_descs.push_back(
+            {3, sizeof(float), vk::VertexInputRate::eVertex});
+        attrib_descs.push_back({3, 3, vk::Format::eR32Sfloat, 0});
     }
 
     vk::PipelineVertexInputStateCreateInfo vertex_input;
@@ -425,14 +456,15 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     }
     rasterization.setFrontFace(vk::FrontFace::eCounterClockwise);
     rasterization.setDepthBiasEnable(
-      key.topology == vk::PrimitiveTopology::eTriangleList ? VK_TRUE : VK_FALSE);
+        key.topology == vk::PrimitiveTopology::eTriangleList ? VK_TRUE
+                                                             : VK_FALSE);
     rasterization.setLineWidth(1.0f);
 
     // ── Multisample ─────────────────────────────────────────────────
 
     vk::PipelineMultisampleStateCreateInfo multisampling;
     multisampling.setRasterizationSamples(
-      static_cast<vk::SampleCountFlagBits>(key.msaa_samples));
+        static_cast<vk::SampleCountFlagBits>(key.msaa_samples));
     multisampling.setSampleShadingEnable(VK_FALSE);
     multisampling.setMinSampleShading(1.0f);
 
@@ -449,10 +481,12 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
 
     vk::PipelineColorBlendAttachmentState color_blend_attachment;
     color_blend_attachment.setColorWriteMask(
-      vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
+        | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
     color_blend_attachment.setBlendEnable(VK_TRUE);
     color_blend_attachment.setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha);
-    color_blend_attachment.setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha);
+    color_blend_attachment.setDstColorBlendFactor(
+        vk::BlendFactor::eOneMinusSrcAlpha);
     color_blend_attachment.setColorBlendOp(vk::BlendOp::eAdd);
     color_blend_attachment.setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
     color_blend_attachment.setDstAlphaBlendFactor(vk::BlendFactor::eZero);
@@ -476,7 +510,7 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
 
     // ── Assemble ────────────────────────────────────────────────────
 
-    vk::RenderPass rp{ reinterpret_cast<VkRenderPass>(key.render_pass) };
+    vk::RenderPass rp{reinterpret_cast<VkRenderPass>(key.render_pass)};
 
     vk::GraphicsPipelineCreateInfo pipeline_info;
     pipeline_info.setStageCount(2);
@@ -500,7 +534,8 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
         result = res.value;
         spdlog::info("MeshPipelineManager: pipeline created successfully");
     } else {
-        spdlog::error("MeshPipelineManager: failed to create graphics pipeline");
+        spdlog::error(
+            "MeshPipelineManager: failed to create graphics pipeline");
     }
 
     // Cleanup shader modules
@@ -510,4 +545,4 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
     return result;
 }
 
-}// namespace balsa::visualization::vulkan
+} // namespace balsa::visualization::vulkan

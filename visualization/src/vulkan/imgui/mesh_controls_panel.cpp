@@ -1,36 +1,39 @@
 #include "balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp"
-#include "balsa/visualization/vulkan/mesh_scene.hpp"
-#include "balsa/visualization/vulkan/mesh_render_state.hpp"
-#include "balsa/visualization/colormap_list.hpp"
-#include "balsa/scene_graph/Object.hpp"
-#include "balsa/scene_graph/Camera.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
-#include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/BVHData.hpp"
+#include "balsa/scene_graph/Camera.hpp"
+#include "balsa/scene_graph/Light.hpp"
+#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/Object.hpp"
+#include "balsa/visualization/colormap_list.hpp"
+#include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/visualization/vulkan/mesh_scene.hpp"
 
-#include <imgui.h>
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <imgui.h>
 #include <string>
 
 namespace balsa::visualization::vulkan::imgui {
 
-using visualization::k_colormap_names;
-using visualization::k_colormap_count;
 using visualization::find_colormap_index;
+using visualization::k_colormap_count;
+using visualization::k_colormap_names;
 
 // ── Enum combo helpers ───────────────────────────────────────────────
 
-static bool combo_shading_model(const char *label, ShadingModel &value, NormalSource normal_source) {
-    static constexpr const char *items[] = { "Flat", "Gouraud", "Phong" };
+static bool combo_shading_model(const char *label,
+                                ShadingModel &value,
+                                NormalSource normal_source) {
+    static constexpr const char *items[] = {"Flat", "Gouraud", "Phong"};
     int current = static_cast<int>(value);
     if (ImGui::BeginCombo(label, items[current])) {
         for (int i = 0; i < 3; ++i) {
             // Gouraud and Phong require per-vertex normals (FromAttribute).
             // ComputedInShader gives flat per-triangle normals via dFdx/dFdy,
             // which makes smooth interpolation meaningless.
-            bool item_disabled = (i > 0 && normal_source != NormalSource::FromAttribute);
+            bool item_disabled =
+                (i > 0 && normal_source != NormalSource::FromAttribute);
             if (item_disabled) ImGui::BeginDisabled();
             bool selected = (i == current);
             if (ImGui::Selectable(items[i], selected)) {
@@ -46,7 +49,8 @@ static bool combo_shading_model(const char *label, ShadingModel &value, NormalSo
 }
 
 static bool combo_color_source(const char *label, ColorSource &value) {
-    static constexpr const char *items[] = { "Uniform Color", "Per-Vertex Color", "Scalar Field" };
+    static constexpr const char *items[] = {
+        "Uniform Color", "Per-Vertex Color", "Scalar Field"};
     int current = static_cast<int>(value);
     if (ImGui::Combo(label, &current, items, 3)) {
         value = static_cast<ColorSource>(current);
@@ -55,8 +59,11 @@ static bool combo_color_source(const char *label, ColorSource &value) {
     return false;
 }
 
-static bool combo_normal_source(const char *label, NormalSource &value, bool has_normals) {
-    static constexpr const char *items[] = { "From Attribute", "Computed (Flat)", "None (Unlit)" };
+static bool combo_normal_source(const char *label,
+                                NormalSource &value,
+                                bool has_normals) {
+    static constexpr const char *items[] = {
+        "From Attribute", "Computed (Flat)", "None (Unlit)"};
     int current = static_cast<int>(value);
     if (ImGui::BeginCombo(label, items[current])) {
         for (int i = 0; i < 3; ++i) {
@@ -77,7 +84,8 @@ static bool combo_normal_source(const char *label, NormalSource &value, bool has
 }
 
 static bool combo_cull_mode(const char *label, CullMode &value) {
-    static constexpr const char *items[] = { "None (Show All)", "Back (Exterior)", "Front (Interior)" };
+    static constexpr const char *items[] = {
+        "None (Show All)", "Back (Exterior)", "Front (Interior)"};
     int current = static_cast<int>(value);
     if (ImGui::Combo(label, &current, items, 3)) {
         value = static_cast<CullMode>(current);
@@ -94,7 +102,7 @@ static const char *icon_for_object(const scene_graph::Object &obj) {
     if (obj.find_feature<scene_graph::Camera>()) return "[C]";
     if (obj.find_feature<scene_graph::BVHData>()) return "[B]";
     if (obj.find_feature<scene_graph::MeshData>()) return "[M]";
-    return "[O]";// Empty / generic object
+    return "[O]"; // Empty / generic object
 }
 
 // ── Ancestor check (for drag-drop loop prevention) ──────────────────
@@ -109,9 +117,8 @@ static bool is_ancestor_of(const scene_graph::Object *candidate,
 
 // ── Deep duplicate ──────────────────────────────────────────────────
 
-static std::unique_ptr<scene_graph::Object> deep_duplicate(
-  const scene_graph::Object &src,
-  MeshScene &scene) {
+static std::unique_ptr<scene_graph::Object>
+    deep_duplicate(const scene_graph::Object &src, MeshScene &scene) {
     auto copy = std::make_unique<scene_graph::Object>(src.name + " Copy");
     copy->visible = src.visible;
     copy->selectable = src.selectable;
@@ -146,8 +153,10 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
     changed |= state.constrain(has_normals);
 
     // ── Shading & Rendering ─────────────────────────────────────────
-    if (ImGui::CollapsingHeader("Shading & Rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (combo_normal_source("Normal Source", state.normal_source, has_normals)) {
+    if (ImGui::CollapsingHeader("Shading & Rendering",
+                                ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (combo_normal_source(
+                "Normal Source", state.normal_source, has_normals)) {
             // Re-constrain after normal source change.
             state.constrain(has_normals);
             changed = true;
@@ -156,7 +165,8 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         // Shading model and two-sided lighting are only meaningful
         // when normals are active (i.e., lighting is enabled).
         if (state.normal_source != NormalSource::None) {
-            if (combo_shading_model("Shading Model", state.shading, state.normal_source)) {
+            if (combo_shading_model(
+                    "Shading Model", state.shading, state.normal_source)) {
                 changed = true;
             }
             changed |= ImGui::Checkbox("Two-Sided Lighting", &state.two_sided);
@@ -165,7 +175,8 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
     }
 
     // ── Render Layers ───────────────────────────────────────────────
-    if (ImGui::CollapsingHeader("Render Layers", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Render Layers",
+                                ImGuiTreeNodeFlags_DefaultOpen)) {
         auto &layers = state.layers;
 
         // Solid layer
@@ -173,7 +184,10 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         changed |= ImGui::Checkbox("Solid", &layers.solid.enabled);
         if (layers.solid.enabled) {
             ImGui::SameLine();
-            changed |= ImGui::ColorEdit4("##solid_color", layers.solid.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+            changed |= ImGui::ColorEdit4("##solid_color",
+                                         layers.solid.color,
+                                         ImGuiColorEditFlags_NoInputs
+                                             | ImGuiColorEditFlags_NoLabel);
         }
         ImGui::PopID();
 
@@ -182,8 +196,12 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         changed |= ImGui::Checkbox("Wireframe", &layers.wireframe.enabled);
         if (layers.wireframe.enabled) {
             ImGui::SameLine();
-            changed |= ImGui::ColorEdit4("##wire_color", layers.wireframe.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-            changed |= ImGui::SliderFloat("Wire Width", &layers.wireframe.width, 0.5f, 5.0f);
+            changed |= ImGui::ColorEdit4("##wire_color",
+                                         layers.wireframe.color,
+                                         ImGuiColorEditFlags_NoInputs
+                                             | ImGuiColorEditFlags_NoLabel);
+            changed |= ImGui::SliderFloat(
+                "Wire Width", &layers.wireframe.width, 0.5f, 5.0f);
         }
         ImGui::PopID();
 
@@ -192,8 +210,12 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         changed |= ImGui::Checkbox("Points", &layers.points.enabled);
         if (layers.points.enabled) {
             ImGui::SameLine();
-            changed |= ImGui::ColorEdit4("##point_color", layers.points.color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-            changed |= ImGui::SliderFloat("Point Size", &layers.points.size, 1.0f, 20.0f);
+            changed |= ImGui::ColorEdit4("##point_color",
+                                         layers.points.color,
+                                         ImGuiColorEditFlags_NoInputs
+                                             | ImGuiColorEditFlags_NoLabel);
+            changed |= ImGui::SliderFloat(
+                "Point Size", &layers.points.size, 1.0f, 20.0f);
         }
         ImGui::PopID();
     }
@@ -209,7 +231,10 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         if (state.color_source == ColorSource::ScalarField) {
             // Colormap combo box
             int cmap_idx = find_colormap_index(state.colormap_name);
-            if (ImGui::BeginCombo("Colormap", cmap_idx >= 0 ? k_colormap_names[cmap_idx] : state.colormap_name.c_str())) {
+            if (ImGui::BeginCombo("Colormap",
+                                  cmap_idx >= 0
+                                      ? k_colormap_names[cmap_idx]
+                                      : state.colormap_name.c_str())) {
                 for (int i = 0; i < k_colormap_count; ++i) {
                     bool selected = (i == cmap_idx);
                     if (ImGui::Selectable(k_colormap_names[i], selected)) {
@@ -225,7 +250,10 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
             char buf[128];
             std::strncpy(buf, state.colormap_name.c_str(), sizeof(buf) - 1);
             buf[sizeof(buf) - 1] = '\0';
-            if (ImGui::InputText("Custom Colormap", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText("Custom Colormap",
+                                 buf,
+                                 sizeof(buf),
+                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
                 state.colormap_name = buf;
                 changed = true;
             }
@@ -249,18 +277,24 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
     if (is_lit && ImGui::CollapsingHeader("Material Response")) {
         ImGui::TextDisabled("How this mesh responds to scene light");
         auto &mat = state.material;
-        changed |= ImGui::SliderFloat("Ambient", &mat.ambient_strength, 0.0f, 1.0f);
+        changed |=
+            ImGui::SliderFloat("Ambient", &mat.ambient_strength, 0.0f, 1.0f);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Base light the mesh receives regardless of light direction");
-        changed |= ImGui::SliderFloat("Diffuse", &mat.diffuse_strength, 0.0f, 2.0f);
+            ImGui::SetTooltip(
+                "Base light the mesh receives regardless of light direction");
+        changed |=
+            ImGui::SliderFloat("Diffuse", &mat.diffuse_strength, 0.0f, 2.0f);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Intensity of the diffuse lighting response");
-        changed |= ImGui::SliderFloat("Specular", &mat.specular_strength, 0.0f, 2.0f);
+        changed |=
+            ImGui::SliderFloat("Specular", &mat.specular_strength, 0.0f, 2.0f);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Intensity of the specular highlight");
-        changed |= ImGui::SliderFloat("Shininess", &mat.shininess, 1.0f, 256.0f, "%.0f");
+        changed |= ImGui::SliderFloat(
+            "Shininess", &mat.shininess, 1.0f, 256.0f, "%.0f");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Sharpness of the specular highlight (higher = tighter)");
+            ImGui::SetTooltip(
+                "Sharpness of the specular highlight (higher = tighter)");
     }
 
     return changed;
@@ -289,9 +323,7 @@ static bool draw_object_node(scene_graph::Object &obj,
     // ── Visibility checkbox ─────────────────────────────────────────
     // Compact checkbox before the tree node.
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-    if (ImGui::Checkbox("##vis", &obj.visible)) {
-        changed = true;
-    }
+    if (ImGui::Checkbox("##vis", &obj.visible)) { changed = true; }
     ImGui::PopStyleVar();
     ImGui::SameLine();
 
@@ -299,12 +331,11 @@ static bool draw_object_node(scene_graph::Object &obj,
     bool is_selected = (state.selected_object == &obj);
     bool has_children = obj.children_count() > 0;
 
-    ImGuiTreeNodeFlags flags =
-      ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
+    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow
+                               | ImGuiTreeNodeFlags_OpenOnDoubleClick
+                               | ImGuiTreeNodeFlags_SpanAvailWidth;
 
-    if (is_selected) {
-        flags |= ImGuiTreeNodeFlags_Selected;
-    }
+    if (is_selected) { flags |= ImGuiTreeNodeFlags_Selected; }
     if (!has_children) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
@@ -322,13 +353,18 @@ static bool draw_object_node(scene_graph::Object &obj,
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
         ImGui::SetKeyboardFocusHere();
-        if (ImGui::InputText("##rename", state.rename_buf, sizeof(state.rename_buf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+        if (ImGui::InputText("##rename",
+                             state.rename_buf,
+                             sizeof(state.rename_buf),
+                             ImGuiInputTextFlags_EnterReturnsTrue
+                                 | ImGuiInputTextFlags_AutoSelectAll)) {
             obj.name = state.rename_buf;
             state.renaming_object = nullptr;
             changed = true;
         }
         // Cancel rename on Escape or click elsewhere
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape) || (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)
+            || (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0))) {
             state.renaming_object = nullptr;
         }
     } else {
@@ -337,22 +373,27 @@ static bool draw_object_node(scene_graph::Object &obj,
         bool is_active_cam = obj.find_feature<scene_graph::Camera>()
                              && (&obj == &scene.active_camera_object());
         if (is_active_cam) {
-            std::snprintf(label, sizeof(label), "%s %s (active)", icon, obj.name.c_str());
+            std::snprintf(
+                label, sizeof(label), "%s %s (active)", icon, obj.name.c_str());
         } else {
-            std::snprintf(label, sizeof(label), "%s %s", icon, obj.name.c_str());
+            std::snprintf(
+                label, sizeof(label), "%s %s", icon, obj.name.c_str());
         }
         node_open = ImGui::TreeNodeEx(label, flags);
 
         // Click to select
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen()) {
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)
+            && !ImGui::IsItemToggledOpen()) {
             state.selected_object = &obj;
         }
     }
 
     // ── Drag source (permanent objects cannot be dragged) ──────────
-    if (!obj.permanent && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+    if (!obj.permanent
+        && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         state.drag_source = &obj;
-        ImGui::SetDragDropPayload("SCENE_OBJECT", &state.drag_source, sizeof(scene_graph::Object *));
+        ImGui::SetDragDropPayload(
+            "SCENE_OBJECT", &state.drag_source, sizeof(scene_graph::Object *));
         ImGui::Text("%s %s", icon_for_object(obj), obj.name.c_str());
         ImGui::EndDragDropSource();
     }
@@ -363,7 +404,8 @@ static bool draw_object_node(scene_graph::Object &obj,
             auto *source = *static_cast<scene_graph::Object **>(payload->Data);
             // Prevent: dropping onto self, dropping onto own descendant,
             // or dropping onto current parent (no-op).
-            if (source && source != &obj && source->parent() != &obj && !is_ancestor_of(source, &obj)) {
+            if (source && source != &obj && source->parent() != &obj
+                && !is_ancestor_of(source, &obj)) {
                 auto detached = source->detach();
                 if (detached) {
                     obj.add_child(std::move(detached));
@@ -387,9 +429,7 @@ static bool draw_object_node(scene_graph::Object &obj,
             // Reparent under this node if not root
             if (&obj != &scene.root()) {
                 auto detached = mesh_obj.detach();
-                if (detached) {
-                    obj.add_child(std::move(detached));
-                }
+                if (detached) { obj.add_child(std::move(detached)); }
             }
             changed = true;
         }
@@ -417,7 +457,9 @@ static bool draw_object_node(scene_graph::Object &obj,
         ImGui::Separator();
         if (!obj.permanent && ImGui::MenuItem("Rename")) {
             state.renaming_object = &obj;
-            std::strncpy(state.rename_buf, obj.name.c_str(), sizeof(state.rename_buf) - 1);
+            std::strncpy(state.rename_buf,
+                         obj.name.c_str(),
+                         sizeof(state.rename_buf) - 1);
             state.rename_buf[sizeof(state.rename_buf) - 1] = '\0';
         }
         if (!obj.permanent && ImGui::MenuItem("Duplicate")) {
@@ -545,7 +587,8 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
         ImGui::Dummy(ImGui::GetContentRegionAvail());
         if (ImGui::BeginDragDropTarget()) {
             if (auto *payload = ImGui::AcceptDragDropPayload("SCENE_OBJECT")) {
-                auto *source = *static_cast<scene_graph::Object **>(payload->Data);
+                auto *source =
+                    *static_cast<scene_graph::Object **>(payload->Data);
                 if (source && source->parent() != &root) {
                     auto detached = source->detach();
                     if (detached) {
@@ -558,7 +601,8 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
         }
 
         // Deselect if clicked in empty area
-        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered()) {
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)
+            && !ImGui::IsAnyItemHovered()) {
             state.selected_object = nullptr;
         }
     }
@@ -604,14 +648,15 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                 ImGui::Text("Triangles: %zu", mesh_data->triangle_count());
                 ImGui::Text("Edges: %zu", mesh_data->edge_count());
 
-                ImGui::TextDisabled("Attributes:");
+                // Show bound roles.
+                ImGui::TextDisabled("Roles:");
+                if (mesh_data->has_positions()) {
+                    ImGui::SameLine();
+                    ImGui::Text("P");
+                }
                 if (mesh_data->has_normals()) {
                     ImGui::SameLine();
                     ImGui::Text("N");
-                }
-                if (mesh_data->has_vertex_colors()) {
-                    ImGui::SameLine();
-                    ImGui::Text("C");
                 }
                 if (mesh_data->has_scalar_field()) {
                     ImGui::SameLine();
@@ -631,21 +676,15 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
 
             // We need contiguous float[3] for DragFloat3, so copy into
             // local arrays, edit, then set back.
-            float tv[3] = {
-                static_cast<float>(t(0)),
-                static_cast<float>(t(1)),
-                static_cast<float>(t(2))
-            };
-            float rv[3] = {
-                static_cast<float>(euler(0)),
-                static_cast<float>(euler(1)),
-                static_cast<float>(euler(2))
-            };
-            float sv[3] = {
-                static_cast<float>(s(0)),
-                static_cast<float>(s(1)),
-                static_cast<float>(s(2))
-            };
+            float tv[3] = {static_cast<float>(t(0)),
+                           static_cast<float>(t(1)),
+                           static_cast<float>(t(2))};
+            float rv[3] = {static_cast<float>(euler(0)),
+                           static_cast<float>(euler(1)),
+                           static_cast<float>(euler(2))};
+            float sv[3] = {static_cast<float>(s(0)),
+                           static_cast<float>(s(1)),
+                           static_cast<float>(s(2))};
 
             bool t_changed = false;
             t_changed |= ImGui::DragFloat3("Translation", tv, 0.01f);
@@ -682,15 +721,166 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
 
         // ── Render State ────────────────────────────────────────────
         if (mesh_data) {
-            if (ImGui::CollapsingHeader("Render State", ImGuiTreeNodeFlags_DefaultOpen)) {
-                changed |= draw_render_state_controls(mesh_data->render_state(), mesh_data->has_normals());
+            if (ImGui::CollapsingHeader("Render State",
+                                        ImGuiTreeNodeFlags_DefaultOpen)) {
+                changed |= draw_render_state_controls(mesh_data->render_state(),
+                                                      mesh_data->has_normals());
+            }
+
+            // ── Attribute Bindings ──────────────────────────────────
+            //
+            // Let the user select which mesh attribute is bound to each
+            // visualization role (positions, normals, scalar field).
+            if (ImGui::CollapsingHeader("Attribute Bindings")) {
+                const auto &discovered = mesh_data->discovered_attributes();
+
+                // Helper lambda: draw a combo that lets the user pick an
+                // attribute for a role.  Returns true if the selection changed.
+                // filter_fn filters which discovered attributes are eligible.
+                auto draw_role_combo =
+                    [&](const char *label,
+                        const scene_graph::RoleBinding &binding,
+                        auto assign_fn,
+                        auto clear_fn,
+                        auto filter_fn) -> bool {
+                    bool role_changed = false;
+
+                    // Find current selection label.
+                    const char *current_label = "(None)";
+                    int current_idx = -1;
+                    for (int i = 0; i < static_cast<int>(discovered.size());
+                         ++i) {
+                        if (binding.is_bound()
+                            && &binding.source.attribute()
+                                   == &discovered[i].handle.attribute()) {
+                            current_label = discovered[i].name.c_str();
+                            current_idx = i;
+                            break;
+                        }
+                    }
+
+                    if (ImGui::BeginCombo(label, current_label)) {
+                        // "(None)" option to clear the role.
+                        if (ImGui::Selectable("(None)", current_idx < 0)) {
+                            clear_fn();
+                            role_changed = true;
+                        }
+                        for (int i = 0; i < static_cast<int>(discovered.size());
+                             ++i) {
+                            if (!filter_fn(discovered[i])) continue;
+                            bool selected = (i == current_idx);
+                            // Show name + type info in the combo item.
+                            char item_label[256];
+                            std::snprintf(
+                                item_label,
+                                sizeof(item_label),
+                                "%s (dim%d, %u comp, %zu elts)",
+                                discovered[i].name.c_str(),
+                                static_cast<int>(discovered[i].dimension),
+                                static_cast<unsigned>(
+                                    discovered[i].component_count),
+                                discovered[i].count);
+                            if (ImGui::Selectable(item_label, selected)) {
+                                assign_fn(discovered[i].handle);
+                                role_changed = true;
+                            }
+                            if (selected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    return role_changed;
+                };
+
+                // Position role: any floating-point attribute with 1+
+                // components.
+                changed |= draw_role_combo(
+                    "Position##role",
+                    mesh_data->position_binding(),
+                    [&](auto h) { mesh_data->assign_position(h); },
+                    [&]() { mesh_data->clear_position(); },
+                    [](const scene_graph::DiscoveredAttribute &da) {
+                        return da.is_floating_point && da.component_count >= 1;
+                    });
+
+                // Normal role: any floating-point attribute with 2+ components.
+                changed |= draw_role_combo(
+                    "Normal##role",
+                    mesh_data->normal_binding(),
+                    [&](auto h) { mesh_data->assign_normal(h); },
+                    [&]() { mesh_data->clear_normal(); },
+                    [](const scene_graph::DiscoveredAttribute &da) {
+                        return da.is_floating_point && da.component_count >= 2;
+                    });
+
+                // Scalar role: any attribute (will be converted to float).
+                changed |= draw_role_combo(
+                    "Scalar##role",
+                    mesh_data->scalar_binding(),
+                    [&](auto h) {
+                        mesh_data->assign_scalar(h,
+                                                 mesh_data->scalar_component());
+                    },
+                    [&]() { mesh_data->clear_scalar(); },
+                    [](const scene_graph::DiscoveredAttribute &da) {
+                        return da.component_count >= 1;
+                    });
+
+                // Scalar component selector (only if scalar is bound to a
+                // multi-component attribute).
+                if (mesh_data->has_scalar_field()) {
+                    // Find the source attribute's component count.
+                    const auto &scl_bind = mesh_data->scalar_binding();
+                    uint8_t src_components = 0;
+                    for (const auto &da : discovered) {
+                        if (scl_bind.is_bound()
+                            && &scl_bind.source.attribute()
+                                   == &da.handle.attribute()) {
+                            src_components = da.component_count;
+                            break;
+                        }
+                    }
+                    if (src_components > 1) {
+                        int comp = mesh_data->scalar_component();
+                        const char *comp_labels[] = {
+                            "Magnitude", "X (0)", "Y (1)", "Z (2)", "W (3)"};
+                        int max_items =
+                            std::min(static_cast<int>(src_components) + 1, 5);
+                        // Map: -1 -> 0 (Magnitude), 0 -> 1 (X), 1 -> 2 (Y), ...
+                        int combo_idx = comp + 1;
+                        if (combo_idx < 0 || combo_idx >= max_items)
+                            combo_idx = 0;
+                        if (ImGui::Combo("Component##scalar",
+                                         &combo_idx,
+                                         comp_labels,
+                                         max_items)) {
+                            int new_comp = combo_idx - 1;
+                            mesh_data->assign_scalar(scl_bind.source, new_comp);
+                            changed = true;
+                        }
+                    }
+                }
+
+                // Show all discovered attributes in a collapsible list.
+                if (!discovered.empty() && ImGui::TreeNode("All Attributes")) {
+                    for (const auto &da : discovered) {
+                        ImGui::BulletText(
+                            "%s: dim=%d, %u comp, %zu elts%s",
+                            da.name.c_str(),
+                            static_cast<int>(da.dimension),
+                            static_cast<unsigned>(da.component_count),
+                            da.count,
+                            da.is_floating_point ? " [float]" : "");
+                    }
+                    ImGui::TreePop();
+                }
             }
         }
 
         // ── BVH Overlay ─────────────────────────────────────────────
         auto *bvh_data = obj->find_feature<scene_graph::BVHData>();
         if (bvh_data) {
-            if (ImGui::CollapsingHeader("BVH Overlay", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::CollapsingHeader("BVH Overlay",
+                                        ImGuiTreeNodeFlags_DefaultOpen)) {
                 // Enabled toggle
                 if (ImGui::Checkbox("Show Overlay", &bvh_data->enabled)) {
                     bvh_data->mark_overlay_dirty();
@@ -721,11 +911,13 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                         "SAH (Best Quality)",
                         "Object Median (Balanced)",
                         "Spatial Median",
-                        "LBVH (Fastest)"
-                    };
+                        "LBVH (Fastest)"};
                     int strategy_idx = static_cast<int>(bvh_data->strategy);
-                    if (ImGui::Combo("##strategy", &strategy_idx, strategy_names, 4)) {
-                        bvh_data->strategy = static_cast<quiver::spatial::BVHBuildStrategy>(strategy_idx);
+                    if (ImGui::Combo(
+                            "##strategy", &strategy_idx, strategy_names, 4)) {
+                        bvh_data->strategy =
+                            static_cast<quiver::spatial::BVHBuildStrategy>(
+                                strategy_idx);
                         bvh_data->mark_dirty();
                         changed = true;
                     }
@@ -733,7 +925,8 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     // Max leaf size
                     int leaf_size = static_cast<int>(bvh_data->max_leaf_size);
                     if (ImGui::SliderInt("Max Leaf Size", &leaf_size, 1, 32)) {
-                        bvh_data->max_leaf_size = static_cast<uint16_t>(leaf_size);
+                        bvh_data->max_leaf_size =
+                            static_cast<uint16_t>(leaf_size);
                         bvh_data->mark_dirty();
                         changed = true;
                     }
@@ -744,7 +937,10 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     if (bvh_data->is_built()) {
                         ImGui::Text("BVH height: %d", bvh_data->bvh_height());
                         int prev_depth = bvh_data->display_depth;
-                        ImGui::SliderInt("Display Depth", &bvh_data->display_depth, 0, bvh_data->bvh_height());
+                        ImGui::SliderInt("Display Depth",
+                                         &bvh_data->display_depth,
+                                         0,
+                                         bvh_data->bvh_height());
                         if (bvh_data->display_depth != prev_depth) {
                             bvh_data->mark_overlay_dirty();
                             changed = true;
@@ -784,11 +980,9 @@ bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state) {
 
         if (light.enabled) {
             // Direction in local space (camera space for headlight).
-            float dir[3] = {
-                static_cast<float>(light.direction(0)),
-                static_cast<float>(light.direction(1)),
-                static_cast<float>(light.direction(2))
-            };
+            float dir[3] = {static_cast<float>(light.direction(0)),
+                            static_cast<float>(light.direction(1)),
+                            static_cast<float>(light.direction(2))};
             if (ImGui::DragFloat3("Direction", dir, 0.01f, -1.0f, 1.0f)) {
                 light.direction(0) = dir[0];
                 light.direction(1) = dir[1];
@@ -799,11 +993,9 @@ bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state) {
             ImGui::TextDisabled("(camera-local)");
 
             // Light color
-            float col[3] = {
-                static_cast<float>(light.color(0)),
-                static_cast<float>(light.color(1)),
-                static_cast<float>(light.color(2))
-            };
+            float col[3] = {static_cast<float>(light.color(0)),
+                            static_cast<float>(light.color(1)),
+                            static_cast<float>(light.color(2))};
             if (ImGui::ColorEdit3("Light Color", col)) {
                 light.color(0) = col[0];
                 light.color(1) = col[1];
@@ -835,4 +1027,4 @@ bool draw_mesh_controls(MeshScene &scene, MeshPanelState &state) {
     return changed;
 }
 
-}// namespace balsa::visualization::vulkan::imgui
+} // namespace balsa::visualization::vulkan::imgui

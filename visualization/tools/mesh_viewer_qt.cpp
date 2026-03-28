@@ -1,11 +1,11 @@
 // mesh_viewer_qt.cpp — Qt + Vulkan mesh viewer with native Qt controls
 //
-// Usage:  mesh_viewer_qt [--input path/to/model.obj]
-//         mesh_viewer_qt path/to/model.obj
+// Usage:  mesh_viewer_qt [--input path/to/model.{obj,msh}]
+//         mesh_viewer_qt path/to/model.{obj,msh}
 //
-// Embeds a QVulkanWindow in a QMainWindow with a MeshControlsWidget
-// dock panel.  Supports loading OBJ files via File > Open or via
-// command-line argument.
+// Loads an OBJ or MSH mesh via quiver I/O, renders it with Phong
+// shading, and provides Qt dock panels for scene graph navigation
+// and mesh property editing.
 //
 // Camera: left-drag orbit, right-drag pan, scroll zoom.
 
@@ -28,33 +28,32 @@
 #include <QVulkanInstance>
 #include <QWidget>
 
-#include <spdlog/spdlog.h>
 #include <balsa/qt/spdlog_logger.hpp>
+#include <spdlog/spdlog.h>
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
 // that transitively include TBB (via quiver), then restore it.
 #undef emit
 
-#include <balsa/visualization/qt/vulkan/window.hpp>
-#include <balsa/visualization/vulkan/mesh_scene.hpp>
-#include <balsa/visualization/vulkan/mesh_render_state.hpp>
-#include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
-#include <balsa/visualization/qt/mesh_controls_widget.hpp>
-#include <balsa/visualization/qt/SceneGraphWidget.hpp>
-#include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/Object.hpp>
+#include <balsa/visualization/qt/SceneGraphWidget.hpp>
+#include <balsa/visualization/qt/mesh_controls_widget.hpp>
+#include <balsa/visualization/qt/vulkan/window.hpp>
+#include <balsa/visualization/vulkan/mesh_render_state.hpp>
+#include <balsa/visualization/vulkan/mesh_scene.hpp>
+#include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <balsa/geometry/triangle_mesh/read_obj.hpp>
-#include <balsa/geometry/bounding_box.hpp>
+#include <quiver/attributes/StoredAttribute.hpp>
+#include <quiver/io/mesh_io.hpp>
 
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
 #define emit
 
-#include <zipper/utils/max_coeff.hpp>
-
 namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
+namespace sg = balsa::scene_graph;
 
 // ── MeshViewerMainWindow ────────────────────────────────────────────
 //
@@ -64,13 +63,15 @@ namespace vk_viz = viz::vulkan;
 
 class MeshViewerMainWindow : public QMainWindow {
   public:
-    MeshViewerMainWindow(QVulkanInstance *inst, const std::filesystem::path &initial_obj)
+    MeshViewerMainWindow(QVulkanInstance *inst,
+                         const std::filesystem::path &initial_obj)
       : QMainWindow(nullptr) {
         setWindowTitle("Balsa Mesh Viewer (Qt)");
         resize(1280, 800);
 
         // ── Create the Vulkan window ─────────────────────────────────
-        _vk_window = new viz::qt::vulkan::Window("Balsa Mesh Viewer (Qt)", 900, 800);
+        _vk_window =
+            new viz::qt::vulkan::Window("Balsa Mesh Viewer (Qt)", 900, 800);
         _vk_window->setVulkanInstance(inst);
 
         // Wrap QVulkanWindow in a widget for embedding
@@ -88,7 +89,8 @@ class MeshViewerMainWindow : public QMainWindow {
 
         // Initial projection
         constexpr float pi = 3.14159265358979323846f;
-        _scene->set_perspective(45.0f * pi / 180.0f, 900.0f / 800.0f, 0.01f, 100.0f);
+        _scene->set_perspective(
+            45.0f * pi / 180.0f, 900.0f / 800.0f, 0.01f, 100.0f);
 
         // ── Create the scene graph outliner dock ─────────────────────
         _outliner = new viz::qt::SceneGraphWidget();
@@ -96,7 +98,8 @@ class MeshViewerMainWindow : public QMainWindow {
 
         _outliner_dock = new QDockWidget("Scene Graph", this);
         _outliner_dock->setWidget(_outliner);
-        _outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        _outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea
+                                        | Qt::RightDockWidgetArea);
         addDockWidget(Qt::RightDockWidgetArea, _outliner_dock);
 
         // ── Create the mesh properties dock ──────────────────────────
@@ -105,7 +108,8 @@ class MeshViewerMainWindow : public QMainWindow {
 
         _controls_dock = new QDockWidget("Mesh Properties", this);
         _controls_dock->setWidget(_controls);
-        _controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        _controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea
+                                        | Qt::RightDockWidgetArea);
         addDockWidget(Qt::RightDockWidgetArea, _controls_dock);
 
         // Stack docks vertically: outliner on top, properties below
@@ -113,17 +117,29 @@ class MeshViewerMainWindow : public QMainWindow {
         splitDockWidget(_outliner_dock, _controls_dock, Qt::Vertical);
 
         // ── Wire outliner selection → properties panel ───────────────
-        connect(_outliner, &viz::qt::SceneGraphWidget::object_selected, _controls, &viz::qt::MeshControlsWidget::set_selected_object);
+        connect(_outliner,
+                &viz::qt::SceneGraphWidget::object_selected,
+                _controls,
+                &viz::qt::MeshControlsWidget::set_selected_object);
 
         // Re-render when controls or outliner change
-        connect(_controls, &viz::qt::MeshControlsWidget::scene_changed, _vk_window, [this]() { _vk_window->requestUpdate(); });
-        connect(_outliner, &viz::qt::SceneGraphWidget::scene_changed, _vk_window, [this]() { _vk_window->requestUpdate(); });
+        connect(_controls,
+                &viz::qt::MeshControlsWidget::scene_changed,
+                _vk_window,
+                [this]() { _vk_window->requestUpdate(); });
+        connect(_outliner,
+                &viz::qt::SceneGraphWidget::scene_changed,
+                _vk_window,
+                [this]() { _vk_window->requestUpdate(); });
 
         // Camera activation from the outliner
-        connect(_outliner, &viz::qt::SceneGraphWidget::camera_activated, this, [this](balsa::scene_graph::Object *cam_obj) {
-            _scene->set_active_camera(cam_obj);
-            _vk_window->requestUpdate();
-        });
+        connect(_outliner,
+                &viz::qt::SceneGraphWidget::camera_activated,
+                this,
+                [this](balsa::scene_graph::Object *cam_obj) {
+                    _scene->set_active_camera(cam_obj);
+                    _vk_window->requestUpdate();
+                });
 
         // ── Create menus ─────────────────────────────────────────────
         create_menus();
@@ -148,7 +164,7 @@ class MeshViewerMainWindow : public QMainWindow {
         // timer to give it one more event-loop pass.
         if (!_initial_obj.empty() && !_loaded) {
             QTimer::singleShot(100, this, [this]() {
-                load_obj(_initial_obj);
+                load_mesh(_initial_obj);
                 _loaded = true;
             });
         }
@@ -172,9 +188,13 @@ class MeshViewerMainWindow : public QMainWindow {
         open_action->setShortcuts(QKeySequence::Open);
         connect(open_action, &QAction::triggered, this, [this]() {
             QString path = QFileDialog::getOpenFileName(
-              this, tr("Open Mesh"), QString(), tr("OBJ Files (*.obj);;All Files (*)"));
+                this,
+                tr("Open Mesh"),
+                QString(),
+                tr("Mesh Files (*.obj *.msh);;OBJ Files (*.obj);;MSH Files "
+                   "(*.msh);;All Files (*)"));
             if (!path.isEmpty()) {
-                load_obj(std::filesystem::path(path.toStdString()));
+                load_mesh(std::filesystem::path(path.toStdString()));
             }
         });
 
@@ -195,93 +215,88 @@ class MeshViewerMainWindow : public QMainWindow {
         // always present inside MeshControlsWidget.)
     }
 
-    void load_obj(const std::filesystem::path &path) {
-        spdlog::info("Loading OBJ: {}", path.string());
+    void load_mesh(const std::filesystem::path &path) {
+        spdlog::info("Loading mesh: {}", path.string());
 
-        auto obj = balsa::geometry::triangle_mesh::read_objF(path);
-        const auto &pos = obj.position;
-        const auto &nrm = obj.normal;
-
-        if (pos.vertices.extent(1) == 0) {
-            spdlog::error("OBJ file has no vertices: {}", path.string());
+        // Use quiver's format-dispatching reader (OBJ, MSH, ...).
+        auto result = quiver::io::read_mesh(path);
+        if (!result) {
+            spdlog::error("Failed to load mesh: {}", path.string());
             return;
         }
+        auto mesh = std::move(*result);
 
-        spdlog::info("  {} vertices, {} triangles",
-                     pos.vertices.extent(1),
-                     pos.triangles.extent(1));
+        spdlog::info("  Mesh dimension: {}",
+                     static_cast<int>(mesh->dimension()));
 
-        // Normalize to unit bounding box centered at origin
-        balsa::ColVectors<float, 3> V = pos.vertices;
-        auto bb = balsa::geometry::bounding_box(V);
-        auto bb_range = bb.range();
-        float range = static_cast<float>(::zipper::utils::maxCoeff(bb_range));
-        if (range < 1e-8f) range = 1.0f;
-        auto bb_center = (bb.min() + bb.max()) / 2.0;
-        for (::zipper::index_type j = 0; j < V.extent(1); ++j) {
-            auto col = V.col(j);
-            for (::zipper::index_type i = 0; i < 3; ++i) {
-                col(i) = static_cast<float>((static_cast<double>(col(i)) - bb_center(i)) / range);
-            }
-        }
-
-        // Add a mesh Object to the scene graph
+        // Add a mesh Object to the scene graph.
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
-        auto *mesh_data = mesh_obj.find_feature<balsa::scene_graph::MeshData>();
+        auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
 
-        // Convert positions from ColVectors (SOA row-major) to
-        // vector<Vec3f> (AOS)
-        std::size_t n_verts = V.extent(1);
-        {
-            std::vector<balsa::scene_graph::Vec3f> positions(n_verts);
-            for (std::size_t j = 0; j < n_verts; ++j) {
-                positions[j](0) = V(0, j);
-                positions[j](1) = V(1, j);
-                positions[j](2) = V(2, j);
-            }
-            mesh_data->set_positions(positions);
-        }
+        // set_mesh() enumerates attributes, auto-assigns roles by
+        // convention name (vertex_positions -> position, vertex_normals
+        // -> normal), builds skeletons, and extracts topology indices.
+        mesh_data->set_mesh(mesh);
 
-        // Convert and set normals if available
-        if (nrm.vertices.extent(1) == pos.vertices.extent(1)) {
-            std::vector<balsa::scene_graph::Vec3f> normals(n_verts);
-            for (std::size_t j = 0; j < n_verts; ++j) {
-                normals[j](0) = nrm.vertices(0, j);
-                normals[j](1) = nrm.vertices(1, j);
-                normals[j](2) = nrm.vertices(2, j);
-            }
-            mesh_data->set_normals(normals);
-        }
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.
         mesh_data->render_state().constrain(mesh_data->has_normals());
 
-        // Convert triangle indices (size_t -> uint32_t)
-        if (pos.triangles.extent(1) > 0) {
-            std::size_t n_tris = pos.triangles.extent(1);
-            std::vector<uint32_t> tri_indices(n_tris * 3);
-            for (std::size_t j = 0; j < n_tris; ++j) {
-                tri_indices[j * 3 + 0] = static_cast<uint32_t>(pos.triangles(0, j));
-                tri_indices[j * 3 + 1] = static_cast<uint32_t>(pos.triangles(1, j));
-                tri_indices[j * 3 + 2] = static_cast<uint32_t>(pos.triangles(2, j));
-            }
-            mesh_data->set_triangle_indices(tri_indices);
-        }
+        // Compute bounding box from the position binding and set Object
+        // transform to center and normalize the mesh.  The source data
+        // stays pristine -- normalization is applied via the Object's
+        // local transform.
+        if (mesh_data->has_positions()) {
+            const auto &pos_bind = mesh_data->position_binding();
+            const auto *fdata = static_cast<const float *>(pos_bind.raw_data());
+            std::size_t n = pos_bind.size();
+            uint8_t comp = pos_bind.component_count;
 
-        // Convert edge indices
-        if (pos.edges.extent(1) > 0) {
-            std::size_t n_edges = pos.edges.extent(1);
-            std::vector<uint32_t> edge_indices(n_edges * 2);
-            for (std::size_t j = 0; j < n_edges; ++j) {
-                edge_indices[j * 2 + 0] = static_cast<uint32_t>(pos.edges(0, j));
-                edge_indices[j * 2 + 1] = static_cast<uint32_t>(pos.edges(1, j));
+            if (fdata && n > 0 && comp >= 1) {
+                // Compute AABB in up to 3 dimensions.
+                float bbmin[3] = {1e30f, 1e30f, 1e30f};
+                float bbmax[3] = {-1e30f, -1e30f, -1e30f};
+                for (std::size_t i = 0; i < n; ++i) {
+                    for (uint8_t c = 0; c < std::min(comp, uint8_t(3)); ++c) {
+                        float v = fdata[i * comp + c];
+                        bbmin[c] = std::min(bbmin[c], v);
+                        bbmax[c] = std::max(bbmax[c], v);
+                    }
+                }
+                // For missing dimensions, leave at 0.
+                for (uint8_t c = comp; c < 3; ++c) {
+                    bbmin[c] = 0.0f;
+                    bbmax[c] = 0.0f;
+                }
+
+                // Compute center and range.
+                sg::Vec3f center;
+                float range = 0.0f;
+                for (int c = 0; c < 3; ++c) {
+                    center(c) = (bbmin[c] + bbmax[c]) * 0.5f;
+                    range = std::max(range, bbmax[c] - bbmin[c]);
+                }
+                if (range < 1e-8f) range = 1.0f;
+
+                // Apply normalization via Object transform.
+                sg::Vec3f neg_center;
+                neg_center(0) = -center(0);
+                neg_center(1) = -center(1);
+                neg_center(2) = -center(2);
+                mesh_obj.set_translation(neg_center);
+                sg::Vec3f uniform_scale;
+                float inv_range = 1.0f / range;
+                uniform_scale(0) = inv_range;
+                uniform_scale(1) = inv_range;
+                uniform_scale(2) = inv_range;
+                mesh_obj.set_scale_factors(uniform_scale);
             }
-            mesh_data->set_edge_indices(edge_indices);
         }
 
         // If the mesh has edges but no triangles, default to wireframe
         // so that edge-only meshes are visible immediately.
-        if (!mesh_data->has_triangle_indices() && mesh_data->has_edge_indices()) {
+        if (!mesh_data->has_triangle_indices()
+            && mesh_data->has_edge_indices()) {
             mesh_data->render_state().layers.solid.enabled = false;
             mesh_data->render_state().layers.wireframe.enabled = true;
         }
@@ -308,19 +323,17 @@ int main(int argc, char *argv[]) {
     // ── CLI argument parsing (before QApplication consumes args) ─────
     std::string input_path;
 #if BALSA_HAS_CLI11
-    CLI::App cli{ "Balsa Mesh Viewer (Qt + Vulkan)", "mesh_viewer_qt" };
+    CLI::App cli{"Balsa Mesh Viewer (Qt + Vulkan)", "mesh_viewer_qt"};
 
-    cli.add_option("input", input_path, "OBJ file to load")
-      ->check(CLI::ExistingFile);
+    cli.add_option("input", input_path, "Mesh file to load (OBJ, MSH)")
+        ->check(CLI::ExistingFile);
 
     // Allow Qt-specific flags (e.g. -platform) to pass through.
     cli.allow_extras(true);
     CLI11_PARSE(cli, argc, argv);
 #else
     // Fallback: treat first argument as input file
-    if (argc > 1) {
-        input_path = argv[1];
-    }
+    if (argc > 1) { input_path = argv[1]; }
 #endif
 
     QApplication app(argc, argv);
@@ -328,13 +341,11 @@ int main(int argc, char *argv[]) {
     balsa::qt::activateSpdlogOutput();
 
     std::filesystem::path obj_path;
-    if (!input_path.empty()) {
-        obj_path = input_path;
-    }
+    if (!input_path.empty()) { obj_path = input_path; }
 
     // QVulkanInstance must outlive the QVulkanWindow
     QVulkanInstance inst;
-    inst.setLayers({ "VK_LAYER_KHRONOS_validation" });
+    inst.setLayers({"VK_LAYER_KHRONOS_validation"});
     if (!inst.create()) {
         spdlog::error("Failed to create QVulkanInstance");
         return 1;

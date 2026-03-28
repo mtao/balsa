@@ -2,10 +2,12 @@
 //
 // Usage:  mesh_viewer_glfw [--input path/to/model.obj]
 //         mesh_viewer_glfw path/to/model.obj
+//         mesh_viewer_glfw path/to/model.msh
 //
-// Loads an OBJ mesh, renders it with Phong shading, and provides an
-// ImGui panel for tweaking render state (shading model, color source,
-// colormaps, lighting, wireframe, etc.).
+// Loads an OBJ or MSH mesh via quiver I/O, renders it with Phong
+// shading, and provides an ImGui panel for tweaking render state
+// (shading model, color source, colormaps, lighting, wireframe, etc.)
+// and selecting which attribute is bound to each visualization role.
 //
 // BVH bounding volume visualization is available via right-click
 // context menu on mesh objects in the scene graph panel.
@@ -28,19 +30,17 @@
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
-#include <balsa/visualization/glfw/vulkan/window.hpp>
-#include <balsa/visualization/vulkan/imgui_integration.hpp>
-#include <balsa/visualization/vulkan/mesh_scene.hpp>
-#include <balsa/visualization/vulkan/mesh_render_state.hpp>
-#include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
-#include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
-#include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/Object.hpp>
+#include <balsa/visualization/glfw/vulkan/window.hpp>
+#include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
+#include <balsa/visualization/vulkan/imgui_integration.hpp>
+#include <balsa/visualization/vulkan/mesh_render_state.hpp>
+#include <balsa/visualization/vulkan/mesh_scene.hpp>
+#include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <balsa/geometry/triangle_mesh/read_obj.hpp>
-#include <balsa/geometry/bounding_box.hpp>
-
-#include <zipper/utils/max_coeff.hpp>
+#include <quiver/attributes/StoredAttribute.hpp>
+#include <quiver/io/mesh_io.hpp>
 
 namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
@@ -66,7 +66,9 @@ class MeshViewerScene : public vk_viz::MeshScene {
     // Set a callback invoked when the user confirms a file path in the
     // ImGui "Open" dialog.
     using OpenFileCallback = std::function<void(const std::filesystem::path &)>;
-    void set_open_file_callback(OpenFileCallback cb) { _open_file_cb = std::move(cb); }
+    void set_open_file_callback(OpenFileCallback cb) {
+        _open_file_cb = std::move(cb);
+    }
 
     void draw(vk_viz::Film &film) override {
         // Draw mesh geometry first
@@ -105,15 +107,17 @@ class MeshViewerScene : public vk_viz::MeshScene {
                     _open_error.clear();
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Quit", "Ctrl+Q")) {
-                    std::exit(0);
-                }
+                if (ImGui::MenuItem("Quit", "Ctrl+Q")) { std::exit(0); }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("View")) {
-                ImGui::MenuItem("Scene Graph", nullptr, &_panel_state.show_scene_panel);
-                ImGui::MenuItem("Properties", nullptr, &_panel_state.show_property_panel);
-                ImGui::MenuItem("Scene Lighting", nullptr, &_panel_state.show_lighting_panel);
+                ImGui::MenuItem(
+                    "Scene Graph", nullptr, &_panel_state.show_scene_panel);
+                ImGui::MenuItem(
+                    "Properties", nullptr, &_panel_state.show_property_panel);
+                ImGui::MenuItem("Scene Lighting",
+                                nullptr,
+                                &_panel_state.show_lighting_panel);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -126,8 +130,11 @@ class MeshViewerScene : public vk_viz::MeshScene {
         ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Open Mesh File", &_show_open_dialog)) {
             ImGui::Text("Enter OBJ file path:");
-            bool enter_pressed = ImGui::InputText(
-              "##path", _path_buf, sizeof(_path_buf), ImGuiInputTextFlags_EnterReturnsTrue);
+            bool enter_pressed =
+                ImGui::InputText("##path",
+                                 _path_buf,
+                                 sizeof(_path_buf),
+                                 ImGuiInputTextFlags_EnterReturnsTrue);
 
             ImGui::SameLine();
             bool load_clicked = ImGui::Button("Load");
@@ -135,9 +142,7 @@ class MeshViewerScene : public vk_viz::MeshScene {
             if (enter_pressed || load_clicked) {
                 std::filesystem::path p(_path_buf);
                 if (std::filesystem::exists(p)) {
-                    if (_open_file_cb) {
-                        _open_file_cb(p);
-                    }
+                    if (_open_file_cb) { _open_file_cb(p); }
                     _show_open_dialog = false;
                     _open_error.clear();
                 } else {
@@ -172,9 +177,8 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         _scene->init_imgui(film(), glfw_window());
 
         // Wire up the "Open" dialog callback
-        _scene->set_open_file_callback([this](const std::filesystem::path &p) {
-            load_obj(p);
-        });
+        _scene->set_open_file_callback(
+            [this](const std::filesystem::path &p) { load_mesh(p); });
 
         // Set up orbit camera
         _camera = std::make_shared<vk_viz::OrbitCameraController>(_scene.get());
@@ -184,7 +188,9 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
         // Set initial projection
         auto fb = framebuffer_size();
-        float aspect = (fb[1] > 0) ? static_cast<float>(fb[0]) / static_cast<float>(fb[1]) : 1.0f;
+        float aspect =
+            (fb[1] > 0) ? static_cast<float>(fb[0]) / static_cast<float>(fb[1])
+                        : 1.0f;
         constexpr float pi = 3.14159265358979323846f;
         _scene->set_perspective(45.0f * pi / 180.0f, aspect, 0.01f, 100.0f);
 
@@ -193,91 +199,93 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
     ~MeshViewerWindow() override = default;
 
-    void load_obj(const std::filesystem::path &path) {
-        spdlog::info("Loading OBJ: {}", path.string());
+    void load_mesh(const std::filesystem::path &path) {
+        spdlog::info("Loading mesh: {}", path.string());
 
-        auto obj = balsa::geometry::triangle_mesh::read_objF(path);
-        const auto &pos = obj.position;
-        const auto &nrm = obj.normal;
-
-        if (pos.vertices.extent(1) == 0) {
-            spdlog::error("OBJ file has no vertices: {}", path.string());
+        // Use quiver's format-dispatching reader (OBJ, MSH, ...).
+        auto result = quiver::io::read_mesh(path);
+        if (!result) {
+            spdlog::error("Failed to load mesh: {}", path.string());
             return;
         }
+        auto mesh = std::move(*result);
 
-        std::size_t n_verts = pos.vertices.extent(1);
-        std::size_t n_tris = pos.triangles.extent(1);
+        spdlog::info("  Mesh dimension: {}",
+                     static_cast<int>(mesh->dimension()));
 
-        spdlog::info("  {} vertices, {} triangles", n_verts, n_tris);
+        // Compute bounding box from the position attribute for Object
+        // transform normalization.  Position attribute types may be
+        // array<double,3>, array<double,2>, array<float,3>, etc.
+        // We iterate the discovered attributes after set_mesh() to find
+        // the position binding and compute the AABB.
 
-        // Normalize to unit bounding box centered at origin
-        balsa::ColVectors<float, 3> V = pos.vertices;
-        auto bb = balsa::geometry::bounding_box(V);
-        auto bb_range = bb.range();
-        float range = static_cast<float>(::zipper::utils::maxCoeff(bb_range));
-        if (range < 1e-8f) range = 1.0f;
-        auto bb_center = (bb.min() + bb.max()) / 2.0;
-        for (::zipper::index_type j = 0; j < V.extent(1); ++j) {
-            auto col = V.col(j);
-            for (::zipper::index_type i = 0; i < 3; ++i) {
-                col(i) = static_cast<float>((static_cast<double>(col(i)) - bb_center(i)) / range);
-            }
-        }
-
-        // Add a mesh Object to the scene graph
+        // Add a mesh Object to the scene graph.
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
         auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
 
-        // Convert positions from ColVectors (SOA) to vector<Vec3f> (AOS)
-        std::vector<sg::Vec3f> positions(n_verts);
-        for (std::size_t j = 0; j < n_verts; ++j) {
-            positions[j](0) = V(0, j);
-            positions[j](1) = V(1, j);
-            positions[j](2) = V(2, j);
-        }
-        mesh_data->set_positions(positions);
+        // set_mesh() enumerates attributes, auto-assigns roles by
+        // convention name (vertex_positions → position, vertex_normals
+        // → normal), builds skeletons, and extracts topology indices.
+        mesh_data->set_mesh(mesh);
 
-        // Convert and set normals if available
-        if (nrm.vertices.extent(1) == pos.vertices.extent(1)) {
-            std::vector<sg::Vec3f> normals(n_verts);
-            for (std::size_t j = 0; j < n_verts; ++j) {
-                normals[j](0) = nrm.vertices(0, j);
-                normals[j](1) = nrm.vertices(1, j);
-                normals[j](2) = nrm.vertices(2, j);
-            }
-            mesh_data->set_normals(normals);
-        }
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.
         mesh_data->render_state().constrain(mesh_data->has_normals());
 
-        // Convert triangle indices (size_t -> uint32_t)
-        std::vector<uint32_t> tri_indices;
-        if (n_tris > 0) {
-            tri_indices.resize(n_tris * 3);
-            for (std::size_t j = 0; j < n_tris; ++j) {
-                tri_indices[j * 3 + 0] = static_cast<uint32_t>(pos.triangles(0, j));
-                tri_indices[j * 3 + 1] = static_cast<uint32_t>(pos.triangles(1, j));
-                tri_indices[j * 3 + 2] = static_cast<uint32_t>(pos.triangles(2, j));
+        // Compute bounding box from the position binding and set Object
+        // transform to center and normalize the mesh.  The source data
+        // stays pristine — normalization is applied via the Object's
+        // local transform.
+        if (mesh_data->has_positions()) {
+            const auto &pos_bind = mesh_data->position_binding();
+            const auto *fdata = static_cast<const float *>(pos_bind.raw_data());
+            std::size_t n = pos_bind.size();
+            uint8_t comp = pos_bind.component_count;
+
+            if (fdata && n > 0 && comp >= 1) {
+                // Compute AABB in up to 3 dimensions.
+                float bbmin[3] = {1e30f, 1e30f, 1e30f};
+                float bbmax[3] = {-1e30f, -1e30f, -1e30f};
+                for (std::size_t i = 0; i < n; ++i) {
+                    for (uint8_t c = 0; c < std::min(comp, uint8_t(3)); ++c) {
+                        float v = fdata[i * comp + c];
+                        bbmin[c] = std::min(bbmin[c], v);
+                        bbmax[c] = std::max(bbmax[c], v);
+                    }
+                }
+                // For missing dimensions, leave at 0.
+                for (uint8_t c = comp; c < 3; ++c) {
+                    bbmin[c] = 0.0f;
+                    bbmax[c] = 0.0f;
+                }
+
+                // Compute center and range.
+                sg::Vec3f center;
+                float range = 0.0f;
+                for (int c = 0; c < 3; ++c) {
+                    center(c) = (bbmin[c] + bbmax[c]) * 0.5f;
+                    range = std::max(range, bbmax[c] - bbmin[c]);
+                }
+                if (range < 1e-8f) range = 1.0f;
+
+                // Apply normalization via Object transform.
+                sg::Vec3f neg_center;
+                neg_center(0) = -center(0);
+                neg_center(1) = -center(1);
+                neg_center(2) = -center(2);
+                mesh_obj.set_translation(neg_center);
+                sg::Vec3f uniform_scale;
+                float inv_range = 1.0f / range;
+                uniform_scale(0) = inv_range;
+                uniform_scale(1) = inv_range;
+                uniform_scale(2) = inv_range;
+                mesh_obj.set_scale_factors(uniform_scale);
             }
-            mesh_data->set_triangle_indices(tri_indices);
         }
 
-        // If the OBJ has explicit edge data from 'l' lines, set those
-        // as explicit edges.  Otherwise, MeshData auto-derives edges
-        // from the triangle topology (built in set_triangle_indices).
-        if (pos.edges.extent(1) > 0) {
-            std::size_t n_edges = pos.edges.extent(1);
-            std::vector<uint32_t> edge_indices(n_edges * 2);
-            for (std::size_t j = 0; j < n_edges; ++j) {
-                edge_indices[j * 2 + 0] = static_cast<uint32_t>(pos.edges(0, j));
-                edge_indices[j * 2 + 1] = static_cast<uint32_t>(pos.edges(1, j));
-            }
-            mesh_data->set_edge_indices(edge_indices);
-        }
-
-        // If the mesh has edges but no triangles, default to wireframe
-        if (!mesh_data->has_triangle_indices() && mesh_data->has_edge_indices()) {
+        // If the mesh has edges but no triangles, default to wireframe.
+        if (!mesh_data->has_triangle_indices()
+            && mesh_data->has_edge_indices()) {
             mesh_data->render_state().layers.solid.enabled = false;
             mesh_data->render_state().layers.wireframe.enabled = true;
         }
@@ -316,16 +324,15 @@ int main(int argc, char *argv[]) {
 
     std::string input_path;
 #if BALSA_HAS_CLI11
-    CLI::App app{ "Balsa Mesh Viewer (GLFW + Vulkan + ImGui)", "mesh_viewer_glfw" };
+    CLI::App app{"Balsa Mesh Viewer (GLFW + Vulkan + ImGui)",
+                 "mesh_viewer_glfw"};
 
     app.add_option("input", input_path, "OBJ file to load")
-      ->check(CLI::ExistingFile);
+        ->check(CLI::ExistingFile);
 
     CLI11_PARSE(app, argc, argv);
 #else
-    if (argc > 1) {
-        input_path = argv[1];
-    }
+    if (argc > 1) { input_path = argv[1]; }
 #endif
 
     glfwInit();
@@ -334,7 +341,7 @@ int main(int argc, char *argv[]) {
         MeshViewerWindow window("Balsa Mesh Viewer (GLFW)", 1280, 960);
 
         if (!input_path.empty()) {
-            window.load_obj(std::filesystem::path(input_path));
+            window.load_mesh(std::filesystem::path(input_path));
         }
 
         return window.exec();
