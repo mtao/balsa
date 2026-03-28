@@ -33,8 +33,7 @@ if get_option('imgui')
   endif
 endif
 
-colormap_proj = subproject('colormap_shaders')
-colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep')
+colormap_shaders_dep = dependency('colormap_shaders')
 
 # Public deps: propagated to consumers via declare_dependency().
 visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
@@ -107,7 +106,9 @@ endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
-visualization_public_deps += quiver_dep
+if get_option('quiver')
+  visualization_public_deps += quiver_dep
+endif
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,
@@ -116,6 +117,7 @@ visualization_lib = library('balsaVisualization', visualization_sources,
 
 # For consumers: propagate public deps (including imgui shared library).
 visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir)
+meson.override_dependency('balsaVisualization', visualization_dep)
 
 if get_option('testing')
   subdir('tests')

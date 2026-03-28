@@ -40,6 +40,7 @@ endif
 core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
 
 core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)
+meson.override_dependency('balsaCore', core_dep)
 if get_option('testing')
   subdir('tests')
 endif
