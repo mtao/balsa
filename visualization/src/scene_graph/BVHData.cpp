@@ -18,12 +18,11 @@ namespace balsa::scene_graph {
 
 // ── Collect BVH node bounds at a given tree depth ───────────────────
 
-template<int8_t SpatialDim, int8_t K, typename DirPolicy>
+template <int8_t SpatialDim, int8_t K, typename DirPolicy>
 static auto collect_bounds_at_depth(
-  const quiver::spatial::BVH<SpatialDim, K, DirPolicy> &bvh,
-  int target_depth)
-  -> std::vector<quiver::spatial::KDOP<SpatialDim, K, DirPolicy>> {
-
+    const quiver::spatial::BVH<SpatialDim, K, DirPolicy> &bvh,
+    int target_depth)
+    -> std::vector<quiver::spatial::KDOP<SpatialDim, K, DirPolicy>> {
     using kdop_type = quiver::spatial::KDOP<SpatialDim, K, DirPolicy>;
     std::vector<kdop_type> result;
 
@@ -32,7 +31,7 @@ static auto collect_bounds_at_depth(
     auto nodes = bvh.nodes();
 
     std::stack<std::pair<uint32_t, int>> stack;
-    stack.push({ 0, 0 });
+    stack.push({0, 0});
 
     while (!stack.empty()) {
         auto [idx, depth] = stack.top();
@@ -43,8 +42,8 @@ static auto collect_bounds_at_depth(
         if (depth == target_depth || node.is_leaf()) {
             result.push_back(node.bounds);
         } else {
-            stack.push({ node.right_child(), depth + 1 });
-            stack.push({ idx + 1, depth + 1 });// left child (implicit)
+            stack.push({node.right_child(), depth + 1});
+            stack.push({idx + 1, depth + 1}); // left child (implicit)
         }
     }
 
@@ -52,38 +51,53 @@ static auto collect_bounds_at_depth(
 }
 
 // ── Set wireframe geometry from KDOP bounds ─────────────────────────
+//
+// Creates a quiver::Mesh<1> (edge mesh) from the KDOP wireframe
+// geometry, attaches float vertex positions, and sets it on the
+// overlay MeshData via set_mesh().
 
-template<int8_t K, typename DirPolicy>
+using Vec3fArr = std::array<float, 3>;
+
+template <int8_t K, typename DirPolicy>
 static void set_kdop_wireframe(
-  MeshData &mesh_data,
-  const std::vector<quiver::spatial::KDOP<3, K, DirPolicy>> &bounds,
-  float uniform_color[4]) {
-
-    std::vector<Vec3f> all_positions;
-    std::vector<uint32_t> all_edges;
+    MeshData &mesh_data,
+    const std::vector<quiver::spatial::KDOP<3, K, DirPolicy>> &bounds,
+    float uniform_color[4]) {
+    std::vector<Vec3fArr> all_positions;
+    std::vector<std::array<int64_t, 2>> all_edges;
 
     for (const auto &kdop : bounds) {
         auto geom = quiver::spatial::kdop_geometry(kdop);
 
-        uint32_t base = static_cast<uint32_t>(all_positions.size());
+        auto base = static_cast<int64_t>(all_positions.size());
 
         for (const auto &v : geom.vertices) {
-            Vec3f pos;
-            pos(0) = static_cast<float>(v[0]);
-            pos(1) = static_cast<float>(v[1]);
-            pos(2) = static_cast<float>(v[2]);
-            all_positions.push_back(pos);
+            all_positions.push_back({static_cast<float>(v[0]),
+                                     static_cast<float>(v[1]),
+                                     static_cast<float>(v[2])});
         }
 
         for (const auto &[a, b] : geom.edges) {
-            all_edges.push_back(base + static_cast<uint32_t>(a));
-            all_edges.push_back(base + static_cast<uint32_t>(b));
+            all_edges.push_back({base + static_cast<int64_t>(a),
+                                 base + static_cast<int64_t>(b)});
         }
     }
 
-    mesh_data.set_positions(all_positions);
-    mesh_data.set_edge_indices(all_edges);
+    // Build edge mesh from vertex indices.
+    auto mesh = quiver::Mesh<1>::from_vertex_indices(
+        std::span<const std::array<int64_t, 2>>(all_edges));
 
+    // Create float vertex_positions attribute.
+    auto pos_handle = mesh.create_attribute<Vec3fArr>("vertex_positions", 0);
+    for (std::size_t i = 0; i < all_positions.size(); ++i) {
+        pos_handle[i] = all_positions[i];
+    }
+
+    // Set the mesh on the overlay MeshData (auto-discovers attributes,
+    // auto-assigns vertex_positions → position role).
+    mesh_data.set_mesh(std::make_shared<quiver::Mesh<1>>(std::move(mesh)));
+
+    // Configure render state for wireframe-only display.
     auto &rs = mesh_data.render_state();
     rs.layers.solid.enabled = false;
     rs.layers.wireframe.enabled = true;
@@ -101,29 +115,25 @@ static void set_kdop_wireframe(
     rs.shading = visualization::vulkan::ShadingModel::Flat;
 }
 
-// ── Build quiver::Mesh<2> from MeshData positions + triangles ───────
+// ── Build quiver::Mesh<2> from float positions + triangle indices ────
 //
-// Converts MeshData's flat float positions (Vec3f) and uint32_t
+// Converts flat float positions (array<float,3>) and uint32_t
 // triangle indices into the quiver::Mesh<2> representation needed by
 // quiver::spatial::make_bvh.
 
 using Vec3d = std::array<double, 3>;
 
-static auto make_quiver_mesh(
-  std::span<const Vec3f> positions,
-  std::span<const uint32_t> tri_indices)
-  -> std::pair<quiver::Mesh<2>,
-               quiver::attributes::AttributeHandle<const Vec3d>> {
-
+static auto make_quiver_mesh(std::span<const Vec3fArr> positions,
+                             std::span<const uint32_t> tri_indices)
+    -> std::pair<quiver::Mesh<2>,
+                 quiver::attributes::AttributeHandle<const Vec3d>> {
     // Convert uint32_t triples → int64_t triples for from_vertex_indices.
     size_t n_tris = tri_indices.size() / 3;
     std::vector<std::array<int64_t, 3>> tris(n_tris);
     for (size_t t = 0; t < n_tris; ++t) {
-        tris[t] = {
-            static_cast<int64_t>(tri_indices[t * 3 + 0]),
-            static_cast<int64_t>(tri_indices[t * 3 + 1]),
-            static_cast<int64_t>(tri_indices[t * 3 + 2])
-        };
+        tris[t] = {static_cast<int64_t>(tri_indices[t * 3 + 0]),
+                   static_cast<int64_t>(tri_indices[t * 3 + 1]),
+                   static_cast<int64_t>(tri_indices[t * 3 + 2])};
     }
 
     auto mesh = quiver::Mesh<2>::from_vertex_indices(tris);
@@ -131,30 +141,44 @@ static auto make_quiver_mesh(
     // Create a vertex position attribute (double, as required by KDOP).
     auto pos_handle = mesh.create_attribute<Vec3d>("positions", 0);
     for (size_t i = 0; i < positions.size(); ++i) {
-        pos_handle[i] = {
-            static_cast<double>(positions[i](0)),
-            static_cast<double>(positions[i](1)),
-            static_cast<double>(positions[i](2))
-        };
+        pos_handle[i] = {static_cast<double>(positions[i][0]),
+                         static_cast<double>(positions[i][1]),
+                         static_cast<double>(positions[i][2])};
     }
 
     // Return const handle for make_bvh.
     quiver::attributes::AttributeHandle<const Vec3d> cpos(pos_handle);
-    return { std::move(mesh), cpos };
+    return {std::move(mesh), cpos};
 }
 
 // ── BVHData::rebuild_bvh ────────────────────────────────────────────
 
 void BVHData::rebuild_bvh(MeshData &mesh_data) {
-    auto positions = mesh_data.positions();
+    const auto &pos_binding = mesh_data.position_binding();
     auto tri_indices = mesh_data.triangle_indices();
 
-    if (positions.empty() || tri_indices.empty()) {
+    if (!pos_binding.is_bound() || tri_indices.empty()) {
         _bvh_height = -1;
         return;
     }
 
-    auto [mesh, pos] = make_quiver_mesh(positions, tri_indices);
+    // Extract float positions from the binding as Vec3f-like data.
+    // raw_data() returns contiguous floats; component_count tells stride.
+    const auto *raw = static_cast<const float *>(pos_binding.raw_data());
+    std::size_t n_verts = pos_binding.size();
+    uint8_t comps = pos_binding.component_count;
+
+    // Build a vector of Vec3f from raw float data (pad missing components).
+    std::vector<Vec3fArr> positions(n_verts);
+    for (std::size_t i = 0; i < n_verts; ++i) {
+        const float *src = raw + i * comps;
+        positions[i] = {comps >= 1 ? src[0] : 0.0f,
+                        comps >= 2 ? src[1] : 0.0f,
+                        comps >= 3 ? src[2] : 0.0f};
+    }
+
+    auto [mesh, pos] =
+        make_quiver_mesh(std::span<const Vec3fArr>(positions), tri_indices);
 
     quiver::spatial::BVHConfig config;
     config.strategy = strategy;
@@ -192,9 +216,9 @@ void BVHData::update_overlay() {
 
     // Create a child Object on the owning mesh Object.
     auto &parent = object();
-    auto &child = parent.add_child(
-      "BVH K=" + std::to_string(kdop_k) + " d=" + std::to_string(display_depth));
-    child.selectable = false;// not user-selectable in the outliner
+    auto &child = parent.add_child("BVH K=" + std::to_string(kdop_k)
+                                   + " d=" + std::to_string(display_depth));
+    child.selectable = false; // not user-selectable in the outliner
     _overlay_obj = &child;
 
     auto &md = child.emplace_feature<MeshData>();
@@ -236,4 +260,4 @@ bool BVHData::apply_pending_update(MeshData &mesh_data) {
     return true;
 }
 
-}// namespace balsa::scene_graph
+} // namespace balsa::scene_graph

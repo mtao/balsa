@@ -1,15 +1,88 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
-#include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/Camera.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/types.hpp>
+
+#include <quiver/Mesh.hpp>
 
 #include <zipper/transform/common.hpp>
 #include <zipper/transform/model.hpp>
 #include <zipper/transform/quaternion_transform.hpp>
 
+#include <array>
+#include <memory>
+
+// ── Helper: create a quiver Mesh<2> with positions and normals ──────
+//
+// Builds a two-triangle quad (vertices 0–3) as a Mesh<2> with
+// array<float,3> vertex_positions and optionally vertex_normals.
+
+static auto make_quad_mesh(bool with_normals = false)
+    -> std::shared_ptr<quiver::Mesh<2>> {
+    using Vec3f = std::array<float, 3>;
+
+    // Two triangles: (0,1,2) and (0,2,3)
+    std::vector<std::array<int64_t, 3>> tris = {{0, 1, 2}, {0, 2, 3}};
+    auto mesh = std::make_shared<quiver::Mesh<2>>(
+        quiver::Mesh<2>::from_vertex_indices(tris));
+    mesh->build_all_skeletons();
+
+    // Create vertex positions.
+    auto pos = mesh->create_attribute<Vec3f>("vertex_positions", 0);
+    pos[0] = {0.0f, 0.0f, 0.0f};
+    pos[1] = {1.0f, 0.0f, 0.0f};
+    pos[2] = {1.0f, 1.0f, 0.0f};
+    pos[3] = {0.0f, 1.0f, 0.0f};
+
+    if (with_normals) {
+        auto nrm = mesh->create_attribute<Vec3f>("vertex_normals", 0);
+        for (std::size_t i = 0; i < 4; ++i) { nrm[i] = {0.0f, 0.0f, 1.0f}; }
+    }
+
+    return mesh;
+}
+
+// ── Helper: create a single-triangle mesh ───────────────────────────
+
+static auto make_single_tri_mesh() -> std::shared_ptr<quiver::Mesh<2>> {
+    using Vec3f = std::array<float, 3>;
+
+    std::vector<std::array<int64_t, 3>> tris = {{0, 1, 2}};
+    auto mesh = std::make_shared<quiver::Mesh<2>>(
+        quiver::Mesh<2>::from_vertex_indices(tris));
+    mesh->build_all_skeletons();
+
+    auto pos = mesh->create_attribute<Vec3f>("vertex_positions", 0);
+    pos[0] = {0.0f, 0.0f, 0.0f};
+    pos[1] = {1.0f, 0.0f, 0.0f};
+    pos[2] = {0.0f, 1.0f, 0.0f};
+
+    return mesh;
+}
+
+// ── Helper: create a Mesh<1> (edges only, no triangles) ─────────────
+
+static auto make_edge_mesh() -> std::shared_ptr<quiver::Mesh<1>> {
+    using Vec3f = std::array<float, 3>;
+
+    std::vector<std::array<int64_t, 2>> edges = {{0, 1}, {1, 2}};
+    auto mesh = std::make_shared<quiver::Mesh<1>>(
+        quiver::Mesh<1>::from_vertex_indices(edges));
+    mesh->build_all_skeletons();
+
+    auto pos = mesh->create_attribute<Vec3f>("vertex_positions", 0);
+    pos[0] = {0.0f, 0.0f, 0.0f};
+    pos[1] = {1.0f, 0.0f, 0.0f};
+    pos[2] = {2.0f, 0.0f, 0.0f};
+
+    // Add explicit edge positions (4 vertices).
+    // Not needed — the mesh already has positions on its 3 vertices.
+
+    return mesh;
+}
 
 TEST_CASE("Object creation and hierarchy", "[scene_graph]") {
     using namespace balsa::scene_graph;
@@ -79,50 +152,21 @@ TEST_CASE("MeshData geometry and version tracking", "[scene_graph]") {
     CHECK_FALSE(md.has_normals());
     CHECK_FALSE(md.has_triangle_indices());
     CHECK_FALSE(md.has_edge_indices());
-    CHECK_FALSE(md.has_vertex_colors());
     CHECK_FALSE(md.has_scalar_field());
 
     uint64_t v0 = md.version();
 
-    // Set positions
-    std::vector<Vec3f> positions(4);
-    for (auto &p : positions) {
-        p(0) = 0.0f;
-        p(1) = 0.0f;
-        p(2) = 0.0f;
-    }
-    md.set_positions(positions);
+    // Set mesh with positions and normals.
+    auto mesh = make_quad_mesh(/*with_normals=*/true);
+    md.set_mesh(mesh);
+
     CHECK(md.vertex_count() == 4);
     CHECK(md.has_positions());
-    CHECK(md.version() > v0);
-    uint64_t v1 = md.version();
-
-    // Set triangle indices
-    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
-    md.set_triangle_indices(tri_idx);
-    CHECK(md.triangle_count() == 2);
-    CHECK(md.has_triangle_indices());
-    CHECK(md.version() > v1);
-    uint64_t v2 = md.version();
-
-    // Set edge indices
-    std::vector<uint32_t> edge_idx = { 0, 1, 1, 2, 2, 3, 3, 0 };
-    md.set_edge_indices(edge_idx);
-    CHECK(md.edge_count() == 4);
-    CHECK(md.has_edge_indices());
-    CHECK(md.version() > v2);
-    uint64_t v3 = md.version();
-
-    // Set normals
-    std::vector<Vec3f> normals(4);
-    for (auto &n : normals) {
-        n(0) = 0.0f;
-        n(1) = 0.0f;
-        n(2) = 1.0f;
-    }
-    md.set_normals(normals);
     CHECK(md.has_normals());
-    CHECK(md.version() > v3);
+    CHECK(md.has_triangle_indices());
+    CHECK(md.triangle_count() == 2);
+    CHECK(md.has_edge_indices());
+    CHECK(md.version() > v0);
 }
 
 TEST_CASE("MeshData auto-derives edges from triangles", "[scene_graph]") {
@@ -130,48 +174,24 @@ TEST_CASE("MeshData auto-derives edges from triangles", "[scene_graph]") {
 
     MeshData md;
 
-    // Set triangle indices for two triangles sharing an edge:
+    // Two triangles sharing an edge:
     //   tri 0: (0, 1, 2)
     //   tri 1: (0, 2, 3)
     //
     // Expected unique edges: 0-1, 1-2, 0-2, 2-3, 0-3 = 5 edges
-    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
-    md.set_triangle_indices(tri_idx);
+    auto mesh = make_quad_mesh();
+    md.set_mesh(mesh);
 
     CHECK(md.has_triangle_indices());
     CHECK(md.triangle_count() == 2);
-    CHECK(md.has_topology());
 
-    // Edges should be auto-derived
+    // Edges should be auto-derived from the mesh skeleton.
     CHECK(md.has_edge_indices());
     CHECK(md.edge_count() == 5);
 
-    // Verify edge indices are valid vertex references
+    // Verify edge indices are valid vertex references.
     auto edges = md.edge_indices();
-    for (std::size_t i = 0; i < edges.size(); ++i) {
-        CHECK(edges[i] < 4);
-    }
-}
-
-TEST_CASE("MeshData explicit edges override auto-derived", "[scene_graph]") {
-    using namespace balsa::scene_graph;
-
-    MeshData md;
-
-    // Set triangles first (auto-derives 5 edges)
-    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
-    md.set_triangle_indices(tri_idx);
-    CHECK(md.edge_count() == 5);
-
-    // Explicitly set fewer edges — should override
-    std::vector<uint32_t> edge_idx = { 0, 1, 2, 3 };
-    md.set_edge_indices(edge_idx);
-    CHECK(md.edge_count() == 2);
-
-    // Setting triangles again should NOT override explicit edges
-    std::vector<uint32_t> tri_idx2 = { 0, 1, 2 };
-    md.set_triangle_indices(tri_idx2);
-    CHECK(md.edge_count() == 2);// Still the explicit edges
+    for (std::size_t i = 0; i < edges.size(); ++i) { CHECK(edges[i] < 4); }
 }
 
 TEST_CASE("MeshData topology from single triangle", "[scene_graph]") {
@@ -179,32 +199,98 @@ TEST_CASE("MeshData topology from single triangle", "[scene_graph]") {
 
     MeshData md;
 
-    std::vector<uint32_t> tri_idx = { 0, 1, 2 };
-    md.set_triangle_indices(tri_idx);
+    auto mesh = make_single_tri_mesh();
+    md.set_mesh(mesh);
 
-    CHECK(md.has_topology());
     CHECK(md.triangle_count() == 1);
-    CHECK(md.edge_count() == 3);// A single triangle has 3 edges
+    CHECK(md.edge_count() == 3); // A single triangle has 3 edges
 }
 
-TEST_CASE("MeshData no topology without triangles", "[scene_graph]") {
+TEST_CASE("MeshData edge-only mesh has no triangles", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
     MeshData md;
 
-    // Only set positions and explicit edges — no topology
-    std::vector<Vec3f> positions(4);
-    for (auto &p : positions) {
-        p(0) = p(1) = p(2) = 0.0f;
-    }
-    md.set_positions(positions);
+    auto mesh = make_edge_mesh();
+    md.set_mesh(mesh);
 
-    std::vector<uint32_t> edge_idx = { 0, 1, 1, 2 };
-    md.set_edge_indices(edge_idx);
-
-    CHECK_FALSE(md.has_topology());
+    // Edge mesh: has edges but no triangles.
+    CHECK_FALSE(md.has_triangle_indices());
     CHECK(md.has_edge_indices());
     CHECK(md.edge_count() == 2);
+    CHECK(md.has_positions());
+    CHECK(md.vertex_count() == 3);
+}
+
+TEST_CASE("MeshData role assignment and clearing", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshData md;
+    auto mesh = make_quad_mesh(/*with_normals=*/true);
+    md.set_mesh(mesh);
+
+    // set_mesh auto-assigns by convention name.
+    CHECK(md.has_positions());
+    CHECK(md.has_normals());
+    CHECK_FALSE(md.has_scalar_field());
+
+    uint64_t v1 = md.version();
+
+    // Clear positions.
+    md.clear_position();
+    CHECK_FALSE(md.has_positions());
+    CHECK(md.version() > v1);
+
+    // Clear normals.
+    uint64_t v2 = md.version();
+    md.clear_normal();
+    CHECK_FALSE(md.has_normals());
+    CHECK(md.version() > v2);
+
+    // Re-assign position from discovered attributes.
+    uint64_t v3 = md.version();
+    const auto &discovered = md.discovered_attributes();
+    REQUIRE(!discovered.empty());
+    for (const auto &da : discovered) {
+        if (da.name == "vertex_positions") {
+            md.assign_position(da.handle);
+            break;
+        }
+    }
+    CHECK(md.has_positions());
+    CHECK(md.version() > v3);
+}
+
+TEST_CASE("MeshData discovered attributes", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshData md;
+    auto mesh = make_quad_mesh(/*with_normals=*/true);
+    md.set_mesh(mesh);
+
+    const auto &discovered = md.discovered_attributes();
+
+    // Should have at least vertex_positions and vertex_normals.
+    bool found_pos = false;
+    bool found_nrm = false;
+    for (const auto &da : discovered) {
+        if (da.name == "vertex_positions") {
+            found_pos = true;
+            CHECK(da.dimension == 0);
+            CHECK(da.component_count == 3);
+            CHECK(da.is_floating_point);
+            CHECK(da.count == 4);
+        }
+        if (da.name == "vertex_normals") {
+            found_nrm = true;
+            CHECK(da.dimension == 0);
+            CHECK(da.component_count == 3);
+            CHECK(da.is_floating_point);
+            CHECK(da.count == 4);
+        }
+    }
+    CHECK(found_pos);
+    CHECK(found_nrm);
 }
 
 TEST_CASE("MeshData as Object feature", "[scene_graph]") {
@@ -213,20 +299,16 @@ TEST_CASE("MeshData as Object feature", "[scene_graph]") {
     Object obj("mesh_obj");
     auto &md = obj.emplace_feature<MeshData>();
 
-    // Verify it can be found via find_feature
+    // Verify it can be found via find_feature.
     MeshData *found = obj.find_feature<MeshData>();
     REQUIRE(found != nullptr);
     CHECK(found == &md);
 
-    // Set some data and verify through the found pointer
-    std::vector<Vec3f> positions(3);
-    for (std::size_t i = 0; i < 3; ++i) {
-        positions[i](0) = static_cast<float>(i);
-        positions[i](1) = 0.0f;
-        positions[i](2) = 0.0f;
-    }
-    md.set_positions(positions);
+    // Set mesh and verify through the found pointer.
+    auto mesh = make_single_tri_mesh();
+    md.set_mesh(mesh);
     CHECK(found->vertex_count() == 3);
+    CHECK(found->has_positions());
 }
 
 TEST_CASE("Object detach", "[scene_graph]") {
@@ -285,7 +367,8 @@ TEST_CASE("Object default TRS is identity", "[scene_graph][trs]") {
     for (int r = 0; r < 4; ++r) {
         for (int c = 0; c < 4; ++c) {
             float expected = (r == c) ? 1.0f : 0.0f;
-            CHECK(static_cast<float>(m(r, c)) == Catch::Approx(expected).margin(1e-6f));
+            CHECK(static_cast<float>(m(r, c))
+                  == Catch::Approx(expected).margin(1e-6f));
         }
     }
 }
@@ -314,7 +397,8 @@ TEST_CASE("Object set/get translation", "[scene_graph][trs]") {
     for (int r = 0; r < 3; ++r) {
         for (int c = 0; c < 3; ++c) {
             float expected = (r == c) ? 1.0f : 0.0f;
-            CHECK(static_cast<float>(m(r, c)) == Catch::Approx(expected).margin(1e-6f));
+            CHECK(static_cast<float>(m(r, c))
+                  == Catch::Approx(expected).margin(1e-6f));
         }
     }
 }
@@ -356,7 +440,8 @@ TEST_CASE("Object set_uniform_scale", "[scene_graph][trs]") {
     CHECK(static_cast<float>(obj.scale_factors()(2)) == Catch::Approx(5.0f));
 }
 
-TEST_CASE("Object translate() adds to current translation", "[scene_graph][trs]") {
+TEST_CASE("Object translate() adds to current translation",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object obj("accum");
@@ -410,9 +495,9 @@ TEST_CASE("Object euler angle round-trip", "[scene_graph][trs]") {
     Object obj("euler");
 
     Vec3f euler_deg;
-    euler_deg(0) = 30.0f;// pitch (X)
-    euler_deg(1) = 45.0f;// yaw (Y)
-    euler_deg(2) = 60.0f;// roll (Z)
+    euler_deg(0) = 30.0f; // pitch (X)
+    euler_deg(1) = 45.0f; // yaw (Y)
+    euler_deg(2) = 60.0f; // roll (Z)
     obj.set_rotation_euler(euler_deg);
 
     Vec3f result = obj.rotation_euler();
@@ -421,7 +506,8 @@ TEST_CASE("Object euler angle round-trip", "[scene_graph][trs]") {
     CHECK(static_cast<float>(result(2)) == Catch::Approx(60.0f).margin(0.01f));
 }
 
-TEST_CASE("Object euler angle zero is identity rotation", "[scene_graph][trs]") {
+TEST_CASE("Object euler angle zero is identity rotation",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object obj("euler_zero");
@@ -433,10 +519,14 @@ TEST_CASE("Object euler angle zero is identity rotation", "[scene_graph][trs]") 
     obj.set_rotation_euler(zero);
 
     // Should produce identity quaternion.
-    CHECK(static_cast<float>(obj.rotation().w()) == Catch::Approx(1.0f).margin(1e-6f));
-    CHECK(static_cast<float>(obj.rotation().x()) == Catch::Approx(0.0f).margin(1e-6f));
-    CHECK(static_cast<float>(obj.rotation().y()) == Catch::Approx(0.0f).margin(1e-6f));
-    CHECK(static_cast<float>(obj.rotation().z()) == Catch::Approx(0.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().w())
+          == Catch::Approx(1.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().x())
+          == Catch::Approx(0.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().y())
+          == Catch::Approx(0.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().z())
+          == Catch::Approx(0.0f).margin(1e-6f));
 }
 
 TEST_CASE("Object reset_transform restores identity", "[scene_graph][trs]") {
@@ -511,23 +601,33 @@ TEST_CASE("Object set_from_transform round-trip", "[scene_graph][trs]") {
     dst.set_from_transform(xf);
 
     // Translation should match.
-    CHECK(static_cast<float>(dst.translation()(0)) == Catch::Approx(3.0f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.translation()(1)) == Catch::Approx(-1.0f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.translation()(2)) == Catch::Approx(7.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.translation()(0))
+          == Catch::Approx(3.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.translation()(1))
+          == Catch::Approx(-1.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.translation()(2))
+          == Catch::Approx(7.0f).margin(1e-4f));
 
     // Scale should match.
-    CHECK(static_cast<float>(dst.scale_factors()(0)) == Catch::Approx(2.0f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.scale_factors()(1)) == Catch::Approx(0.5f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.scale_factors()(2)) == Catch::Approx(1.5f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.scale_factors()(0))
+          == Catch::Approx(2.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.scale_factors()(1))
+          == Catch::Approx(0.5f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.scale_factors()(2))
+          == Catch::Approx(1.5f).margin(1e-4f));
 
     // Euler angles should match (check via re-extraction).
     Vec3f dst_euler = dst.rotation_euler();
-    CHECK(static_cast<float>(dst_euler(0)) == Catch::Approx(20.0f).margin(0.1f));
-    CHECK(static_cast<float>(dst_euler(1)) == Catch::Approx(35.0f).margin(0.1f));
-    CHECK(static_cast<float>(dst_euler(2)) == Catch::Approx(-10.0f).margin(0.1f));
+    CHECK(static_cast<float>(dst_euler(0))
+          == Catch::Approx(20.0f).margin(0.1f));
+    CHECK(static_cast<float>(dst_euler(1))
+          == Catch::Approx(35.0f).margin(0.1f));
+    CHECK(static_cast<float>(dst_euler(2))
+          == Catch::Approx(-10.0f).margin(0.1f));
 }
 
-TEST_CASE("Object local_transform composes T*R*S correctly", "[scene_graph][trs]") {
+TEST_CASE("Object local_transform composes T*R*S correctly",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object obj("trs");
@@ -566,7 +666,8 @@ TEST_CASE("Object local_transform composes T*R*S correctly", "[scene_graph][trs]
     CHECK(static_cast<float>(m(2, 2)) == Catch::Approx(1.0f).margin(1e-5f));
 }
 
-TEST_CASE("Object world_transform composes parent chain", "[scene_graph][trs]") {
+TEST_CASE("Object world_transform composes parent chain",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object root("root");
@@ -596,7 +697,8 @@ TEST_CASE("Object world_transform composes parent chain", "[scene_graph][trs]") 
     CHECK(static_cast<float>(child_world(2, 3)) == Catch::Approx(0.0f));
 }
 
-TEST_CASE("Object world_transform with rotation propagation", "[scene_graph][trs]") {
+TEST_CASE("Object world_transform with rotation propagation",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     // Parent has 90° rotation around Z.
@@ -616,9 +718,12 @@ TEST_CASE("Object world_transform with rotation propagation", "[scene_graph][trs
     // In world space, the child's translation should be rotated by
     // parent's 90°-Z: (1,0,0) → (0,1,0).
     auto child_world = child.world_transform().to_matrix();
-    CHECK(static_cast<float>(child_world(0, 3)) == Catch::Approx(0.0f).margin(1e-5f));
-    CHECK(static_cast<float>(child_world(1, 3)) == Catch::Approx(1.0f).margin(1e-5f));
-    CHECK(static_cast<float>(child_world(2, 3)) == Catch::Approx(0.0f).margin(1e-5f));
+    CHECK(static_cast<float>(child_world(0, 3))
+          == Catch::Approx(0.0f).margin(1e-5f));
+    CHECK(static_cast<float>(child_world(1, 3))
+          == Catch::Approx(1.0f).margin(1e-5f));
+    CHECK(static_cast<float>(child_world(2, 3))
+          == Catch::Approx(0.0f).margin(1e-5f));
 }
 
 TEST_CASE("Object selectability flag", "[scene_graph]") {
