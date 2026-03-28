@@ -1,5 +1,6 @@
 */
 !patches/
+!packagefiles/
 
 # Auto-generated wrap-redirects from transitive deps
 lua.wrap

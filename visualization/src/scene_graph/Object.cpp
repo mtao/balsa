@@ -11,12 +11,11 @@ namespace balsa::scene_graph {
 namespace {
     constexpr float k_deg2rad = std::numbers::pi_v<float> / 180.0f;
     constexpr float k_rad2deg = 180.0f / std::numbers::pi_v<float>;
-}// namespace
+} // namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
-Object::Object(std::string name)
-  : name(std::move(name)) {
+Object::Object(std::string name) : name(std::move(name)) {
     // _translation: Vec3f default-constructs to zero.
     // _rotation: explicitly initialized to identity quaternion {1,0,0,0}.
     // _scale: needs explicit init to {1,1,1}.
@@ -30,16 +29,12 @@ Object::~Object() = default;
 // ── Move operations ─────────────────────────────────────────────────
 
 Object::Object(Object &&other) noexcept
-  : name(std::move(other.name)),
-    visible(other.visible),
-    selectable(other.selectable),
-    _translation(other._translation),
-    _rotation(other._rotation),
-    _scale(other._scale),
-    _parent(other._parent),
+  : name(std::move(other.name)), visible(other.visible),
+    selectable(other.selectable), _translation(other._translation),
+    _rotation(other._rotation), _scale(other._scale), _parent(other._parent),
     _children(std::move(other._children)),
-    _features(std::move(other._features)) {
-
+    _features(std::move(other._features)),
+    _feature_map(std::move(other._feature_map)) {
     // Fix up children's parent pointers.
     for (auto &child : _children) {
         if (child) child->_parent = this;
@@ -62,6 +57,7 @@ Object &Object::operator=(Object &&other) noexcept {
         _parent = other._parent;
         _children = std::move(other._children);
         _features = std::move(other._features);
+        _feature_map = std::move(other._feature_map);
 
         for (auto &child : _children) {
             if (child) child->_parent = this;
@@ -141,9 +137,7 @@ void Object::set_from_transform(const AffineTransformf &xf) {
 }
 
 AffineTransformf Object::world_transform() const {
-    if (_parent) {
-        return _parent->world_transform() * local_transform();
-    }
+    if (_parent) { return _parent->world_transform() * local_transform(); }
     return local_transform();
 }
 
@@ -153,6 +147,7 @@ Object &Object::add_child(std::string child_name) {
     auto child = std::make_unique<Object>(std::move(child_name));
     child->_parent = this;
     _children.push_back(std::move(child));
+    on_child_added(*this, *_children.back());
     return *_children.back();
 }
 
@@ -163,8 +158,12 @@ Object &Object::add_child(std::unique_ptr<Object> child) {
     }
     // Detach from previous parent if needed.
     if (child->_parent) {
+        child->_parent->on_child_removing(*child->_parent, *child);
         auto &siblings = child->_parent->_children;
-        auto it = std::find_if(siblings.begin(), siblings.end(), [&](const auto &p) { return p.get() == child.get(); });
+        auto it =
+            std::find_if(siblings.begin(), siblings.end(), [&](const auto &p) {
+                return p.get() == child.get();
+            });
         if (it != siblings.end()) {
             // Release ownership without destroying — we're taking it.
             it->release();
@@ -173,17 +172,22 @@ Object &Object::add_child(std::unique_ptr<Object> child) {
     }
     child->_parent = this;
     _children.push_back(std::move(child));
+    on_child_added(*this, *_children.back());
     return *_children.back();
 }
 
 std::unique_ptr<Object> Object::detach() {
     if (!_parent) return nullptr;
-    if (permanent) return nullptr;// permanent objects cannot be detached
+    if (permanent) return nullptr; // permanent objects cannot be detached
 
     auto &siblings = _parent->_children;
-    auto it = std::find_if(siblings.begin(), siblings.end(), [this](const auto &p) { return p.get() == this; });
+    auto it = std::find_if(siblings.begin(),
+                           siblings.end(),
+                           [this](const auto &p) { return p.get() == this; });
 
     if (it == siblings.end()) return nullptr;
+
+    _parent->on_child_removing(*_parent, *this);
 
     std::unique_ptr<Object> self = std::move(*it);
     siblings.erase(it);
@@ -195,10 +199,24 @@ std::unique_ptr<Object> Object::detach() {
 
 bool Object::remove_feature(AbstractFeature *feature) {
     if (!feature) return false;
-    auto it = std::find_if(_features.begin(), _features.end(), [feature](const auto &p) { return p.get() == feature; });
+    auto it =
+        std::find_if(_features.begin(),
+                     _features.end(),
+                     [feature](const auto &p) { return p.get() == feature; });
     if (it == _features.end()) return false;
+
+    // Signal before destruction.
+    on_feature_removing(*this, *feature);
+
+    // Remove from type map.  Use typeid of the concrete object so it matches
+    // the key inserted by emplace_feature<F>().
+    auto map_it = _feature_map.find(std::type_index(typeid(*feature)));
+    if (map_it != _feature_map.end() && map_it->second == feature) {
+        _feature_map.erase(map_it);
+    }
+
     _features.erase(it);
     return true;
 }
 
-}// namespace balsa::scene_graph
+} // namespace balsa::scene_graph

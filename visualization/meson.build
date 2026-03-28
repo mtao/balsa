@@ -35,9 +35,10 @@ endif
 
 colormap_proj = subproject('colormap_shaders')
 colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep')
+sigslot_dep = dependency('sigslot', fallback: ['sigslot', 'sigslot_dep'])
 
 # Public deps: propagated to consumers via declare_dependency().
-visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
+visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep, sigslot_dep]
 # Private deps: used only for building the library (not propagated).
 visualization_private_deps = []
 
@@ -58,6 +59,7 @@ visualization_sources = [
   'src/scene_graph/MeshData.cpp',
   'src/scene_graph/BVHData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
+  'src/scene_graph/FeatureIndex.cpp',
 ]
 
 if get_option('qt')

@@ -1,15 +1,16 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_all.hpp>
 
-#include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/Camera.hpp>
+#include <balsa/scene_graph/FeatureIndex.hpp>
+#include <balsa/scene_graph/Light.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/types.hpp>
 
 #include <zipper/transform/common.hpp>
 #include <zipper/transform/model.hpp>
 #include <zipper/transform/quaternion_transform.hpp>
-
 
 TEST_CASE("Object creation and hierarchy", "[scene_graph]") {
     using namespace balsa::scene_graph;
@@ -98,7 +99,7 @@ TEST_CASE("MeshData geometry and version tracking", "[scene_graph]") {
     uint64_t v1 = md.version();
 
     // Set triangle indices
-    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
+    std::vector<uint32_t> tri_idx = {0, 1, 2, 0, 2, 3};
     md.set_triangle_indices(tri_idx);
     CHECK(md.triangle_count() == 2);
     CHECK(md.has_triangle_indices());
@@ -106,7 +107,7 @@ TEST_CASE("MeshData geometry and version tracking", "[scene_graph]") {
     uint64_t v2 = md.version();
 
     // Set edge indices
-    std::vector<uint32_t> edge_idx = { 0, 1, 1, 2, 2, 3, 3, 0 };
+    std::vector<uint32_t> edge_idx = {0, 1, 1, 2, 2, 3, 3, 0};
     md.set_edge_indices(edge_idx);
     CHECK(md.edge_count() == 4);
     CHECK(md.has_edge_indices());
@@ -135,7 +136,7 @@ TEST_CASE("MeshData auto-derives edges from triangles", "[scene_graph]") {
     //   tri 1: (0, 2, 3)
     //
     // Expected unique edges: 0-1, 1-2, 0-2, 2-3, 0-3 = 5 edges
-    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
+    std::vector<uint32_t> tri_idx = {0, 1, 2, 0, 2, 3};
     md.set_triangle_indices(tri_idx);
 
     CHECK(md.has_triangle_indices());
@@ -148,9 +149,7 @@ TEST_CASE("MeshData auto-derives edges from triangles", "[scene_graph]") {
 
     // Verify edge indices are valid vertex references
     auto edges = md.edge_indices();
-    for (std::size_t i = 0; i < edges.size(); ++i) {
-        CHECK(edges[i] < 4);
-    }
+    for (std::size_t i = 0; i < edges.size(); ++i) { CHECK(edges[i] < 4); }
 }
 
 TEST_CASE("MeshData explicit edges override auto-derived", "[scene_graph]") {
@@ -159,19 +158,19 @@ TEST_CASE("MeshData explicit edges override auto-derived", "[scene_graph]") {
     MeshData md;
 
     // Set triangles first (auto-derives 5 edges)
-    std::vector<uint32_t> tri_idx = { 0, 1, 2, 0, 2, 3 };
+    std::vector<uint32_t> tri_idx = {0, 1, 2, 0, 2, 3};
     md.set_triangle_indices(tri_idx);
     CHECK(md.edge_count() == 5);
 
     // Explicitly set fewer edges — should override
-    std::vector<uint32_t> edge_idx = { 0, 1, 2, 3 };
+    std::vector<uint32_t> edge_idx = {0, 1, 2, 3};
     md.set_edge_indices(edge_idx);
     CHECK(md.edge_count() == 2);
 
     // Setting triangles again should NOT override explicit edges
-    std::vector<uint32_t> tri_idx2 = { 0, 1, 2 };
+    std::vector<uint32_t> tri_idx2 = {0, 1, 2};
     md.set_triangle_indices(tri_idx2);
-    CHECK(md.edge_count() == 2);// Still the explicit edges
+    CHECK(md.edge_count() == 2); // Still the explicit edges
 }
 
 TEST_CASE("MeshData topology from single triangle", "[scene_graph]") {
@@ -179,12 +178,12 @@ TEST_CASE("MeshData topology from single triangle", "[scene_graph]") {
 
     MeshData md;
 
-    std::vector<uint32_t> tri_idx = { 0, 1, 2 };
+    std::vector<uint32_t> tri_idx = {0, 1, 2};
     md.set_triangle_indices(tri_idx);
 
     CHECK(md.has_topology());
     CHECK(md.triangle_count() == 1);
-    CHECK(md.edge_count() == 3);// A single triangle has 3 edges
+    CHECK(md.edge_count() == 3); // A single triangle has 3 edges
 }
 
 TEST_CASE("MeshData no topology without triangles", "[scene_graph]") {
@@ -194,12 +193,10 @@ TEST_CASE("MeshData no topology without triangles", "[scene_graph]") {
 
     // Only set positions and explicit edges — no topology
     std::vector<Vec3f> positions(4);
-    for (auto &p : positions) {
-        p(0) = p(1) = p(2) = 0.0f;
-    }
+    for (auto &p : positions) { p(0) = p(1) = p(2) = 0.0f; }
     md.set_positions(positions);
 
-    std::vector<uint32_t> edge_idx = { 0, 1, 1, 2 };
+    std::vector<uint32_t> edge_idx = {0, 1, 1, 2};
     md.set_edge_indices(edge_idx);
 
     CHECK_FALSE(md.has_topology());
@@ -285,7 +282,8 @@ TEST_CASE("Object default TRS is identity", "[scene_graph][trs]") {
     for (int r = 0; r < 4; ++r) {
         for (int c = 0; c < 4; ++c) {
             float expected = (r == c) ? 1.0f : 0.0f;
-            CHECK(static_cast<float>(m(r, c)) == Catch::Approx(expected).margin(1e-6f));
+            CHECK(static_cast<float>(m(r, c))
+                  == Catch::Approx(expected).margin(1e-6f));
         }
     }
 }
@@ -314,7 +312,8 @@ TEST_CASE("Object set/get translation", "[scene_graph][trs]") {
     for (int r = 0; r < 3; ++r) {
         for (int c = 0; c < 3; ++c) {
             float expected = (r == c) ? 1.0f : 0.0f;
-            CHECK(static_cast<float>(m(r, c)) == Catch::Approx(expected).margin(1e-6f));
+            CHECK(static_cast<float>(m(r, c))
+                  == Catch::Approx(expected).margin(1e-6f));
         }
     }
 }
@@ -356,7 +355,8 @@ TEST_CASE("Object set_uniform_scale", "[scene_graph][trs]") {
     CHECK(static_cast<float>(obj.scale_factors()(2)) == Catch::Approx(5.0f));
 }
 
-TEST_CASE("Object translate() adds to current translation", "[scene_graph][trs]") {
+TEST_CASE("Object translate() adds to current translation",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object obj("accum");
@@ -410,9 +410,9 @@ TEST_CASE("Object euler angle round-trip", "[scene_graph][trs]") {
     Object obj("euler");
 
     Vec3f euler_deg;
-    euler_deg(0) = 30.0f;// pitch (X)
-    euler_deg(1) = 45.0f;// yaw (Y)
-    euler_deg(2) = 60.0f;// roll (Z)
+    euler_deg(0) = 30.0f; // pitch (X)
+    euler_deg(1) = 45.0f; // yaw (Y)
+    euler_deg(2) = 60.0f; // roll (Z)
     obj.set_rotation_euler(euler_deg);
 
     Vec3f result = obj.rotation_euler();
@@ -421,7 +421,8 @@ TEST_CASE("Object euler angle round-trip", "[scene_graph][trs]") {
     CHECK(static_cast<float>(result(2)) == Catch::Approx(60.0f).margin(0.01f));
 }
 
-TEST_CASE("Object euler angle zero is identity rotation", "[scene_graph][trs]") {
+TEST_CASE("Object euler angle zero is identity rotation",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object obj("euler_zero");
@@ -433,10 +434,14 @@ TEST_CASE("Object euler angle zero is identity rotation", "[scene_graph][trs]") 
     obj.set_rotation_euler(zero);
 
     // Should produce identity quaternion.
-    CHECK(static_cast<float>(obj.rotation().w()) == Catch::Approx(1.0f).margin(1e-6f));
-    CHECK(static_cast<float>(obj.rotation().x()) == Catch::Approx(0.0f).margin(1e-6f));
-    CHECK(static_cast<float>(obj.rotation().y()) == Catch::Approx(0.0f).margin(1e-6f));
-    CHECK(static_cast<float>(obj.rotation().z()) == Catch::Approx(0.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().w())
+          == Catch::Approx(1.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().x())
+          == Catch::Approx(0.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().y())
+          == Catch::Approx(0.0f).margin(1e-6f));
+    CHECK(static_cast<float>(obj.rotation().z())
+          == Catch::Approx(0.0f).margin(1e-6f));
 }
 
 TEST_CASE("Object reset_transform restores identity", "[scene_graph][trs]") {
@@ -511,23 +516,33 @@ TEST_CASE("Object set_from_transform round-trip", "[scene_graph][trs]") {
     dst.set_from_transform(xf);
 
     // Translation should match.
-    CHECK(static_cast<float>(dst.translation()(0)) == Catch::Approx(3.0f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.translation()(1)) == Catch::Approx(-1.0f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.translation()(2)) == Catch::Approx(7.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.translation()(0))
+          == Catch::Approx(3.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.translation()(1))
+          == Catch::Approx(-1.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.translation()(2))
+          == Catch::Approx(7.0f).margin(1e-4f));
 
     // Scale should match.
-    CHECK(static_cast<float>(dst.scale_factors()(0)) == Catch::Approx(2.0f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.scale_factors()(1)) == Catch::Approx(0.5f).margin(1e-4f));
-    CHECK(static_cast<float>(dst.scale_factors()(2)) == Catch::Approx(1.5f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.scale_factors()(0))
+          == Catch::Approx(2.0f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.scale_factors()(1))
+          == Catch::Approx(0.5f).margin(1e-4f));
+    CHECK(static_cast<float>(dst.scale_factors()(2))
+          == Catch::Approx(1.5f).margin(1e-4f));
 
     // Euler angles should match (check via re-extraction).
     Vec3f dst_euler = dst.rotation_euler();
-    CHECK(static_cast<float>(dst_euler(0)) == Catch::Approx(20.0f).margin(0.1f));
-    CHECK(static_cast<float>(dst_euler(1)) == Catch::Approx(35.0f).margin(0.1f));
-    CHECK(static_cast<float>(dst_euler(2)) == Catch::Approx(-10.0f).margin(0.1f));
+    CHECK(static_cast<float>(dst_euler(0))
+          == Catch::Approx(20.0f).margin(0.1f));
+    CHECK(static_cast<float>(dst_euler(1))
+          == Catch::Approx(35.0f).margin(0.1f));
+    CHECK(static_cast<float>(dst_euler(2))
+          == Catch::Approx(-10.0f).margin(0.1f));
 }
 
-TEST_CASE("Object local_transform composes T*R*S correctly", "[scene_graph][trs]") {
+TEST_CASE("Object local_transform composes T*R*S correctly",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object obj("trs");
@@ -566,7 +581,8 @@ TEST_CASE("Object local_transform composes T*R*S correctly", "[scene_graph][trs]
     CHECK(static_cast<float>(m(2, 2)) == Catch::Approx(1.0f).margin(1e-5f));
 }
 
-TEST_CASE("Object world_transform composes parent chain", "[scene_graph][trs]") {
+TEST_CASE("Object world_transform composes parent chain",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     Object root("root");
@@ -596,7 +612,8 @@ TEST_CASE("Object world_transform composes parent chain", "[scene_graph][trs]") 
     CHECK(static_cast<float>(child_world(2, 3)) == Catch::Approx(0.0f));
 }
 
-TEST_CASE("Object world_transform with rotation propagation", "[scene_graph][trs]") {
+TEST_CASE("Object world_transform with rotation propagation",
+          "[scene_graph][trs]") {
     using namespace balsa::scene_graph;
 
     // Parent has 90° rotation around Z.
@@ -616,9 +633,12 @@ TEST_CASE("Object world_transform with rotation propagation", "[scene_graph][trs
     // In world space, the child's translation should be rotated by
     // parent's 90°-Z: (1,0,0) → (0,1,0).
     auto child_world = child.world_transform().to_matrix();
-    CHECK(static_cast<float>(child_world(0, 3)) == Catch::Approx(0.0f).margin(1e-5f));
-    CHECK(static_cast<float>(child_world(1, 3)) == Catch::Approx(1.0f).margin(1e-5f));
-    CHECK(static_cast<float>(child_world(2, 3)) == Catch::Approx(0.0f).margin(1e-5f));
+    CHECK(static_cast<float>(child_world(0, 3))
+          == Catch::Approx(0.0f).margin(1e-5f));
+    CHECK(static_cast<float>(child_world(1, 3))
+          == Catch::Approx(1.0f).margin(1e-5f));
+    CHECK(static_cast<float>(child_world(2, 3))
+          == Catch::Approx(0.0f).margin(1e-5f));
 }
 
 TEST_CASE("Object selectability flag", "[scene_graph]") {
@@ -673,4 +693,397 @@ TEST_CASE("Object rotate() post-multiplies quaternion", "[scene_graph][trs]") {
     CHECK(static_cast<float>(m(2, 2)) == Catch::Approx(1.0f).margin(1e-5f));
     CHECK(static_cast<float>(m(0, 1)) == Catch::Approx(0.0f).margin(1e-5f));
     CHECK(static_cast<float>(m(1, 0)) == Catch::Approx(0.0f).margin(1e-5f));
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ── O(1) Feature Lookup Tests ──────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+TEST_CASE("find_feature O(1) exact type lookup", "[scene_graph][feature_map]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    auto &cam = obj.emplace_feature<Camera>();
+    auto &light = obj.emplace_feature<Light>();
+
+    // Exact type queries should hit the map.
+    CHECK(obj.find_feature<Camera>() == &cam);
+    CHECK(obj.find_feature<Light>() == &light);
+
+    // Type not present returns nullptr.
+    CHECK(obj.find_feature<MeshData>() == nullptr);
+}
+
+TEST_CASE("find_feature const overload", "[scene_graph][feature_map]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    obj.emplace_feature<Camera>();
+
+    const Object &cobj = obj;
+    const Camera *cam = cobj.find_feature<Camera>();
+    REQUIRE(cam != nullptr);
+    CHECK(cobj.find_feature<MeshData>() == nullptr);
+}
+
+TEST_CASE("remove_feature clears type map", "[scene_graph][feature_map]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    auto &cam = obj.emplace_feature<Camera>();
+    REQUIRE(obj.find_feature<Camera>() == &cam);
+
+    bool removed = obj.remove_feature(&cam);
+    CHECK(removed);
+    CHECK(obj.find_feature<Camera>() == nullptr);
+    CHECK(obj.features().empty());
+}
+
+TEST_CASE("remove_feature nonexistent returns false",
+          "[scene_graph][feature_map]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    Object other("other");
+    auto &cam = other.emplace_feature<Camera>();
+
+    CHECK_FALSE(obj.remove_feature(&cam));
+    CHECK_FALSE(obj.remove_feature(nullptr));
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ── Signal Tests ───────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+TEST_CASE("on_feature_added fires on emplace", "[scene_graph][signals]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    int count = 0;
+    AbstractFeature *received = nullptr;
+
+    obj.on_feature_added.connect([&](Object &, AbstractFeature &f) {
+        ++count;
+        received = &f;
+    });
+
+    auto &cam = obj.emplace_feature<Camera>();
+    CHECK(count == 1);
+    CHECK(received == &cam);
+
+    obj.emplace_feature<Light>();
+    CHECK(count == 2);
+}
+
+TEST_CASE("on_feature_removing fires on remove", "[scene_graph][signals]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    auto &cam = obj.emplace_feature<Camera>();
+
+    int count = 0;
+    AbstractFeature *received = nullptr;
+
+    obj.on_feature_removing.connect([&](Object &, AbstractFeature &f) {
+        ++count;
+        received = &f;
+    });
+
+    obj.remove_feature(&cam);
+    CHECK(count == 1);
+    CHECK(received == &cam);
+}
+
+TEST_CASE("on_child_added fires on add_child", "[scene_graph][signals]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    int count = 0;
+    std::string last_child_name;
+
+    root.on_child_added.connect([&](Object &, Object &child) {
+        ++count;
+        last_child_name = child.name;
+    });
+
+    root.add_child("child1");
+    CHECK(count == 1);
+    CHECK(last_child_name == "child1");
+
+    root.add_child("child2");
+    CHECK(count == 2);
+    CHECK(last_child_name == "child2");
+}
+
+TEST_CASE("on_child_removing fires on detach", "[scene_graph][signals]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    auto &child = root.add_child("child");
+
+    int count = 0;
+    root.on_child_removing.connect([&](Object &, Object &c) {
+        ++count;
+        CHECK(c.name == "child");
+    });
+
+    auto detached = child.detach();
+    CHECK(count == 1);
+    REQUIRE(detached != nullptr);
+}
+
+TEST_CASE("mark_modified fires on_modified signal", "[scene_graph][signals]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("test");
+    auto &cam = obj.emplace_feature<Camera>();
+
+    int count = 0;
+    cam.on_modified.connect([&](AbstractFeature &f) {
+        ++count;
+        CHECK(&f == &cam);
+    });
+
+    cam.mark_modified();
+    CHECK(count == 1);
+
+    cam.mark_modified();
+    CHECK(count == 2);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ── FeatureIndex Tests ─────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+TEST_CASE("FeatureIndex tracks existing features",
+          "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    auto &c1 = root.add_child("cam_node");
+    c1.emplace_feature<Camera>();
+    auto &c2 = root.add_child("mesh_node");
+    c2.emplace_feature<MeshData>();
+
+    FeatureIndex index;
+    index.track(root);
+
+    CHECK(index.count<Camera>() == 1);
+    CHECK(index.count<MeshData>() == 1);
+    CHECK(index.count<Light>() == 0);
+
+    auto cam_objects = index.objects_with<Camera>();
+    REQUIRE(cam_objects.size() == 1);
+    CHECK(cam_objects[0] == &c1);
+}
+
+TEST_CASE("FeatureIndex auto-updates on feature add/remove",
+          "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    auto &child = root.add_child("child");
+
+    FeatureIndex index;
+    index.track(root);
+
+    CHECK(index.count<Camera>() == 0);
+
+    // Add a feature after tracking.
+    auto &cam = child.emplace_feature<Camera>();
+    CHECK(index.count<Camera>() == 1);
+
+    // Remove it.
+    child.remove_feature(&cam);
+    CHECK(index.count<Camera>() == 0);
+}
+
+TEST_CASE("FeatureIndex auto-tracks new children",
+          "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    FeatureIndex index;
+    index.track(root);
+
+    CHECK(index.count<Camera>() == 0);
+
+    // Add a child with a feature after tracking started.
+    auto &child = root.add_child("late_child");
+    child.emplace_feature<Camera>();
+
+    CHECK(index.count<Camera>() == 1);
+}
+
+TEST_CASE("FeatureIndex untracks on child removal",
+          "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    auto &child = root.add_child("child");
+    child.emplace_feature<Camera>();
+
+    FeatureIndex index;
+    index.track(root);
+    CHECK(index.count<Camera>() == 1);
+
+    // Detach the child — its features should be removed from the index.
+    auto detached = child.detach();
+    CHECK(index.count<Camera>() == 0);
+}
+
+TEST_CASE("FeatureIndex destroyed before Objects is safe",
+          "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    root.add_child("child").emplace_feature<Camera>();
+
+    {
+        FeatureIndex index;
+        index.track(root);
+        CHECK(index.count<Camera>() == 1);
+    }
+    // index destroyed — observer disconnected.
+    // Adding more features should not crash.
+    root.add_child("child2").emplace_feature<Light>();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ── Traversal Tests ────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+
+TEST_CASE("for_each_descendant visits all descendants",
+          "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    //      root
+    //      / \     .
+    //     a   b
+    //    /
+    //   c
+    Object root("root");
+    root.add_child("a").add_child("c");
+    root.add_child("b");
+
+    std::vector<std::string> visited;
+    root.for_each_descendant([&](Object &obj) { visited.push_back(obj.name); });
+
+    REQUIRE(visited.size() == 3);
+    // DFS pre-order: a, c, b
+    CHECK(visited[0] == "a");
+    CHECK(visited[1] == "c");
+    CHECK(visited[2] == "b");
+}
+
+TEST_CASE("for_each_descendant const overload", "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    root.add_child("a");
+    root.add_child("b");
+
+    const Object &croot = root;
+    int count = 0;
+    croot.for_each_descendant([&](const Object &) { ++count; });
+    CHECK(count == 2);
+}
+
+TEST_CASE("for_each_descendant with pruning", "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    //      root
+    //      / \     .
+    //     a   b
+    //    /
+    //   c
+    Object root("root");
+    root.add_child("a").add_child("c");
+    root.add_child("b");
+
+    std::vector<std::string> visited;
+    root.for_each_descendant([&](Object &obj) -> bool {
+        visited.push_back(obj.name);
+        return obj.name != "a"; // prune subtree under "a"
+    });
+
+    REQUIRE(visited.size() == 2);
+    CHECK(visited[0] == "a");
+    CHECK(visited[1] == "b");
+    // "c" should NOT be visited because "a" was pruned.
+}
+
+TEST_CASE("for_each_ancestor walks parent chain", "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    auto &a = root.add_child("a");
+    auto &c = a.add_child("c");
+
+    std::vector<std::string> ancestors;
+    c.for_each_ancestor(
+        [&](const Object &obj) { ancestors.push_back(obj.name); });
+
+    REQUIRE(ancestors.size() == 2);
+    CHECK(ancestors[0] == "a");
+    CHECK(ancestors[1] == "root");
+}
+
+TEST_CASE("for_each_ancestor with early stop", "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    auto &a = root.add_child("a");
+    auto &c = a.add_child("c");
+
+    std::vector<std::string> ancestors;
+    c.for_each_ancestor([&](const Object &obj) -> bool {
+        ancestors.push_back(obj.name);
+        return false; // stop after first ancestor
+    });
+
+    REQUIRE(ancestors.size() == 1);
+    CHECK(ancestors[0] == "a");
+}
+
+TEST_CASE("find_descendant returns first match", "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    root.add_child("a").emplace_feature<Camera>();
+    root.add_child("b").emplace_feature<Camera>();
+
+    Object *found = root.find_descendant(
+        [](Object &obj) { return obj.find_feature<Camera>() != nullptr; });
+
+    REQUIRE(found != nullptr);
+    CHECK(found->name == "a"); // first in DFS order
+}
+
+TEST_CASE("find_descendant returns nullptr if no match",
+          "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    root.add_child("a");
+    root.add_child("b");
+
+    Object *found = root.find_descendant(
+        [](Object &obj) { return obj.find_feature<Camera>() != nullptr; });
+
+    CHECK(found == nullptr);
+}
+
+TEST_CASE("find_descendant const overload", "[scene_graph][traversal]") {
+    using namespace balsa::scene_graph;
+
+    Object root("root");
+    root.add_child("target").emplace_feature<Light>();
+
+    const Object &croot = root;
+    const Object *found = croot.find_descendant(
+        [](const Object &obj) { return obj.find_feature<Light>() != nullptr; });
+
+    REQUIRE(found != nullptr);
+    CHECK(found->name == "target");
 }

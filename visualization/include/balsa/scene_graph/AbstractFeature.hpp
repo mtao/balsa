@@ -1,6 +1,8 @@
 #if !defined(BALSA_SCENE_GRAPH_ABSTRACT_FEATURE_HPP)
 #define BALSA_SCENE_GRAPH_ABSTRACT_FEATURE_HPP
 
+#include <sigslot/signal.hpp>
+
 namespace balsa::scene_graph {
 
 class Object;
@@ -21,6 +23,13 @@ class AbstractFeature {
     Object &object() { return *_object; }
     const Object &object() const { return *_object; }
 
+    // Signal emitted when this feature's data has changed.
+    // Subscribers receive a reference to the modified feature.
+    sigslot::signal_st<AbstractFeature &> on_modified;
+
+    // Call this from derived classes after mutating internal state.
+    void mark_modified() { on_modified(*this); }
+
   protected:
     AbstractFeature() = default;
 
@@ -34,6 +43,6 @@ class AbstractFeature {
     Object *_object = nullptr;
 };
 
-}// namespace balsa::scene_graph
+} // namespace balsa::scene_graph
 
 #endif
