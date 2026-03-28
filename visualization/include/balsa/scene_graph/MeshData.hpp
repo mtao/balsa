@@ -120,6 +120,11 @@ class MeshData : public AbstractFeature {
         return _discovered;
     }
 
+    // Re-scan the source mesh's AttributeManager for new attributes
+    // added since the last set_mesh() or rediscover_attributes() call.
+    // Preserves existing role bindings.  Bumps the version counter.
+    void rediscover_attributes();
+
     // ── Role assignment ─────────────────────────────────────────────
     //
     // Bind an attribute to a visualization role.  The handle must

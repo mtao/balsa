@@ -48,6 +48,14 @@
 #include <quiver/attributes/StoredAttribute.hpp>
 #include <quiver/io/mesh_io.hpp>
 
+#if BALSA_HAS_LUA
+#include <balsa/geometry/lua/bindings.hpp>
+#include <balsa/lua/lua_repl.hpp>
+#include <balsa/visualization/qt/lua_repl_widget.hpp>
+#include <quiver/lua/bindings.hpp>
+#include <sol/sol.hpp>
+#endif
+
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
 #define emit
 
@@ -116,6 +124,44 @@ class MeshViewerMainWindow : public QMainWindow {
         // (Blender-style right sidebar with both panels visible)
         splitDockWidget(_outliner_dock, _controls_dock, Qt::Vertical);
 
+#if BALSA_HAS_LUA
+        // ── Lua REPL setup ───────────────────────────────────────────
+        _repl = std::make_unique<balsa::lua::LuaRepl>();
+
+        // Load quiver and geometry bindings into the Lua state.
+        quiver::lua::load_bindings(_repl->lua_state());
+        balsa::geometry::lua::load_bindings(_repl->lua_state());
+
+        // Post-execute callback: rediscover attributes on all scene
+        // meshes so that Lua-created attributes appear in the UI.
+        _repl->set_post_execute_callback([this]() {
+            auto visit = [](auto &self, sg::Object &obj) -> void {
+                if (auto *md = obj.find_feature<sg::MeshData>()) {
+                    md->rediscover_attributes();
+                }
+                for (auto &child : obj.children()) { self(self, *child); }
+            };
+            visit(visit, _scene->root());
+        });
+
+        // Create REPL widget and dock.
+        _repl_widget = new viz::qt::LuaReplWidget();
+        _repl_widget->set_repl(_repl.get());
+
+        _repl_dock = new QDockWidget("Lua REPL", this);
+        _repl_dock->setWidget(_repl_widget);
+        _repl_dock->setAllowedAreas(Qt::BottomDockWidgetArea
+                                    | Qt::LeftDockWidgetArea
+                                    | Qt::RightDockWidgetArea);
+        addDockWidget(Qt::BottomDockWidgetArea, _repl_dock);
+
+        // Re-render when a Lua command is executed.
+        connect(_repl_widget,
+                &viz::qt::LuaReplWidget::command_executed,
+                _vk_window,
+                [this]() { _vk_window->requestUpdate(); });
+#endif
+
         // ── Wire outliner selection → properties panel ───────────────
         connect(_outliner,
                 &viz::qt::SceneGraphWidget::object_selected,
@@ -178,6 +224,11 @@ class MeshViewerMainWindow : public QMainWindow {
     viz::qt::SceneGraphWidget *_outliner = nullptr;
     QDockWidget *_outliner_dock = nullptr;
     QDockWidget *_controls_dock = nullptr;
+#if BALSA_HAS_LUA
+    std::unique_ptr<balsa::lua::LuaRepl> _repl;
+    viz::qt::LuaReplWidget *_repl_widget = nullptr;
+    QDockWidget *_repl_dock = nullptr;
+#endif
     std::filesystem::path _initial_obj;
     bool _loaded = false;
 
@@ -208,6 +259,11 @@ class MeshViewerMainWindow : public QMainWindow {
         QMenu *view_menu = menuBar()->addMenu(tr("&View"));
         view_menu->addAction(_outliner_dock->toggleViewAction());
         view_menu->addAction(_controls_dock->toggleViewAction());
+#if BALSA_HAS_LUA
+        if (_repl_dock) {
+            view_menu->addAction(_repl_dock->toggleViewAction());
+        }
+#endif
 
         // Scene Lighting is part of the Mesh Properties dock, so we
         // just ensure the properties dock is visible when the user

@@ -519,6 +519,13 @@ void MeshData::discover_attributes() {
     }
 }
 
+void MeshData::rediscover_attributes() {
+    if (!_mesh) return;
+
+    discover_attributes();
+    ++_version;
+}
+
 // ── Topology index extraction ───────────────────────────────────────
 
 void MeshData::extract_topology_indices() {

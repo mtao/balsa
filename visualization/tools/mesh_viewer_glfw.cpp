@@ -42,6 +42,14 @@
 #include <quiver/attributes/StoredAttribute.hpp>
 #include <quiver/io/mesh_io.hpp>
 
+#if BALSA_HAS_LUA
+#include <balsa/geometry/lua/bindings.hpp>
+#include <balsa/lua/lua_repl.hpp>
+#include <balsa/visualization/vulkan/imgui/lua_repl_panel.hpp>
+#include <quiver/lua/bindings.hpp>
+#include <sol/sol.hpp>
+#endif
+
 namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
 namespace sg = balsa::scene_graph;
@@ -70,6 +78,10 @@ class MeshViewerScene : public vk_viz::MeshScene {
         _open_file_cb = std::move(cb);
     }
 
+#if BALSA_HAS_LUA
+    void set_repl(balsa::lua::LuaRepl *repl) { _repl = repl; }
+#endif
+
     void draw(vk_viz::Film &film) override {
         // Draw mesh geometry first
         MeshScene::draw(film);
@@ -80,6 +92,11 @@ class MeshViewerScene : public vk_viz::MeshScene {
             draw_main_menu_bar();
             draw_open_file_dialog();
             vk_viz::imgui::draw_mesh_controls(*this, _panel_state);
+#if BALSA_HAS_LUA
+            if (_repl) {
+                vk_viz::imgui::draw_lua_repl(_repl_panel_state, *_repl);
+            }
+#endif
             _imgui.render(film);
         }
     }
@@ -93,6 +110,10 @@ class MeshViewerScene : public vk_viz::MeshScene {
     vk_viz::ImGuiIntegration _imgui;
     vk_viz::imgui::MeshPanelState _panel_state;
     OpenFileCallback _open_file_cb;
+#if BALSA_HAS_LUA
+    balsa::lua::LuaRepl *_repl = nullptr;
+    vk_viz::imgui::LuaReplPanelState _repl_panel_state;
+#endif
 
     // ── ImGui "Open File" dialog state ───────────────────────────────
     bool _show_open_dialog = false;
@@ -118,6 +139,12 @@ class MeshViewerScene : public vk_viz::MeshScene {
                 ImGui::MenuItem("Scene Lighting",
                                 nullptr,
                                 &_panel_state.show_lighting_panel);
+#if BALSA_HAS_LUA
+                if (_repl) {
+                    ImGui::MenuItem(
+                        "Lua REPL", nullptr, &_repl_panel_state.show_panel);
+                }
+#endif
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -179,6 +206,30 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         // Wire up the "Open" dialog callback
         _scene->set_open_file_callback(
             [this](const std::filesystem::path &p) { load_mesh(p); });
+
+#if BALSA_HAS_LUA
+        // ── Lua REPL setup ──────────────────────────────────────────
+        _repl = std::make_unique<balsa::lua::LuaRepl>();
+
+        // Load quiver and geometry bindings into the Lua state.
+        quiver::lua::load_bindings(_repl->lua_state());
+        balsa::geometry::lua::load_bindings(_repl->lua_state());
+
+        // Post-execute callback: rediscover attributes on all scene
+        // meshes so that Lua-created attributes appear in the UI.
+        _repl->set_post_execute_callback([this]() {
+            // Recursive traversal of scene graph to refresh all MeshData.
+            auto visit = [](auto &self, sg::Object &obj) -> void {
+                if (auto *md = obj.find_feature<sg::MeshData>()) {
+                    md->rediscover_attributes();
+                }
+                for (auto &child : obj.children()) { self(self, *child); }
+            };
+            visit(visit, _scene->root());
+        });
+
+        _scene->set_repl(_repl.get());
+#endif
 
         // Set up orbit camera
         _camera = std::make_shared<vk_viz::OrbitCameraController>(_scene.get());
@@ -315,6 +366,9 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
   private:
     std::shared_ptr<MeshViewerScene> _scene;
     std::shared_ptr<vk_viz::OrbitCameraController> _camera;
+#if BALSA_HAS_LUA
+    std::unique_ptr<balsa::lua::LuaRepl> _repl;
+#endif
 };
 
 // ── main ─────────────────────────────────────────────────────────────
