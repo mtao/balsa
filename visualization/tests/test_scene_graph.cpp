@@ -2,9 +2,11 @@
 #include <catch2/catch_all.hpp>
 
 #include <balsa/scene_graph/Camera.hpp>
+#include <balsa/scene_graph/ImageData.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/types.hpp>
+#include <balsa/visualization/image_io.hpp>
 
 #include <quiver/Mesh.hpp>
 
@@ -13,6 +15,7 @@
 #include <zipper/transform/quaternion_transform.hpp>
 
 #include <array>
+#include <cstdio>
 #include <memory>
 
 // ── Helper: create a quiver Mesh<2> with positions and normals ──────
@@ -756,6 +759,346 @@ TEST_CASE("Object reparenting via add_child(unique_ptr)", "[scene_graph]") {
     CHECK(reparented.parent() == &parent2);
     CHECK(reparented.name == "orphan");
     CHECK(parent2.children_count() == 1);
+}
+
+// ── ImageData Tests ────────────────────────────────────────────────
+
+TEST_CASE("ImageData default state", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    CHECK(img.width() == 0);
+    CHECK(img.height() == 0);
+    CHECK(img.format() == ImageData::Format::RGBA8);
+    CHECK_FALSE(img.has_pixels());
+    CHECK(img.pixels().empty());
+    CHECK(img.version() == 0);
+    CHECK_FALSE(img.dirty_region().has_value());
+
+    // Default display parameters.
+    CHECK(img.exposure() == Catch::Approx(0.0f));
+    CHECK(img.gamma() == Catch::Approx(2.2f));
+    CHECK(img.channel_mode() == ImageData::ChannelMode::RGBA);
+}
+
+TEST_CASE("ImageData set_pixels_rgba8", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    uint32_t w = 2, h = 3;
+    // 2x3 image, RGBA8 = 4 bytes/pixel = 24 bytes
+    std::vector<uint8_t> rgba(w * h * 4, 128);
+    // Set a recognizable pixel.
+    rgba[0] = 255;
+    rgba[1] = 0;
+    rgba[2] = 0;
+    rgba[3] = 255; // red
+
+    img.set_pixels_rgba8(w, h, rgba);
+
+    CHECK(img.width() == 2);
+    CHECK(img.height() == 3);
+    CHECK(img.format() == ImageData::Format::RGBA8);
+    CHECK(img.has_pixels());
+    CHECK(img.bytes_per_pixel() == 4);
+    CHECK(img.pixels().size() == 24);
+    CHECK(img.version() == 1);
+
+    // Dirty region should cover the full image.
+    auto dirty = img.dirty_region();
+    REQUIRE(dirty.has_value());
+    CHECK(dirty->x == 0);
+    CHECK(dirty->y == 0);
+    CHECK(dirty->w == 2);
+    CHECK(dirty->h == 3);
+    CHECK(img.is_full_dirty());
+
+    // Verify pixel data was copied.
+    auto px = img.pixels();
+    CHECK(static_cast<uint8_t>(px[0]) == 255);
+    CHECK(static_cast<uint8_t>(px[1]) == 0);
+    CHECK(static_cast<uint8_t>(px[2]) == 0);
+    CHECK(static_cast<uint8_t>(px[3]) == 255);
+}
+
+TEST_CASE("ImageData set_pixels_rgbaf32", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    uint32_t w = 4, h = 2;
+    // 4x2 image, RGBAF32 = 16 bytes/pixel = 128 bytes = 32 floats
+    std::vector<float> rgba(w * h * 4, 0.5f);
+    rgba[0] = 1.0f;
+    rgba[1] = 0.0f;
+    rgba[2] = 0.0f;
+    rgba[3] = 1.0f;
+
+    img.set_pixels_rgbaf32(w, h, rgba);
+
+    CHECK(img.width() == 4);
+    CHECK(img.height() == 2);
+    CHECK(img.format() == ImageData::Format::RGBAF32);
+    CHECK(img.bytes_per_pixel() == 16);
+    CHECK(img.pixels().size() == 128);
+    CHECK(img.version() == 1);
+    CHECK(img.is_full_dirty());
+}
+
+TEST_CASE("ImageData version increments on mutations", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    CHECK(img.version() == 0);
+
+    std::vector<uint8_t> rgba(4 * 4 * 4, 200); // 4x4 image
+    img.set_pixels_rgba8(4, 4, rgba);
+    CHECK(img.version() == 1);
+
+    // Partial update.
+    std::vector<uint8_t> patch(2 * 2 * 4, 100); // 2x2 patch
+    auto patch_bytes = std::as_bytes(std::span<const uint8_t>(patch));
+    img.update_region(1, 1, 2, 2, patch_bytes);
+    CHECK(img.version() == 2);
+
+    // Another set_pixels replaces everything.
+    img.set_pixels_rgba8(4, 4, rgba);
+    CHECK(img.version() == 3);
+}
+
+TEST_CASE("ImageData update_region writes correct pixels",
+          "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    uint32_t w = 4, h = 4;
+    std::vector<uint8_t> rgba(w * h * 4, 0);
+    img.set_pixels_rgba8(w, h, rgba);
+    img.clear_dirty();
+
+    // Write a 2x2 red patch at (1, 1).
+    std::vector<uint8_t> patch(2 * 2 * 4);
+    for (size_t i = 0; i < 4; ++i) {
+        patch[i * 4 + 0] = 255; // R
+        patch[i * 4 + 1] = 0; // G
+        patch[i * 4 + 2] = 0; // B
+        patch[i * 4 + 3] = 255; // A
+    }
+    auto patch_bytes = std::as_bytes(std::span<const uint8_t>(patch));
+    img.update_region(1, 1, 2, 2, patch_bytes);
+
+    // Verify the dirty region.
+    auto dirty = img.dirty_region();
+    REQUIRE(dirty.has_value());
+    CHECK(dirty->x == 1);
+    CHECK(dirty->y == 1);
+    CHECK(dirty->w == 2);
+    CHECK(dirty->h == 2);
+    CHECK_FALSE(img.is_full_dirty());
+
+    // Verify pixel at (1, 1) is red.
+    auto px = img.pixels();
+    size_t offset_1_1 = (1 * w + 1) * 4; // row 1, col 1
+    CHECK(static_cast<uint8_t>(px[offset_1_1 + 0]) == 255);
+    CHECK(static_cast<uint8_t>(px[offset_1_1 + 1]) == 0);
+    CHECK(static_cast<uint8_t>(px[offset_1_1 + 2]) == 0);
+    CHECK(static_cast<uint8_t>(px[offset_1_1 + 3]) == 255);
+
+    // Verify pixel at (0, 0) is still black.
+    CHECK(static_cast<uint8_t>(px[0]) == 0);
+    CHECK(static_cast<uint8_t>(px[1]) == 0);
+    CHECK(static_cast<uint8_t>(px[2]) == 0);
+    CHECK(static_cast<uint8_t>(px[3]) == 0);
+}
+
+TEST_CASE("ImageData update_region merges dirty rectangles",
+          "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    uint32_t w = 8, h = 8;
+    std::vector<uint8_t> rgba(w * h * 4, 0);
+    img.set_pixels_rgba8(w, h, rgba);
+    img.clear_dirty();
+
+    // First patch at (0, 0) size 2x2.
+    std::vector<uint8_t> p1(2 * 2 * 4, 100);
+    img.update_region(0, 0, 2, 2, std::as_bytes(std::span<const uint8_t>(p1)));
+
+    // Second patch at (4, 4) size 3x3.
+    std::vector<uint8_t> p2(3 * 3 * 4, 200);
+    img.update_region(4, 4, 3, 3, std::as_bytes(std::span<const uint8_t>(p2)));
+
+    // Dirty region should be the union bounding box: (0,0) to (7,7).
+    auto dirty = img.dirty_region();
+    REQUIRE(dirty.has_value());
+    CHECK(dirty->x == 0);
+    CHECK(dirty->y == 0);
+    CHECK(dirty->w == 7); // max(0+2, 4+3) - min(0,4) = 7 - 0
+    CHECK(dirty->h == 7);
+}
+
+TEST_CASE("ImageData clear_dirty resets tracking", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    std::vector<uint8_t> rgba(4 * 4 * 4, 0);
+    img.set_pixels_rgba8(4, 4, rgba);
+
+    REQUIRE(img.dirty_region().has_value());
+    REQUIRE(img.is_full_dirty());
+
+    img.clear_dirty();
+    CHECK_FALSE(img.dirty_region().has_value());
+}
+
+TEST_CASE("ImageData display parameters", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+
+    img.set_exposure(2.5f);
+    CHECK(img.exposure() == Catch::Approx(2.5f));
+
+    img.set_gamma(1.0f);
+    CHECK(img.gamma() == Catch::Approx(1.0f));
+
+    img.set_channel_mode(ImageData::ChannelMode::Red);
+    CHECK(img.channel_mode() == ImageData::ChannelMode::Red);
+
+    img.set_channel_mode(ImageData::ChannelMode::Luminance);
+    CHECK(img.channel_mode() == ImageData::ChannelMode::Luminance);
+}
+
+TEST_CASE("ImageData as Object feature", "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    Object obj("image_obj");
+    auto &img = obj.emplace_feature<ImageData>();
+
+    ImageData *found = obj.find_feature<ImageData>();
+    REQUIRE(found != nullptr);
+    CHECK(found == &img);
+
+    std::vector<uint8_t> rgba(2 * 2 * 4, 255);
+    img.set_pixels_rgba8(2, 2, rgba);
+    CHECK(found->has_pixels());
+    CHECK(found->width() == 2);
+    CHECK(found->height() == 2);
+}
+
+TEST_CASE("ImageData set_pixels throws on insufficient data",
+          "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    // 4x4 RGBA8 needs 64 bytes, only provide 10.
+    std::vector<uint8_t> too_small(10, 0);
+    CHECK_THROWS(img.set_pixels_rgba8(4, 4, too_small));
+}
+
+TEST_CASE("ImageData update_region throws on out-of-bounds",
+          "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    std::vector<uint8_t> rgba(4 * 4 * 4, 0);
+    img.set_pixels_rgba8(4, 4, rgba);
+
+    // Region exceeds image bounds.
+    std::vector<uint8_t> patch(3 * 3 * 4, 100);
+    CHECK_THROWS(img.update_region(
+        2, 2, 3, 3, std::as_bytes(std::span<const uint8_t>(patch))));
+}
+
+TEST_CASE("ImageData update_region throws when no image set",
+          "[scene_graph][image]") {
+    using namespace balsa::scene_graph;
+
+    ImageData img;
+    std::vector<uint8_t> patch(4, 100);
+    CHECK_THROWS(img.update_region(
+        0, 0, 1, 1, std::as_bytes(std::span<const uint8_t>(patch))));
+}
+
+// ── PPM I/O Tests ──────────────────────────────────────────────────
+
+TEST_CASE("PPM round-trip save and load", "[image_io]") {
+    using namespace balsa::visualization;
+
+    uint32_t w = 3, h = 2;
+    // Create a known 3x2 RGBA image.
+    std::vector<uint8_t> rgba(w * h * 4);
+    for (uint32_t y = 0; y < h; ++y) {
+        for (uint32_t x = 0; x < w; ++x) {
+            size_t i = (y * w + x) * 4;
+            rgba[i + 0] = static_cast<uint8_t>(x * 80); // R
+            rgba[i + 1] = static_cast<uint8_t>(y * 120); // G
+            rgba[i + 2] = static_cast<uint8_t>((x + y) * 40); // B
+            rgba[i + 3] = 255; // A (ignored in PPM)
+        }
+    }
+
+    std::string path = "/tmp/balsa_test_ppm_roundtrip.ppm";
+    auto save_result = save_ppm(path, w, h, rgba.data());
+    REQUIRE(save_result.has_value());
+
+    auto load_result = load_ppm(path);
+    REQUIRE(load_result.has_value());
+
+    const auto &img = load_result.value();
+    CHECK(img.width == w);
+    CHECK(img.height == h);
+    REQUIRE(img.pixels.size() == w * h * 4);
+
+    // Verify pixel data (RGB should match, alpha should be 255).
+    for (uint32_t y = 0; y < h; ++y) {
+        for (uint32_t x = 0; x < w; ++x) {
+            size_t i = (y * w + x) * 4;
+            CHECK(img.pixels[i + 0] == rgba[i + 0]); // R
+            CHECK(img.pixels[i + 1] == rgba[i + 1]); // G
+            CHECK(img.pixels[i + 2] == rgba[i + 2]); // B
+            CHECK(img.pixels[i + 3] == 255); // A
+        }
+    }
+
+    // Cleanup.
+    std::remove(path.c_str());
+}
+
+TEST_CASE("PPM load nonexistent file", "[image_io]") {
+    using namespace balsa::visualization;
+
+    auto result = load_ppm("/tmp/balsa_test_nonexistent_file.ppm");
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error() == ImageIOError::FileNotFound);
+}
+
+TEST_CASE("PPM load invalid format", "[image_io]") {
+    using namespace balsa::visualization;
+
+    std::string path = "/tmp/balsa_test_invalid_ppm.ppm";
+    // Write something that is not a valid PPM.
+    {
+        std::FILE *f = std::fopen(path.c_str(), "wb");
+        REQUIRE(f != nullptr);
+        std::fprintf(f, "NOT_PPM\n");
+        std::fclose(f);
+    }
+
+    auto result = load_ppm(path);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error() == ImageIOError::InvalidFormat);
+
+    std::remove(path.c_str());
+}
+
+TEST_CASE("PPM error_string returns non-empty strings", "[image_io]") {
+    using namespace balsa::visualization;
+
+    CHECK(!error_string(ImageIOError::FileNotFound).empty());
+    CHECK(!error_string(ImageIOError::InvalidFormat).empty());
+    CHECK(!error_string(ImageIOError::ReadError).empty());
+    CHECK(!error_string(ImageIOError::WriteError).empty());
 }
 
 TEST_CASE("Object rotate() post-multiplies quaternion", "[scene_graph][trs]") {
