@@ -12,8 +12,7 @@ dl_lib = cc.find_library('dl', required: false)
 spdlog_dep = dependency('spdlog', version: '>=1.9.2', default_options: ['tests=disabled', 'default_library=static'])
 eigen_dep  = dependency('eigen3', version: '>=3.4.0')
 
-zipper_proj = subproject('zipper', default_options: {'testing': false})
-zipper_dep = zipper_proj.get_variable('zipper_dep')
+zipper_dep = dependency('zipper', default_options: ['testing=false'])
 
 core_required_deps = [spdlog_dep, eigen_dep, zipper_dep]
 
@@ -62,8 +61,7 @@ endif
 subdir('core')
 
 if get_option('quiver')
-  quiver_proj = subproject('quiver', default_options: ['testing=false', 'tools=false', 'examples=false', 'bundled_spdlog=true'])
-  quiver_dep = quiver_proj.get_variable('quiver_dep')
+  quiver_dep = dependency('quiver', default_options: ['testing=false', 'tools=false', 'examples=false'])
 endif
 
 subdir('geometry')
