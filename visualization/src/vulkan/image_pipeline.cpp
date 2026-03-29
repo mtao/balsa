@@ -27,8 +27,8 @@ ImagePipelineManager::ImagePipelineManager(ImagePipelineManager &&o) noexcept
     o._initialized = false;
 }
 
-ImagePipelineManager &
-    ImagePipelineManager::operator=(ImagePipelineManager &&o) noexcept {
+auto ImagePipelineManager::operator=(ImagePipelineManager &&o) noexcept
+    -> ImagePipelineManager & {
     if (this != &o) {
         release();
         _device = o._device;
@@ -52,7 +52,7 @@ ImagePipelineManager &
     return *this;
 }
 
-void ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
+auto ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) -> void {
     if (_initialized) { release(); }
     _film = &film;
     _device = film.device();
@@ -65,7 +65,7 @@ void ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
     spdlog::info("ImagePipelineManager: initialized");
 }
 
-void ImagePipelineManager::release() {
+auto ImagePipelineManager::release() -> void {
     if (!_initialized) { return; }
     if (_device) {
         _device.waitIdle();
@@ -93,7 +93,7 @@ void ImagePipelineManager::release() {
     _initialized = false;
 }
 
-void ImagePipelineManager::invalidate_pipeline() {
+auto ImagePipelineManager::invalidate_pipeline() -> void {
     if (!_initialized) return;
     if (_device && _pipeline) {
         _device.waitIdle();
@@ -108,7 +108,7 @@ void ImagePipelineManager::invalidate_pipeline() {
 
 // ── Descriptor set layout / pipeline layout / pool ──────────────────
 
-void ImagePipelineManager::create_descriptor_set_layout() {
+auto ImagePipelineManager::create_descriptor_set_layout() -> void {
     // binding 0: ImageTransformUBO (vertex stage)
     // binding 1: ImageParamsUBO    (fragment stage)
     // binding 2: combined image sampler (fragment stage)
@@ -138,14 +138,14 @@ void ImagePipelineManager::create_descriptor_set_layout() {
     _descriptor_set_layout = _device.createDescriptorSetLayout(ci);
 }
 
-void ImagePipelineManager::create_pipeline_layout() {
+auto ImagePipelineManager::create_pipeline_layout() -> void {
     vk::PipelineLayoutCreateInfo ci;
     ci.setSetLayouts(_descriptor_set_layout);
     ci.setPushConstantRangeCount(0);
     _pipeline_layout = _device.createPipelineLayout(ci);
 }
 
-void ImagePipelineManager::create_descriptor_pool(uint32_t max_sets) {
+auto ImagePipelineManager::create_descriptor_pool(uint32_t max_sets) -> void {
     // Each set has 2 uniform buffers + 1 combined image sampler.
     std::array<vk::DescriptorPoolSize, 2> pool_sizes;
     pool_sizes[0].setType(vk::DescriptorType::eUniformBuffer);
@@ -162,7 +162,7 @@ void ImagePipelineManager::create_descriptor_pool(uint32_t max_sets) {
 
 // ── Descriptor set allocation / writing / freeing ────────────────────
 
-vk::DescriptorSet ImagePipelineManager::allocate_descriptor_set() {
+auto ImagePipelineManager::allocate_descriptor_set() -> vk::DescriptorSet {
     if (!_initialized) {
         throw std::runtime_error("ImagePipelineManager: not initialized");
     }
@@ -173,13 +173,13 @@ vk::DescriptorSet ImagePipelineManager::allocate_descriptor_set() {
     return sets[0];
 }
 
-void ImagePipelineManager::write_descriptor_set(vk::DescriptorSet ds,
+auto ImagePipelineManager::write_descriptor_set(vk::DescriptorSet ds,
                                                 vk::Buffer transform_buffer,
                                                 vk::DeviceSize transform_size,
                                                 vk::Buffer params_buffer,
                                                 vk::DeviceSize params_size,
                                                 vk::ImageView image_view,
-                                                vk::Sampler sampler) {
+                                                vk::Sampler sampler) -> void {
     vk::DescriptorBufferInfo transform_info;
     transform_info.setBuffer(transform_buffer);
     transform_info.setOffset(0);
@@ -224,14 +224,14 @@ void ImagePipelineManager::write_descriptor_set(vk::DescriptorSet ds,
     _device.updateDescriptorSets(writes, {});
 }
 
-void ImagePipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
+auto ImagePipelineManager::free_descriptor_set(vk::DescriptorSet ds) -> void {
     if (!_initialized || !ds) return;
     _device.freeDescriptorSets(_descriptor_pool, {ds});
 }
 
 // ── Pipeline access ─────────────────────────────────────────────────
 
-vk::Pipeline ImagePipelineManager::get_or_create(Film &film) {
+auto ImagePipelineManager::get_or_create(Film &film) -> vk::Pipeline {
     if (!_initialized) {
         throw std::runtime_error("ImagePipelineManager: not initialized");
     }
@@ -263,7 +263,7 @@ vk::Pipeline ImagePipelineManager::get_or_create(Film &film) {
 
 // ── Pipeline creation ───────────────────────────────────────────────
 
-vk::Pipeline ImagePipelineManager::create_pipeline() {
+auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
     spdlog::info("ImagePipelineManager: creating pipeline");
 
     // Compile shaders from Qt resources.

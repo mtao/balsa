@@ -36,41 +36,41 @@ class ImageData : public AbstractFeature {
     // Each bumps the version counter.
 
     // Set the full image.  Copies the data.
-    void set_pixels(uint32_t width,
+    auto set_pixels(uint32_t width,
                     uint32_t height,
                     Format format,
-                    std::span<const std::byte> data);
+                    std::span<const std::byte> data) -> void;
 
     // Convenience overloads.
-    void set_pixels_rgba8(uint32_t width,
+    auto set_pixels_rgba8(uint32_t width,
                           uint32_t height,
-                          std::span<const uint8_t> rgba);
-    void set_pixels_rgbaf32(uint32_t width,
+                          std::span<const uint8_t> rgba) -> void;
+    auto set_pixels_rgbaf32(uint32_t width,
                             uint32_t height,
-                            std::span<const float> rgba);
+                            std::span<const float> rgba) -> void;
 
     // Partial update — marks a dirty region.
     // The data must be tightly packed (w * h * bytes_per_pixel).
-    void update_region(uint32_t x,
+    auto update_region(uint32_t x,
                        uint32_t y,
                        uint32_t w,
                        uint32_t h,
-                       std::span<const std::byte> data);
+                       std::span<const std::byte> data) -> void;
 
     // ── Accessors ───────────────────────────────────────────────────
 
-    uint32_t width() const { return _width; }
-    uint32_t height() const { return _height; }
-    Format format() const { return _format; }
-    std::span<const std::byte> pixels() const { return _pixels; }
-    bool has_pixels() const { return !_pixels.empty(); }
+    auto width() const -> uint32_t { return _width; }
+    auto height() const -> uint32_t { return _height; }
+    auto format() const -> Format { return _format; }
+    auto pixels() const -> std::span<const std::byte> { return _pixels; }
+    auto has_pixels() const -> bool { return !_pixels.empty(); }
 
     // Bytes per pixel for the current format.
-    size_t bytes_per_pixel() const;
+    auto bytes_per_pixel() const -> size_t;
 
     // ── Dirty tracking ──────────────────────────────────────────────
 
-    uint64_t version() const { return _version; }
+    auto version() const -> uint64_t { return _version; }
 
     // Dirty region: the rectangle that changed since last clear.
     // If no partial update has been done (or set_pixels was called),
@@ -78,21 +78,21 @@ class ImageData : public AbstractFeature {
     struct DirtyRegion {
         uint32_t x, y, w, h;
     };
-    std::optional<DirtyRegion> dirty_region() const { return _dirty; }
-    void clear_dirty() { _dirty = std::nullopt; }
+    auto dirty_region() const -> std::optional<DirtyRegion> { return _dirty; }
+    auto clear_dirty() -> void { _dirty = std::nullopt; }
 
     // Was the full image replaced since last clear?
     // (As opposed to just a partial region update.)
-    bool is_full_dirty() const { return _full_dirty; }
+    auto is_full_dirty() const -> bool { return _full_dirty; }
 
     // ── Display parameters ──────────────────────────────────────────
     // Tone mapping (for HDR float images).
 
-    float exposure() const { return _exposure; }
-    void set_exposure(float ev) { _exposure = ev; }
+    auto exposure() const -> float { return _exposure; }
+    auto set_exposure(float ev) -> void { _exposure = ev; }
 
-    float gamma() const { return _gamma; }
-    void set_gamma(float g) { _gamma = g; }
+    auto gamma() const -> float { return _gamma; }
+    auto set_gamma(float g) -> void { _gamma = g; }
 
     // Channel display mode.
     enum class ChannelMode : int {
@@ -103,8 +103,8 @@ class ImageData : public AbstractFeature {
         Alpha = 4,
         Luminance = 5,
     };
-    ChannelMode channel_mode() const { return _channel_mode; }
-    void set_channel_mode(ChannelMode mode) { _channel_mode = mode; }
+    auto channel_mode() const -> ChannelMode { return _channel_mode; }
+    auto set_channel_mode(ChannelMode mode) -> void { _channel_mode = mode; }
 
   private:
     std::vector<std::byte> _pixels;

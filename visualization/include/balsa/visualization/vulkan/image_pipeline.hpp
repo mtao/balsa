@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_VISUALIZATION_VULKAN_IMAGE_PIPELINE_HPP)
+#define BALSA_VISUALIZATION_VULKAN_IMAGE_PIPELINE_HPP
 
 #include <vulkan/vulkan.hpp>
 
@@ -48,59 +49,59 @@ class ImagePipelineManager {
 
     // Non-copyable, movable
     ImagePipelineManager(const ImagePipelineManager &) = delete;
-    ImagePipelineManager &operator=(const ImagePipelineManager &) = delete;
+    auto operator=(const ImagePipelineManager &) -> ImagePipelineManager & = delete;
     ImagePipelineManager(ImagePipelineManager &&) noexcept;
-    ImagePipelineManager &operator=(ImagePipelineManager &&) noexcept;
+    auto operator=(ImagePipelineManager &&) noexcept -> ImagePipelineManager &;
 
     // Initialise with a Film reference.  Must be called before any
     // other method.
-    void init(Film &film, uint32_t max_descriptor_sets = 16);
+    auto init(Film &film, uint32_t max_descriptor_sets = 16) -> void;
 
     // ── Pipeline access ─────────────────────────────────────────────
 
     // Get (or lazily create) the pipeline.  The Film is queried for
     // render-pass / MSAA / depth-stencil info.
-    vk::Pipeline get_or_create(Film &film);
+    auto get_or_create(Film &film) -> vk::Pipeline;
 
     // The shared pipeline layout.
-    vk::PipelineLayout pipeline_layout() const { return _pipeline_layout; }
+    auto pipeline_layout() const -> vk::PipelineLayout { return _pipeline_layout; }
 
     // ── Descriptor sets ─────────────────────────────────────────────
 
     // Allocate a descriptor set from the internal pool.
-    vk::DescriptorSet allocate_descriptor_set();
+    auto allocate_descriptor_set() -> vk::DescriptorSet;
 
     // Write buffer + image bindings into a descriptor set.
     //   binding 0 = ImageTransformUBO  (uniform buffer)
     //   binding 1 = ImageParamsUBO     (uniform buffer)
     //   binding 2 = combined image sampler
-    void write_descriptor_set(vk::DescriptorSet ds,
+    auto write_descriptor_set(vk::DescriptorSet ds,
                               vk::Buffer transform_buffer,
                               vk::DeviceSize transform_size,
                               vk::Buffer params_buffer,
                               vk::DeviceSize params_size,
                               vk::ImageView image_view,
-                              vk::Sampler sampler);
+                              vk::Sampler sampler) -> void;
 
     // Free a descriptor set back to the pool.
-    void free_descriptor_set(vk::DescriptorSet ds);
+    auto free_descriptor_set(vk::DescriptorSet ds) -> void;
 
     // ── Lifecycle ───────────────────────────────────────────────────
 
     // Destroy the cached pipeline (e.g. on swapchain recreation).
-    void invalidate_pipeline();
+    auto invalidate_pipeline() -> void;
 
     // Destroy everything.  Safe to call multiple times.
-    void release();
+    auto release() -> void;
 
-    bool is_initialized() const { return _initialized; }
+    auto is_initialized() const -> bool { return _initialized; }
 
   private:
-    vk::Pipeline create_pipeline();
+    auto create_pipeline() -> vk::Pipeline;
 
-    void create_descriptor_set_layout();
-    void create_pipeline_layout();
-    void create_descriptor_pool(uint32_t max_sets);
+    auto create_descriptor_set_layout() -> void;
+    auto create_pipeline_layout() -> void;
+    auto create_descriptor_pool(uint32_t max_sets) -> void;
 
     vk::Device _device;
     Film *_film = nullptr;
@@ -121,3 +122,5 @@ class ImagePipelineManager {
 };
 
 } // namespace balsa::visualization::vulkan
+
+#endif

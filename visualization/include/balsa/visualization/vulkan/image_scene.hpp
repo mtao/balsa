@@ -48,84 +48,84 @@ class ImageScene : public SceneBase {
 
     // Non-copyable, non-movable
     ImageScene(const ImageScene &) = delete;
-    ImageScene &operator=(const ImageScene &) = delete;
+    auto operator=(const ImageScene &) -> ImageScene & = delete;
     ImageScene(ImageScene &&) = delete;
-    ImageScene &operator=(ImageScene &&) = delete;
+    auto operator=(ImageScene &&) -> ImageScene & = delete;
 
     // ── SceneBase overrides ─────────────────────────────────────────
 
-    void initialize(Film &film) override;
-    void draw(Film &film) override;
-    void release_vulkan_resources() override;
+    auto initialize(Film &film) -> void override;
+    auto draw(Film &film) -> void override;
+    auto release_vulkan_resources() -> void override;
 
     // ── Image management ────────────────────────────────────────────
 
     // Set the full image data.  Creates the internal ImageData +
     // Object + VulkanImageDrawable on first call.
-    void set_image(uint32_t width,
+    auto set_image(uint32_t width,
                    uint32_t height,
                    scene_graph::ImageData::Format format,
-                   std::span<const std::byte> pixels);
+                   std::span<const std::byte> pixels) -> void;
 
     // Convenience overloads.
-    void set_image_rgba8(uint32_t width,
+    auto set_image_rgba8(uint32_t width,
                          uint32_t height,
-                         std::span<const uint8_t> rgba);
-    void set_image_rgbaf32(uint32_t width,
+                         std::span<const uint8_t> rgba) -> void;
+    auto set_image_rgbaf32(uint32_t width,
                            uint32_t height,
-                           std::span<const float> rgba);
+                           std::span<const float> rgba) -> void;
 
     // Access the underlying ImageData for direct manipulation
     // (e.g., partial updates from a live render, or changing
     // tone-mapping parameters).
     // Returns nullptr if no image has been set yet.
-    scene_graph::ImageData *image_data();
-    const scene_graph::ImageData *image_data() const;
+    auto image_data() -> scene_graph::ImageData *;
+    auto image_data() const -> const scene_graph::ImageData *;
 
-    bool has_image() const;
+    auto has_image() const -> bool;
 
     // ── 2D navigation ───────────────────────────────────────────────
 
     // Zoom level: 1.0 = 1 image pixel = 1 screen pixel (at fit).
     // Values > 1 zoom in, < 1 zoom out.
-    void set_zoom(float zoom);
-    float zoom() const { return _zoom; }
+    auto set_zoom(float zoom) -> void;
+    auto zoom() const -> float { return _zoom; }
 
     // Pan offset in NDC units (-1 to 1).
-    void set_pan(float x, float y);
-    float pan_x() const { return _pan_x; }
-    float pan_y() const { return _pan_y; }
+    auto set_pan(float x, float y) -> void;
+    auto pan_x() const -> float { return _pan_x; }
+    auto pan_y() const -> float { return _pan_y; }
 
     // Reset zoom and pan to fit the image in the viewport.
-    void fit_to_window();
+    auto fit_to_window() -> void;
 
     // ── Camera ──────────────────────────────────────────────────────
 
-    scene_graph::Camera &camera();
-    const scene_graph::Camera &camera() const;
+    auto camera() -> scene_graph::Camera &;
+    auto camera() const -> const scene_graph::Camera &;
 
     // ── Scene graph access ──────────────────────────────────────────
 
-    scene_graph::Object &root() { return _scene_root; }
-    const scene_graph::Object &root() const { return _scene_root; }
+    auto root() -> scene_graph::Object & { return _scene_root; }
+    auto root() const -> const scene_graph::Object & { return _scene_root; }
 
-    scene_graph::DrawableGroup &drawable_group() { return _drawable_group; }
-    const scene_graph::DrawableGroup &drawable_group() const {
+    auto drawable_group() -> scene_graph::DrawableGroup & { return _drawable_group; }
+    auto drawable_group() const -> const scene_graph::DrawableGroup & {
         return _drawable_group;
     }
 
-    ImagePipelineManager &pipeline_manager() { return _pipeline_manager; }
-    const ImagePipelineManager &pipeline_manager() const {
+    auto pipeline_manager() -> ImagePipelineManager & { return _pipeline_manager; }
+    auto pipeline_manager() const -> const ImagePipelineManager & {
         return _pipeline_manager;
     }
 
   private:
     // Ensure the image Object and its features exist.
-    void ensure_image_object();
+    auto ensure_image_object() -> void;
 
     // Recompute the MVP matrix from zoom/pan state and update the
     // VulkanImageDrawable's override.
-    void update_mvp();
+    auto update_mvp() -> void;
 
     // Scene graph
     scene_graph::Object _scene_root;

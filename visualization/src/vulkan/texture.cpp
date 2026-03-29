@@ -9,7 +9,7 @@ namespace balsa::visualization::vulkan {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-vk::Format VulkanTexture::vk_format() const {
+auto VulkanTexture::vk_format() const -> vk::Format {
     switch (_format) {
     case Format::RGBA8:
         return vk::Format::eR8G8B8A8Unorm;
@@ -19,7 +19,7 @@ vk::Format VulkanTexture::vk_format() const {
     return vk::Format::eR8G8B8A8Unorm;
 }
 
-size_t VulkanTexture::bytes_per_pixel() const {
+auto VulkanTexture::bytes_per_pixel() const -> size_t {
     switch (_format) {
     case Format::RGBA8:
         return 4;
@@ -52,7 +52,7 @@ VulkanTexture::VulkanTexture(VulkanTexture &&o) noexcept
     o._height = 0;
 }
 
-VulkanTexture &VulkanTexture::operator=(VulkanTexture &&o) noexcept {
+auto VulkanTexture::operator=(VulkanTexture &&o) noexcept -> VulkanTexture & {
     if (this != &o) {
         release();
         _device = o._device;
@@ -82,7 +82,7 @@ VulkanTexture &VulkanTexture::operator=(VulkanTexture &&o) noexcept {
     return *this;
 }
 
-void VulkanTexture::release() {
+auto VulkanTexture::release() -> void {
     if (!_device) return;
 
     if (_sampler) {
@@ -117,10 +117,10 @@ void VulkanTexture::release() {
 
 // ── Create ──────────────────────────────────────────────────────────
 
-void VulkanTexture::create(Film &film,
+auto VulkanTexture::create(Film &film,
                            uint32_t width,
                            uint32_t height,
-                           Format format) {
+                           Format format) -> void {
     release();
 
     _device = film.device();
@@ -219,9 +219,9 @@ void VulkanTexture::create(Film &film,
 
 // ── Layout transition ───────────────────────────────────────────────
 
-void VulkanTexture::transition_layout(vk::CommandBuffer cmd,
+auto VulkanTexture::transition_layout(vk::CommandBuffer cmd,
                                       vk::ImageLayout old_layout,
-                                      vk::ImageLayout new_layout) {
+                                      vk::ImageLayout new_layout) -> void {
     vk::ImageMemoryBarrier barrier;
     barrier.setOldLayout(old_layout);
     barrier.setNewLayout(new_layout);
@@ -265,9 +265,9 @@ void VulkanTexture::transition_layout(vk::CommandBuffer cmd,
 
 // ── One-shot command buffer ─────────────────────────────────────────
 
-void VulkanTexture::one_shot_command(
+auto VulkanTexture::one_shot_command(
     Film &film,
-    std::function<void(vk::CommandBuffer)> record_fn) {
+    std::function<void(vk::CommandBuffer)> record_fn) -> void {
     vk::CommandBufferAllocateInfo cmd_alloc;
     cmd_alloc.setCommandPool(film.graphics_command_pool());
     cmd_alloc.setLevel(vk::CommandBufferLevel::ePrimary);
@@ -297,7 +297,7 @@ void VulkanTexture::one_shot_command(
 
 // ── Full upload ─────────────────────────────────────────────────────
 
-void VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) {
+auto VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) -> void {
     if (!is_valid()) {
         throw std::runtime_error("VulkanTexture::upload: texture not created");
     }
@@ -345,13 +345,13 @@ void VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) {
 
 // ── Partial region update ───────────────────────────────────────────
 
-void VulkanTexture::update_region(Film &film,
+auto VulkanTexture::update_region(Film &film,
                                   uint32_t x,
                                   uint32_t y,
                                   uint32_t w,
                                   uint32_t h,
                                   const void *pixels,
-                                  size_t byte_count) {
+                                  size_t byte_count) -> void {
     if (!is_valid()) {
         throw std::runtime_error(
             "VulkanTexture::update_region: texture not created");

@@ -20,7 +20,7 @@ namespace imgui {
     // call ImGui::Render() afterward.
     //
     // Returns true if any value was modified this frame.
-    bool draw_image_controls(ImageScene &scene, ImagePanelState &state);
+    auto draw_image_controls(ImageScene &scene, ImagePanelState &state) -> bool;
 
 } // namespace imgui
 } // namespace balsa::visualization::vulkan

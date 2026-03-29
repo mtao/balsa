@@ -7,7 +7,7 @@
 
 namespace balsa::visualization::vulkan::imgui {
 
-bool draw_image_controls(ImageScene &scene, ImagePanelState &state) {
+auto draw_image_controls(ImageScene &scene, ImagePanelState &state) -> bool {
     bool changed = false;
 
     if (!state.show_controls) return false;
