@@ -84,6 +84,11 @@ if get_option('qt')
     'include/balsa/visualization/qt/SceneGraphWidget.hpp',
     ]
 
+  if get_option('lua')
+    visualization_qt_sources += 'src/qt/lua_repl_widget.cpp'
+    visualization_moc_headers += 'include/balsa/visualization/qt/lua_repl_widget.hpp'
+  endif
+
   visualization_qt_mocced = qt.compile_moc(
     headers: visualization_moc_headers,
     include_directories: include_dir,
@@ -109,12 +114,18 @@ if get_option('imgui')
   visualization_sources += 'src/vulkan/imgui_integration.cpp'
   visualization_sources += 'src/vulkan/imgui/mesh_controls_panel.cpp'
   visualization_sources += 'src/vulkan/imgui/image_controls_panel.cpp'
+  if get_option('lua')
+    visualization_sources += 'src/vulkan/imgui/lua_repl_panel.cpp'
+  endif
   visualization_sources += imgui_backend_sources
 endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
 visualization_public_deps += quiver_dep
+if get_option('lua')
+  visualization_public_deps += lua_deps
+endif
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,
