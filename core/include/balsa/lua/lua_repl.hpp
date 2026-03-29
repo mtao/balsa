@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_LUA_LUA_REPL_HPP)
+#define BALSA_LUA_LUA_REPL_HPP
 
 // LuaRepl — lightweight Lua REPL engine.
 //
@@ -26,28 +27,28 @@ class LuaRepl {
 
     // Non-copyable, movable.
     LuaRepl(const LuaRepl &) = delete;
-    LuaRepl &operator=(const LuaRepl &) = delete;
+    auto operator=(const LuaRepl &) -> LuaRepl & = delete;
     LuaRepl(LuaRepl &&) noexcept;
-    LuaRepl &operator=(LuaRepl &&) noexcept;
+    auto operator=(LuaRepl &&) noexcept -> LuaRepl &;
 
     // ── Execution ───────────────────────────────────────────────────
 
     // Execute a line of Lua code.  Returns true if the execution
     // succeeded, false on error.  Both output and errors are
     // appended to the output buffer.
-    bool execute(const std::string &code);
+    auto execute(const std::string &code) -> bool;
 
     // ── Output buffer ───────────────────────────────────────────────
     //
     // All print() output, error messages, and echoed input accumulate
     // here.  The UI reads this buffer for display.
 
-    const std::string &output() const { return _output; }
-    void clear_output() { _output.clear(); }
+    auto output() const -> const std::string & { return _output; }
+    auto clear_output() -> void { _output.clear(); }
 
     // ── Command history ─────────────────────────────────────────────
 
-    const std::vector<std::string> &history() const { return _history; }
+    auto history() const -> const std::vector<std::string> & { return _history; }
 
     // ── Post-execute callback ───────────────────────────────────────
     //
@@ -55,7 +56,7 @@ class LuaRepl {
     // uses this to trigger MeshData::rediscover_attributes() etc.
 
     using PostExecuteCallback = std::function<void()>;
-    void set_post_execute_callback(PostExecuteCallback cb) {
+    auto set_post_execute_callback(PostExecuteCallback cb) -> void {
         _post_execute_cb = std::move(cb);
     }
 
@@ -64,7 +65,7 @@ class LuaRepl {
     // For binding registration (quiver::lua::load_bindings,
     // balsa::geometry::lua::load_bindings, etc.)
 
-    sol::state &lua_state();
+    auto lua_state() -> sol::state &;
 
   private:
     struct Impl;
@@ -76,3 +77,5 @@ class LuaRepl {
 };
 
 } // namespace balsa::lua
+
+#endif // BALSA_LUA_LUA_REPL_HPP

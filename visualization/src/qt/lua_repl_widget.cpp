@@ -64,9 +64,9 @@ LuaReplWidget::LuaReplWidget(QWidget *parent) : QWidget(parent) {
     _input->installEventFilter(this);
 }
 
-void LuaReplWidget::set_repl(balsa::lua::LuaRepl *repl) { _repl = repl; }
+auto LuaReplWidget::set_repl(balsa::lua::LuaRepl *repl) -> void { _repl = repl; }
 
-void LuaReplWidget::execute_command() {
+auto LuaReplWidget::execute_command() -> void {
     if (!_repl) return;
 
     QString text = _input->text().trimmed();
@@ -80,7 +80,7 @@ void LuaReplWidget::execute_command() {
     emit command_executed();
 }
 
-void LuaReplWidget::refresh_output() {
+auto LuaReplWidget::refresh_output() -> void {
     if (!_repl) return;
 
     _output->setPlainText(QString::fromStdString(_repl->output()));
@@ -90,7 +90,7 @@ void LuaReplWidget::refresh_output() {
     if (sb) sb->setValue(sb->maximum());
 }
 
-bool LuaReplWidget::eventFilter(QObject *obj, QEvent *event) {
+auto LuaReplWidget::eventFilter(QObject *obj, QEvent *event) -> bool {
     if (obj == _input && event->type() == QEvent::KeyPress && _repl) {
         auto *ke = static_cast<QKeyEvent *>(event);
         const auto &history = _repl->history();

@@ -79,7 +79,7 @@ class MeshViewerScene : public vk_viz::MeshScene {
     }
 
 #if BALSA_HAS_LUA
-    void set_repl(balsa::lua::LuaRepl *repl) { _repl = repl; }
+    auto set_repl(balsa::lua::LuaRepl *repl) -> void { _repl = repl; }
 #endif
 
     void draw(vk_viz::Film &film) override {

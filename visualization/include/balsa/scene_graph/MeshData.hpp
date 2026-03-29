@@ -123,7 +123,7 @@ class MeshData : public AbstractFeature {
     // Re-scan the source mesh's AttributeManager for new attributes
     // added since the last set_mesh() or rediscover_attributes() call.
     // Preserves existing role bindings.  Bumps the version counter.
-    void rediscover_attributes();
+    auto rediscover_attributes() -> void;
 
     // ── Role assignment ─────────────────────────────────────────────
     //

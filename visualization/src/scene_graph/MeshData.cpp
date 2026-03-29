@@ -519,7 +519,7 @@ void MeshData::discover_attributes() {
     }
 }
 
-void MeshData::rediscover_attributes() {
+auto MeshData::rediscover_attributes() -> void {
     if (!_mesh) return;
 
     discover_attributes();

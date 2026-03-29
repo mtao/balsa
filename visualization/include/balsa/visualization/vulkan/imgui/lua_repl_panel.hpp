@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_VISUALIZATION_VULKAN_IMGUI_LUA_REPL_PANEL_HPP)
+#define BALSA_VISUALIZATION_VULKAN_IMGUI_LUA_REPL_PANEL_HPP
 
 // ImGui Lua REPL panel — provides an interactive Lua console inside
 // the GLFW mesh viewer.
@@ -36,6 +37,8 @@ struct LuaReplPanelState {
 // call ImGui::Render() afterward.
 //
 // Returns true if a command was executed this frame.
-bool draw_lua_repl(LuaReplPanelState &state, balsa::lua::LuaRepl &repl);
+auto draw_lua_repl(LuaReplPanelState &state, balsa::lua::LuaRepl &repl) -> bool;
 
 } // namespace balsa::visualization::vulkan::imgui
+
+#endif // BALSA_VISUALIZATION_VULKAN_IMGUI_LUA_REPL_PANEL_HPP

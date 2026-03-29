@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_VISUALIZATION_QT_LUA_REPL_WIDGET_HPP)
+#define BALSA_VISUALIZATION_QT_LUA_REPL_WIDGET_HPP
 
 // Qt Lua REPL widget — provides an interactive Lua console as a
 // QWidget suitable for embedding in a QDockWidget.
@@ -26,7 +27,7 @@ class LuaReplWidget : public QWidget {
 
     // Set the REPL engine.  Must be called before the widget is used.
     // The LuaRepl must outlive the widget.
-    void set_repl(balsa::lua::LuaRepl *repl);
+    auto set_repl(balsa::lua::LuaRepl *repl) -> void;
 
   signals:
     // Emitted after a command is executed, so the main window can
@@ -35,11 +36,11 @@ class LuaReplWidget : public QWidget {
 
   protected:
     // Handle Up/Down arrow keys in the input line for history nav.
-    bool eventFilter(QObject *obj, QEvent *event) override;
+    auto eventFilter(QObject *obj, QEvent *event) -> bool override;
 
   private:
-    void execute_command();
-    void refresh_output();
+    auto execute_command() -> void;
+    auto refresh_output() -> void;
 
     balsa::lua::LuaRepl *_repl = nullptr;
     QPlainTextEdit *_output = nullptr;
@@ -50,3 +51,5 @@ class LuaReplWidget : public QWidget {
 };
 
 } // namespace balsa::visualization::qt
+
+#endif // BALSA_VISUALIZATION_QT_LUA_REPL_WIDGET_HPP

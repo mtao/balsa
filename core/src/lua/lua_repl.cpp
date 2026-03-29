@@ -54,11 +54,11 @@ LuaRepl::LuaRepl() : _impl(std::make_unique<Impl>()) {
 LuaRepl::~LuaRepl() = default;
 
 LuaRepl::LuaRepl(LuaRepl &&) noexcept = default;
-LuaRepl &LuaRepl::operator=(LuaRepl &&) noexcept = default;
+auto LuaRepl::operator=(LuaRepl &&) noexcept -> LuaRepl & = default;
 
 // ── Execution ───────────────────────────────────────────────────────
 
-bool LuaRepl::execute(const std::string &code) {
+auto LuaRepl::execute(const std::string &code) -> bool {
     if (code.empty()) return true;
 
     // Record in history.
@@ -104,6 +104,6 @@ bool LuaRepl::execute(const std::string &code) {
 
 // ── Direct state access ─────────────────────────────────────────────
 
-sol::state &LuaRepl::lua_state() { return _impl->lua; }
+auto LuaRepl::lua_state() -> sol::state & { return _impl->lua; }
 
 } // namespace balsa::lua

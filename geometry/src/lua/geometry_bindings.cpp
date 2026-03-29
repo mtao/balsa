@@ -42,7 +42,7 @@ namespace {
     }
 
     // Bind BoundingBox<3> as a Lua usertype.
-    void bind_bounding_box(sol::table &tbl) {
+    auto bind_bounding_box(sol::table &tbl) -> void {
         tbl.new_usertype<BoundingBox<3>>(
             "BoundingBox3",
             sol::no_constructor,
@@ -64,7 +64,7 @@ namespace {
 
     // geometry.bounding_box(mesh) -> BoundingBox3
     // Computes axis-aligned bounding box from vertex_positions.
-    void bind_bounding_box_fn(sol::table &tbl) {
+    auto bind_bounding_box_fn(sol::table &tbl) -> void {
         tbl.set_function(
             "bounding_box",
             [](quiver::MeshBase &mesh) -> std::optional<BoundingBox<3>> {
@@ -82,7 +82,7 @@ namespace {
 
     // geometry.read_obj(path) -> mesh, err
     // Reads an OBJ file and returns a quiver TriMesh.
-    void bind_read_obj(sol::state_view lua, sol::table &tbl) {
+    auto bind_read_obj(sol::state_view lua, sol::table &tbl) -> void {
         tbl.set_function(
             "read_obj",
             [&lua](const std::string &path)
@@ -161,7 +161,7 @@ namespace {
 
 } // anonymous namespace
 
-void load_bindings(sol::state_view lua) {
+auto load_bindings(sol::state_view lua) -> void {
     auto tbl = lua["geometry"].get_or_create<sol::table>();
 
     // Guard against double-registration.

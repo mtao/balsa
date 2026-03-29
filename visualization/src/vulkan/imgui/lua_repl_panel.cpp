@@ -15,7 +15,7 @@ namespace {
         const balsa::lua::LuaRepl *repl;
     };
 
-    int history_callback(ImGuiInputTextCallbackData *data) {
+    auto history_callback(ImGuiInputTextCallbackData *data) -> int {
         auto *hcd = static_cast<HistoryCallbackData *>(data->UserData);
         auto *state = hcd->state;
         const auto &history = hcd->repl->history();
@@ -59,7 +59,7 @@ namespace {
 
 // ── Main draw function ──────────────────────────────────────────────
 
-bool draw_lua_repl(LuaReplPanelState &state, balsa::lua::LuaRepl &repl) {
+auto draw_lua_repl(LuaReplPanelState &state, balsa::lua::LuaRepl &repl) -> bool {
     if (!state.show_panel) return false;
 
     bool executed = false;

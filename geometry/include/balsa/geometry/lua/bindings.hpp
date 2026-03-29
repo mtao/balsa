@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_GEOMETRY_LUA_BINDINGS_HPP)
+#define BALSA_GEOMETRY_LUA_BINDINGS_HPP
 
 // Geometry Lua bindings — registers balsa::geometry operations into
 // a sol::state_view under the "geometry" table.
@@ -14,6 +15,8 @@ namespace balsa::geometry::lua {
 
 // Register geometry bindings (bounding_box, volumes, read_obj, etc.)
 // into the given Lua state.  Creates a "geometry" table.
-void load_bindings(sol::state_view lua);
+auto load_bindings(sol::state_view lua) -> void;
 
 } // namespace balsa::geometry::lua
+
+#endif // BALSA_GEOMETRY_LUA_BINDINGS_HPP
