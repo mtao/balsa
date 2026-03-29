@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_GEOMETRY_POLYGON_MESH_TRIANGULATE_POLYGONS_HPP)
+#define BALSA_GEOMETRY_POLYGON_MESH_TRIANGULATE_POLYGONS_HPP
 #include "balsa/geometry/polygon_mesh/PolygonMesh.hpp"
 #include "balsa/geometry/triangle_mesh/earclipping.hpp"
 
@@ -75,3 +76,4 @@ ColVectors<index_type, 3> triangulate_polygons(const polygon_mesh::PolygonMesh<S
     }
 }
 }// namespace balsa::geometry::polygon_mesh
+#endif

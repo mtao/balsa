@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_EIGEN_SLICE_FILTER_HPP)
+#define BALSA_EIGEN_SLICE_FILTER_HPP
 
 #include "balsa/eigen/types.hpp"
 
@@ -45,3 +46,4 @@ auto slice_filter_col(const Eigen::MatrixBase<Derived> &A, const VectorX<bool> &
 }
 
 }// namespace balsa::eigen
+#endif
