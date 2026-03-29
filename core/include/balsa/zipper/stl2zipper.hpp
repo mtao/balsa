@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_ZIPPER_STL2ZIPPER_HPP)
+#define BALSA_ZIPPER_STL2ZIPPER_HPP
 #include "types.hpp"
 #include <zipper/expression/nullary/StlMDArray.hpp>
 
@@ -13,3 +14,4 @@ auto stl2zipper(auto const &M) {
 }
 
 }// namespace balsa::zipper
+#endif

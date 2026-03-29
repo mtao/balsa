@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_GEOMETRY_POINT_CLOUD_BRIDSON_POISSON_DISK_SAMPLING_HPP)
+#define BALSA_GEOMETRY_POINT_CLOUD_BRIDSON_POISSON_DISK_SAMPLING_HPP
 // Bridson's Poisson Disk Sampling
 //
 // NOTE: This file is a legacy stub from the mtao:: codebase. It depends on
@@ -25,3 +26,4 @@ namespace balsa::geometry::point_cloud {
 // Requires: balsa::geometry::grid infrastructure (not yet ported)
 
 }// namespace balsa::geometry::point_cloud
+#endif

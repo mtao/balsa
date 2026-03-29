@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_GEOMETRY_TESTS_CIRCUMCENTER_UTILS_HPP)
+#define BALSA_GEOMETRY_TESTS_CIRCUMCENTER_UTILS_HPP
 #include <zipper/concepts/Matrix.hpp>
 #include <balsa/geometry/simplex/circumcenter.hpp>
 #include <catch2/catch_approx.hpp>
@@ -16,3 +17,4 @@ void check_circumcenter_squared(::zipper::concepts::Matrix auto const &V, const 
     }
 }
 }// namespace
+#endif
