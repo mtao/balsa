@@ -26,7 +26,7 @@ ImageScene::~ImageScene() { release_vulkan_resources(); }
 
 // ── SceneBase overrides ─────────────────────────────────────────────
 
-void ImageScene::initialize(Film &film) {
+auto ImageScene::initialize(Film &film) -> void {
     SceneBase::initialize(film);
     _film = &film;
 
@@ -45,7 +45,7 @@ void ImageScene::initialize(Film &film) {
                  _drawable_group.size());
 }
 
-void ImageScene::draw(Film &film) {
+auto ImageScene::draw(Film &film) -> void {
     if (!_initialized) return;
 
     for (auto *drawable : _drawable_group) {
@@ -55,7 +55,7 @@ void ImageScene::draw(Film &film) {
     }
 }
 
-void ImageScene::release_vulkan_resources() {
+auto ImageScene::release_vulkan_resources() -> void {
     if (!_initialized) return;
 
     spdlog::debug("ImageScene: releasing Vulkan resources ({} drawables)",
@@ -77,7 +77,7 @@ void ImageScene::release_vulkan_resources() {
 
 // ── Image management ────────────────────────────────────────────────
 
-void ImageScene::ensure_image_object() {
+auto ImageScene::ensure_image_object() -> void {
     if (_image_object) return;
 
     auto &obj = _scene_root.add_child("Image");
@@ -89,63 +89,63 @@ void ImageScene::ensure_image_object() {
     if (_initialized && _film) { vid.init(*_film); }
 }
 
-void ImageScene::set_image(uint32_t width,
+auto ImageScene::set_image(uint32_t width,
                            uint32_t height,
                            scene_graph::ImageData::Format format,
-                           std::span<const std::byte> pixels) {
+                           std::span<const std::byte> pixels) -> void {
     ensure_image_object();
     auto *img = _image_object->find_feature<scene_graph::ImageData>();
     img->set_pixels(width, height, format, pixels);
     update_mvp();
 }
 
-void ImageScene::set_image_rgba8(uint32_t width,
+auto ImageScene::set_image_rgba8(uint32_t width,
                                  uint32_t height,
-                                 std::span<const uint8_t> rgba) {
+                                 std::span<const uint8_t> rgba) -> void {
     ensure_image_object();
     auto *img = _image_object->find_feature<scene_graph::ImageData>();
     img->set_pixels_rgba8(width, height, rgba);
     update_mvp();
 }
 
-void ImageScene::set_image_rgbaf32(uint32_t width,
+auto ImageScene::set_image_rgbaf32(uint32_t width,
                                    uint32_t height,
-                                   std::span<const float> rgba) {
+                                   std::span<const float> rgba) -> void {
     ensure_image_object();
     auto *img = _image_object->find_feature<scene_graph::ImageData>();
     img->set_pixels_rgbaf32(width, height, rgba);
     update_mvp();
 }
 
-scene_graph::ImageData *ImageScene::image_data() {
+auto ImageScene::image_data() -> scene_graph::ImageData * {
     if (!_image_object) return nullptr;
     return _image_object->find_feature<scene_graph::ImageData>();
 }
 
-const scene_graph::ImageData *ImageScene::image_data() const {
+auto ImageScene::image_data() const -> const scene_graph::ImageData * {
     if (!_image_object) return nullptr;
     return _image_object->find_feature<scene_graph::ImageData>();
 }
 
-bool ImageScene::has_image() const {
+auto ImageScene::has_image() const -> bool {
     return _image_object != nullptr
            && _image_object->find_feature<scene_graph::ImageData>() != nullptr;
 }
 
 // ── 2D navigation ───────────────────────────────────────────────────
 
-void ImageScene::set_zoom(float zoom) {
+auto ImageScene::set_zoom(float zoom) -> void {
     _zoom = std::max(0.01f, zoom);
     update_mvp();
 }
 
-void ImageScene::set_pan(float x, float y) {
+auto ImageScene::set_pan(float x, float y) -> void {
     _pan_x = x;
     _pan_y = y;
     update_mvp();
 }
 
-void ImageScene::fit_to_window() {
+auto ImageScene::fit_to_window() -> void {
     _zoom = 1.0f;
     _pan_x = 0.0f;
     _pan_y = 0.0f;
@@ -154,12 +154,12 @@ void ImageScene::fit_to_window() {
 
 // ── Camera accessors ────────────────────────────────────────────────
 
-scene_graph::Camera &ImageScene::camera() { return *_camera; }
-const scene_graph::Camera &ImageScene::camera() const { return *_camera; }
+auto ImageScene::camera() -> scene_graph::Camera & { return *_camera; }
+auto ImageScene::camera() const -> const scene_graph::Camera & { return *_camera; }
 
 // ── Private: MVP computation ────────────────────────────────────────
 
-void ImageScene::update_mvp() {
+auto ImageScene::update_mvp() -> void {
     if (!_image_object) return;
 
     auto *vid = _image_object->find_feature<VulkanImageDrawable>();

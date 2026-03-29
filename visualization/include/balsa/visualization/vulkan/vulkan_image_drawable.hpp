@@ -44,46 +44,46 @@ class VulkanImageDrawable : public VulkanDrawable {
 
     // Non-copyable (base class already), non-movable (registered).
     VulkanImageDrawable(VulkanImageDrawable &&) = delete;
-    VulkanImageDrawable &operator=(VulkanImageDrawable &&) = delete;
+    auto operator=(VulkanImageDrawable &&) -> VulkanImageDrawable & = delete;
 
     // ── Lifecycle ───────────────────────────────────────────────────
 
     // Allocate UBO buffers and descriptor sets (one per concurrent
     // frame slot).  Must be called once after the Film is available.
-    void init(Film &film);
+    auto init(Film &film) -> void;
 
     // Release all GPU resources.  Safe to call multiple times.
-    void release();
+    auto release() -> void;
 
-    bool is_initialized() const { return _initialized; }
+    auto is_initialized() const -> bool { return _initialized; }
 
     // ── VulkanDrawable interface ────────────────────────────────────
 
     // Draw this image with the given camera.  Syncs from ImageData if
     // dirty, updates UBOs with the MVP and tone-mapping params, then
     // issues a fullscreen triangle draw.
-    void draw(const scene_graph::Camera &cam, Film &film) override;
+    auto draw(const scene_graph::Camera &cam, Film &film) -> void override;
 
     // ── MVP override ────────────────────────────────────────────────
 
     // Set a custom MVP matrix for 2D viewing (orthographic pan/zoom).
     // When set, this overrides the camera-derived MVP.
-    void set_mvp_override(const scene_graph::Mat4f &mvp) {
+    auto set_mvp_override(const scene_graph::Mat4f &mvp) -> void {
         _mvp_override = mvp;
         _has_mvp_override = true;
     }
-    void clear_mvp_override() { _has_mvp_override = false; }
+    auto clear_mvp_override() -> void { _has_mvp_override = false; }
 
   private:
     // Sync GPU texture from the sibling ImageData feature if its
     // version has changed since our last sync.
-    void sync_from_image_data(Film &film);
+    auto sync_from_image_data(Film &film) -> void;
 
     // Upload TransformUBO (MVP) and ImageParamsUBO (tone mapping).
-    void update_ubos(const scene_graph::Camera &cam, Film &film);
+    auto update_ubos(const scene_graph::Camera &cam, Film &film) -> void;
 
     // Issue fullscreen triangle draw commands.
-    void record_draw_commands(Film &film);
+    auto record_draw_commands(Film &film) -> void;
 
     ImagePipelineManager *_manager;
     VulkanTexture _texture;

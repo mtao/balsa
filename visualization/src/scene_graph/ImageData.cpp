@@ -8,7 +8,7 @@ namespace balsa::scene_graph {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-size_t ImageData::bytes_per_pixel() const {
+auto ImageData::bytes_per_pixel() const -> size_t {
     switch (_format) {
     case Format::RGBA8:
         return 4;
@@ -20,10 +20,10 @@ size_t ImageData::bytes_per_pixel() const {
 
 // ── set_pixels (full image replacement) ─────────────────────────────
 
-void ImageData::set_pixels(uint32_t width,
+auto ImageData::set_pixels(uint32_t width,
                            uint32_t height,
                            Format format,
-                           std::span<const std::byte> data) {
+                           std::span<const std::byte> data) -> void {
     size_t bpp = (format == Format::RGBAF32) ? 16 : 4;
     size_t expected = static_cast<size_t>(width) * height * bpp;
     if (data.size() < expected) {
@@ -39,27 +39,27 @@ void ImageData::set_pixels(uint32_t width,
     _full_dirty = true;
 }
 
-void ImageData::set_pixels_rgba8(uint32_t width,
+auto ImageData::set_pixels_rgba8(uint32_t width,
                                  uint32_t height,
-                                 std::span<const uint8_t> rgba) {
+                                 std::span<const uint8_t> rgba) -> void {
     auto bytes = std::as_bytes(rgba);
     set_pixels(width, height, Format::RGBA8, bytes);
 }
 
-void ImageData::set_pixels_rgbaf32(uint32_t width,
+auto ImageData::set_pixels_rgbaf32(uint32_t width,
                                    uint32_t height,
-                                   std::span<const float> rgba) {
+                                   std::span<const float> rgba) -> void {
     auto bytes = std::as_bytes(rgba);
     set_pixels(width, height, Format::RGBAF32, bytes);
 }
 
 // ── update_region (partial update) ──────────────────────────────────
 
-void ImageData::update_region(uint32_t x,
+auto ImageData::update_region(uint32_t x,
                               uint32_t y,
                               uint32_t w,
                               uint32_t h,
-                              std::span<const std::byte> data) {
+                              std::span<const std::byte> data) -> void {
     if (_pixels.empty()) {
         throw std::runtime_error("ImageData::update_region: no image set");
     }

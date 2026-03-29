@@ -44,16 +44,16 @@ class ImageViewerScene : public vk_viz::ImageScene {
     }
     ~ImageViewerScene() override = default;
 
-    void init_imgui(vk_viz::Film &film, GLFWwindow *glfw_window) {
+    auto init_imgui(vk_viz::Film &film, GLFWwindow *glfw_window) -> void {
         _imgui.init(film, glfw_window);
     }
 
     using OpenFileCallback = std::function<void(const std::filesystem::path &)>;
-    void set_open_file_callback(OpenFileCallback cb) {
+    auto set_open_file_callback(OpenFileCallback cb) -> void {
         _open_file_cb = std::move(cb);
     }
 
-    void draw(vk_viz::Film &film) override {
+    auto draw(vk_viz::Film &film) -> void override {
         // Draw the image first.
         ImageScene::draw(film);
 
@@ -67,7 +67,7 @@ class ImageViewerScene : public vk_viz::ImageScene {
         }
     }
 
-    void release_vulkan_resources() override {
+    auto release_vulkan_resources() -> void override {
         _imgui.shutdown();
         ImageScene::release_vulkan_resources();
     }
@@ -81,7 +81,7 @@ class ImageViewerScene : public vk_viz::ImageScene {
     char _path_buf[1024] = {};
     std::string _open_error;
 
-    void draw_main_menu_bar() {
+    auto draw_main_menu_bar() -> void {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("File")) {
                 if (ImGui::MenuItem("Open...", "Ctrl+O")) {
@@ -101,7 +101,7 @@ class ImageViewerScene : public vk_viz::ImageScene {
         }
     }
 
-    void draw_open_file_dialog() {
+    auto draw_open_file_dialog() -> void {
         if (!_show_open_dialog) return;
 
         ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_FirstUseEver);
@@ -163,7 +163,7 @@ class ImageViewerWindow : public viz::glfw::vulkan::Window {
 
     ~ImageViewerWindow() override = default;
 
-    void load_image(const std::filesystem::path &path) {
+    auto load_image(const std::filesystem::path &path) -> void {
         spdlog::info("Loading image: {}", path.string());
 
         auto result = viz::load_ppm(path.string());
@@ -183,7 +183,7 @@ class ImageViewerWindow : public viz::glfw::vulkan::Window {
     }
 
   protected:
-    void dispatch_mouse(const viz::MouseEvent &e) override {
+    auto dispatch_mouse(const viz::MouseEvent &e) -> void override {
         if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
             return;
         }
@@ -226,7 +226,7 @@ class ImageViewerWindow : public viz::glfw::vulkan::Window {
         viz::glfw::vulkan::Window::dispatch_mouse(e);
     }
 
-    void dispatch_key(const viz::KeyEvent &e) override {
+    auto dispatch_key(const viz::KeyEvent &e) -> void override {
         if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard) {
             return;
         }
@@ -242,7 +242,7 @@ class ImageViewerWindow : public viz::glfw::vulkan::Window {
 
 // ── main ─────────────────────────────────────────────────────────────
 
-int main(int argc, char *argv[]) {
+auto main(int argc, char *argv[]) -> int {
     spdlog::set_level(spdlog::level::info);
 
     std::string input_path;

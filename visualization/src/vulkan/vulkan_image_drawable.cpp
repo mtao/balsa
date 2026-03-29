@@ -19,7 +19,7 @@ VulkanImageDrawable::~VulkanImageDrawable() { release(); }
 
 // ── Lifecycle ───────────────────────────────────────────────────────
 
-void VulkanImageDrawable::init(Film &film) {
+auto VulkanImageDrawable::init(Film &film) -> void {
     if (_initialized) return;
 
     const int frame_count = film.concurrent_frame_count();
@@ -53,7 +53,7 @@ void VulkanImageDrawable::init(Film &film) {
     _initialized = true;
 }
 
-void VulkanImageDrawable::release() {
+auto VulkanImageDrawable::release() -> void {
     _texture.release();
 
     for (auto &ubo : _transform_ubos) ubo.release();
@@ -75,7 +75,7 @@ void VulkanImageDrawable::release() {
 
 // ── VulkanDrawable interface ────────────────────────────────────────
 
-void VulkanImageDrawable::draw(const scene_graph::Camera &cam, Film &film) {
+auto VulkanImageDrawable::draw(const scene_graph::Camera &cam, Film &film) -> void {
     if (!_initialized) return;
     if (!object().visible) return;
 
@@ -93,7 +93,7 @@ void VulkanImageDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 
 // ── Private: sync ───────────────────────────────────────────────────
 
-void VulkanImageDrawable::sync_from_image_data(Film &film) {
+auto VulkanImageDrawable::sync_from_image_data(Film &film) -> void {
     auto *image_data = object().find_feature<scene_graph::ImageData>();
     if (!image_data) return;
     if (!image_data->has_pixels()) return;
@@ -170,8 +170,8 @@ void VulkanImageDrawable::sync_from_image_data(Film &film) {
 
 // ── Private: UBO update ─────────────────────────────────────────────
 
-void VulkanImageDrawable::update_ubos(const scene_graph::Camera &cam,
-                                      Film &film) {
+auto VulkanImageDrawable::update_ubos(const scene_graph::Camera &cam,
+                                      Film &film) -> void {
     if (!_initialized) return;
 
     const int fi = film.current_frame();
@@ -215,7 +215,7 @@ void VulkanImageDrawable::update_ubos(const scene_graph::Camera &cam,
 
 // ── Private: draw commands ──────────────────────────────────────────
 
-void VulkanImageDrawable::record_draw_commands(Film &film) {
+auto VulkanImageDrawable::record_draw_commands(Film &film) -> void {
     auto cb = film.current_command_buffer();
     const int fi = film.current_frame();
 

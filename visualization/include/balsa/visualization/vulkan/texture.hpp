@@ -32,62 +32,62 @@ class VulkanTexture {
 
     // Non-copyable
     VulkanTexture(const VulkanTexture &) = delete;
-    VulkanTexture &operator=(const VulkanTexture &) = delete;
+    auto operator=(const VulkanTexture &) -> VulkanTexture & = delete;
 
     // Movable
     VulkanTexture(VulkanTexture &&) noexcept;
-    VulkanTexture &operator=(VulkanTexture &&) noexcept;
+    auto operator=(VulkanTexture &&) noexcept -> VulkanTexture &;
 
     // Create GPU resources (image, memory, view, sampler).
     // The image is created device-local for optimal sampling.
     // A persistent staging buffer is allocated for uploads.
-    void create(Film &film, uint32_t width, uint32_t height, Format format);
+    auto create(Film &film, uint32_t width, uint32_t height, Format format) -> void;
 
     // Upload full image data.  Stages through a host-visible buffer,
     // copies to device-local memory via a one-shot command buffer.
     // The image layout is transitioned:
     //   UNDEFINED -> TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
-    void upload(Film &film, const void *pixels, size_t byte_count);
+    auto upload(Film &film, const void *pixels, size_t byte_count) -> void;
 
     // Partial update: upload a rectangular sub-region.
     // For progressive rendering — avoids re-uploading the entire image.
     // Layout: SHADER_READ_ONLY -> TRANSFER_DST -> SHADER_READ_ONLY.
-    void update_region(Film &film,
+    auto update_region(Film &film,
                        uint32_t x,
                        uint32_t y,
                        uint32_t w,
                        uint32_t h,
                        const void *pixels,
-                       size_t byte_count);
+                       size_t byte_count) -> void;
 
     // Accessors for descriptor set binding
-    vk::ImageView image_view() const { return _image_view; }
-    vk::Sampler sampler() const { return _sampler; }
+    auto image_view() const -> vk::ImageView { return _image_view; }
+    auto sampler() const -> vk::Sampler { return _sampler; }
 
-    uint32_t width() const { return _width; }
-    uint32_t height() const { return _height; }
-    Format format() const { return _format; }
+    auto width() const -> uint32_t { return _width; }
+    auto height() const -> uint32_t { return _height; }
+    auto format() const -> Format { return _format; }
 
     // Release all GPU resources.  Safe to call multiple times.
-    void release();
-    bool is_valid() const { return _image != vk::Image{}; }
+    auto release() -> void;
+    auto is_valid() const -> bool { return _image != vk::Image{}; }
 
   private:
     // Record and execute a layout transition barrier.
-    void transition_layout(vk::CommandBuffer cmd,
+    auto transition_layout(vk::CommandBuffer cmd,
                            vk::ImageLayout old_layout,
-                           vk::ImageLayout new_layout);
+                           vk::ImageLayout new_layout) -> void;
 
     // Execute a one-shot command buffer (record -> submit -> waitIdle).
     // The callback receives the command buffer to record into.
-    void one_shot_command(Film &film,
-                          std::function<void(vk::CommandBuffer)> record_fn);
+    auto one_shot_command(Film &film,
+                          std::function<void(vk::CommandBuffer)> record_fn) -> void;
 
     // Return the VkFormat corresponding to our Format enum.
-    vk::Format vk_format() const;
+    auto vk_format() const -> vk::Format;
 
     // Bytes per pixel for the current format.
-    size_t bytes_per_pixel() const;
+    auto bytes_per_pixel() const -> size_t;
 
     vk::Device _device;
     Film *_film = nullptr;
