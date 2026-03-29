@@ -46,7 +46,7 @@ Object::Object(Object &&other) noexcept
     other._parent = nullptr;
 }
 
-Object &Object::operator=(Object &&other) noexcept {
+auto Object::operator=(Object &&other) noexcept -> Object & {
     if (this != &other) {
         name = std::move(other.name);
         visible = other.visible;
@@ -72,7 +72,7 @@ Object &Object::operator=(Object &&other) noexcept {
 
 // ── Euler angles ────────────────────────────────────────────────────
 
-Vec3f Object::rotation_euler() const {
+auto Object::rotation_euler() const -> Vec3f {
     auto rad = ::zipper::transform::euler_angles(_rotation);
     Vec3f deg;
     deg(0) = static_cast<float>(rad(0)) * k_rad2deg;
@@ -81,7 +81,7 @@ Vec3f Object::rotation_euler() const {
     return deg;
 }
 
-void Object::set_rotation_euler(const Vec3f &degrees) {
+auto Object::set_rotation_euler(const Vec3f &degrees) -> void {
     Vec3f radians;
     radians(0) = degrees(0) * k_deg2rad;
     radians(1) = degrees(1) * k_deg2rad;
@@ -91,22 +91,22 @@ void Object::set_rotation_euler(const Vec3f &degrees) {
 
 // ── Convenience mutators ────────────────────────────────────────────
 
-void Object::translate(const Vec3f &delta) {
+auto Object::translate(const Vec3f &delta) -> void {
     _translation = (_translation + delta).eval();
 }
 
-void Object::rotate(const Quaternionf &q) {
+auto Object::rotate(const Quaternionf &q) -> void {
     // Post-multiply: new_rotation = q * old_rotation
     _rotation = (q * _rotation).eval();
 }
 
-void Object::set_uniform_scale(float s) {
+auto Object::set_uniform_scale(float s) -> void {
     _scale(0) = s;
     _scale(1) = s;
     _scale(2) = s;
 }
 
-void Object::reset_transform() {
+auto Object::reset_transform() -> void {
     _translation(0) = 0;
     _translation(1) = 0;
     _translation(2) = 0;
@@ -118,7 +118,7 @@ void Object::reset_transform() {
 
 // ── Composed transforms ─────────────────────────────────────────────
 
-AffineTransformf Object::local_transform() const {
+auto Object::local_transform() const -> AffineTransformf {
     // Compose T * R * S using zipper's transform composition.
     Translation3f t(_translation);
     Rotation3f r(::zipper::transform::to_rotation_matrix(_rotation));
@@ -126,7 +126,7 @@ AffineTransformf Object::local_transform() const {
     return t * r * s;
 }
 
-void Object::set_from_transform(const AffineTransformf &xf) {
+auto Object::set_from_transform(const AffineTransformf &xf) -> void {
     auto [t, r, s] = ::zipper::transform::trs_decompose(xf);
 
     for (int i = 0; i < 3; ++i) {
@@ -136,14 +136,14 @@ void Object::set_from_transform(const AffineTransformf &xf) {
     _rotation = ::zipper::transform::to_quaternion(r.matrix());
 }
 
-AffineTransformf Object::world_transform() const {
+auto Object::world_transform() const -> AffineTransformf {
     if (_parent) { return _parent->world_transform() * local_transform(); }
     return local_transform();
 }
 
 // ── Hierarchy ───────────────────────────────────────────────────────
 
-Object &Object::add_child(std::string child_name) {
+auto Object::add_child(std::string child_name) -> Object & {
     auto child = std::make_unique<Object>(std::move(child_name));
     child->_parent = this;
     _children.push_back(std::move(child));
@@ -151,7 +151,7 @@ Object &Object::add_child(std::string child_name) {
     return *_children.back();
 }
 
-Object &Object::add_child(std::unique_ptr<Object> child) {
+auto Object::add_child(std::unique_ptr<Object> child) -> Object & {
     if (!child) {
         // Create an empty child rather than storing a null.
         return add_child(std::string{});
@@ -176,7 +176,7 @@ Object &Object::add_child(std::unique_ptr<Object> child) {
     return *_children.back();
 }
 
-std::unique_ptr<Object> Object::detach() {
+auto Object::detach() -> std::unique_ptr<Object> {
     if (!_parent) return nullptr;
     if (permanent) return nullptr; // permanent objects cannot be detached
 
@@ -197,7 +197,7 @@ std::unique_ptr<Object> Object::detach() {
 
 // ── Feature removal ─────────────────────────────────────────────────
 
-bool Object::remove_feature(AbstractFeature *feature) {
+auto Object::remove_feature(AbstractFeature *feature) -> bool {
     if (!feature) return false;
     auto it =
         std::find_if(_features.begin(),

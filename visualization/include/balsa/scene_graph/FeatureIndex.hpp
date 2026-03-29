@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_SCENE_GRAPH_FEATUREINDEX_HPP)
+#define BALSA_SCENE_GRAPH_FEATUREINDEX_HPP
 
 #include <span>
 #include <typeindex>
@@ -42,10 +43,10 @@ class FeatureIndex : public sigslot::observer_st {
 
     // Recursively subscribe to an Object and all its current
     // descendants.  Indexes every feature already present.
-    void track(Object &root);
+    auto track(Object &root) -> void;
 
     // Stop tracking an Object (and its descendants).
-    void untrack(Object &root);
+    auto untrack(Object &root) -> void;
 
     // Return all Objects that currently carry a feature of type F.
     template <typename F>
@@ -56,14 +57,14 @@ class FeatureIndex : public sigslot::observer_st {
     auto count() const -> std::size_t;
 
   private:
-    void track_single(Object &obj);
-    void untrack_single(Object &obj);
+    auto track_single(Object &obj) -> void;
+    auto untrack_single(Object &obj) -> void;
 
     // Signal handlers.
-    void on_feature_added(Object &obj, AbstractFeature &feature);
-    void on_feature_removing(Object &obj, AbstractFeature &feature);
-    void on_child_added(Object &parent, Object &child);
-    void on_child_removing(Object &parent, Object &child);
+    auto on_feature_added(Object &obj, AbstractFeature &feature) -> void;
+    auto on_feature_removing(Object &obj, AbstractFeature &feature) -> void;
+    auto on_child_added(Object &parent, Object &child) -> void;
+    auto on_child_removing(Object &parent, Object &child) -> void;
 
     // type_index -> vector of Object pointers carrying that feature type.
     std::unordered_map<std::type_index, std::vector<Object *>> _index;
@@ -86,3 +87,5 @@ auto FeatureIndex::count() const -> std::size_t {
 }
 
 } // namespace balsa::scene_graph
+
+#endif

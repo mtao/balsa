@@ -6,14 +6,14 @@ namespace balsa::scene_graph {
 
 // ── Public API ──────────────────────────────────────────────────────
 
-void FeatureIndex::track(Object &root) {
+auto FeatureIndex::track(Object &root) -> void {
     track_single(root);
     for (auto &child_ptr : root.children()) {
         if (child_ptr) track(*child_ptr);
     }
 }
 
-void FeatureIndex::untrack(Object &root) {
+auto FeatureIndex::untrack(Object &root) -> void {
     for (auto &child_ptr : root.children()) {
         if (child_ptr) untrack(*child_ptr);
     }
@@ -22,7 +22,7 @@ void FeatureIndex::untrack(Object &root) {
 
 // ── Internals ───────────────────────────────────────────────────────
 
-void FeatureIndex::track_single(Object &obj) {
+auto FeatureIndex::track_single(Object &obj) -> void {
     // Index all features already present on this object.
     for (auto &f : obj.features()) {
         if (f) { _index[std::type_index(typeid(*f))].push_back(&obj); }
@@ -37,7 +37,7 @@ void FeatureIndex::track_single(Object &obj) {
     obj.on_child_removing.connect(&FeatureIndex::on_child_removing, this);
 }
 
-void FeatureIndex::untrack_single(Object &obj) {
+auto FeatureIndex::untrack_single(Object &obj) -> void {
     // Disconnect all signals from this object to us.
     obj.on_feature_added.disconnect(this);
     obj.on_feature_removing.disconnect(this);
@@ -58,11 +58,11 @@ void FeatureIndex::untrack_single(Object &obj) {
 
 // ── Signal handlers ─────────────────────────────────────────────────
 
-void FeatureIndex::on_feature_added(Object &obj, AbstractFeature &feature) {
+auto FeatureIndex::on_feature_added(Object &obj, AbstractFeature &feature) -> void {
     _index[std::type_index(typeid(feature))].push_back(&obj);
 }
 
-void FeatureIndex::on_feature_removing(Object &obj, AbstractFeature &feature) {
+auto FeatureIndex::on_feature_removing(Object &obj, AbstractFeature &feature) -> void {
     auto ti = std::type_index(typeid(feature));
     auto map_it = _index.find(ti);
     if (map_it == _index.end()) return;
@@ -71,11 +71,11 @@ void FeatureIndex::on_feature_removing(Object &obj, AbstractFeature &feature) {
     if (vec.empty()) _index.erase(map_it);
 }
 
-void FeatureIndex::on_child_added(Object & /*parent*/, Object &child) {
+auto FeatureIndex::on_child_added(Object & /*parent*/, Object &child) -> void {
     track(child);
 }
 
-void FeatureIndex::on_child_removing(Object & /*parent*/, Object &child) {
+auto FeatureIndex::on_child_removing(Object & /*parent*/, Object &child) -> void {
     untrack(child);
 }
 

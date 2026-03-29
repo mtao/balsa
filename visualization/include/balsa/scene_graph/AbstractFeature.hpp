@@ -20,15 +20,15 @@ class AbstractFeature {
   public:
     virtual ~AbstractFeature() = default;
 
-    Object &object() { return *_object; }
-    const Object &object() const { return *_object; }
+    auto object() -> Object & { return *_object; }
+    auto object() const -> const Object & { return *_object; }
 
     // Signal emitted when this feature's data has changed.
     // Subscribers receive a reference to the modified feature.
     sigslot::signal_st<AbstractFeature &> on_modified;
 
     // Call this from derived classes after mutating internal state.
-    void mark_modified() { on_modified(*this); }
+    auto mark_modified() -> void { on_modified(*this); }
 
   protected:
     AbstractFeature() = default;
