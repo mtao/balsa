@@ -69,7 +69,7 @@ jobs:
             nlohmann-json3-dev catch2 \
             libvulkan-dev glslang-dev libshaderc-dev \
             libglfw3-dev \
-            qt6-base-dev libqt6opengl6-dev libqt6openglwidgets6-dev \
+            qt6-base-dev \
             libgl-dev libgl1-mesa-dev \
             libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev \
             libxau-dev libxaw7-dev libxcomposite-dev libxcursor-dev \
@@ -120,6 +120,7 @@ jobs:
         run: >
           meson setup build/
           --buildtype=${{ matrix.build_type }}
+          --wrap-mode=forcefallback
           -Dtesting=true
 
       - name: Build

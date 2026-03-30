@@ -72,7 +72,7 @@ jobs:
           sudo apt-get install -y \
             libvulkan-dev glslang-dev libshaderc-dev \
             libglfw3-dev \
-            qt6-base-dev libqt6opengl6-dev libqt6openglwidgets6-dev \
+            qt6-base-dev \
             libgl-dev libgl1-mesa-dev \
             libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev \
             libxau-dev libxaw7-dev libxcomposite-dev libxcursor-dev \
@@ -147,7 +147,7 @@ jobs:
         env:
           CC: ${{ runner.os != 'Windows' && format('ccache {0}', matrix.platform.cc) || matrix.platform.cc }}
           CXX: ${{ runner.os != 'Windows' && format('ccache {0}', matrix.platform.cxx) || matrix.platform.cxx }}
-        run: meson setup builddir/ --native-file builddir/conan/conan_meson_native.ini
+        run: meson setup builddir/ --wrap-mode=forcefallback --native-file builddir/conan/conan_meson_native.ini
 
       - name: Build
         run: meson compile -C builddir/
