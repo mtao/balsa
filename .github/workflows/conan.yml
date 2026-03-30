@@ -56,6 +56,7 @@ jobs:
 
       - name: Configure git for private subprojects
         if: env.SUBPROJECT_PAT != ''
+        shell: bash
         run: git config --global url."https://x-access-token:${SUBPROJECT_PAT}@github.com/".insteadOf "https://github.com/"
 
       - name: Set up Python
@@ -128,7 +129,12 @@ jobs:
           conan profile show
 
       - name: Install conan dependencies
-        run: conan install . --output-folder=builddir/conan --build=missing
+        run: >
+          conan install .
+          --output-folder=builddir/conan
+          --build=missing
+          -o qt=False
+          -o protobuf=False
 
       # -- Caches --
       - name: Cache ccache
@@ -148,11 +154,26 @@ jobs:
           ccache -z
 
       # -- Build & Test --
+      - name: Write compiler native file (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p builddir
+          {
+            echo "[binaries]"
+            echo "c = '${{ matrix.platform.cc }}'"
+            echo "cpp = '${{ matrix.platform.cxx }}'"
+          } > builddir/compiler.ini
+
       - name: Configure
         env:
           CC: ${{ runner.os != 'Windows' && format('ccache {0}', matrix.platform.cc) || matrix.platform.cc }}
           CXX: ${{ runner.os != 'Windows' && format('ccache {0}', matrix.platform.cxx) || matrix.platform.cxx }}
-        run: meson setup builddir/ --wrap-mode=forcefallback --native-file builddir/conan/conan_meson_native.ini
+        run: >
+          meson setup builddir/
+          --wrap-mode=forcefallback
+          --native-file builddir/conan/conan_meson_native.ini
+          ${{ runner.os != 'Windows' && '--native-file builddir/compiler.ini' || '' }}
 
       - name: Build
         run: meson compile -C builddir/

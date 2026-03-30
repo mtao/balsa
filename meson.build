@@ -1,6 +1,6 @@
 project('balsa', 'cpp',
   version : '0.1',
-  default_options : ['warning_level=3', 'cpp_std=c++26'])
+  default_options : ['warning_level=3', 'cpp_std=c++26,vc++latest'])
 
 cc = meson.get_compiler('cpp')
 dl_lib = cc.find_library('dl')

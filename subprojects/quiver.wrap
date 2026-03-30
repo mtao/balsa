@@ -1,3 +1,3 @@
 [wrap-git]
 url = https://github.com/mtao/quiver.git
-revision = main
+revision = fix/mdspan-apple-clang

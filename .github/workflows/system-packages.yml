@@ -90,6 +90,11 @@ jobs:
             libxcb-dri3-dev uuid-dev libxcb-cursor-dev libxcb-dri2-0-dev \
             libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev \
             libxcb-res0-dev libxcb-util-dev
+          # Purge system fmt/spdlog to prevent pkg-config leaking -DFMT_EXPORT
+          # into the bundled subproject build (causes FMT_BEGIN_EXPORT errors).
+          # These are pulled back as transitive deps of qt6-base-dev et al.
+          sudo apt-get remove --purge -y libfmt-dev libspdlog-dev 2>/dev/null || true
+          sudo apt-get autoremove -y 2>/dev/null || true
 
       - name: Install packages (macOS)
         if: runner.os == 'macOS'
