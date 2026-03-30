@@ -79,6 +79,7 @@ jobs:
             libglfw3-dev \
             qt6-base-dev \
             libgl-dev libgl1-mesa-dev \
+            libreadline-dev \
             libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev \
             libxau-dev libxaw7-dev libxcomposite-dev libxcursor-dev \
             libxdamage-dev libxfixes-dev libxi-dev libxinerama-dev \
@@ -181,10 +182,18 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          # Extract library directories from conan .pc files so shared libs
-          # (e.g. libtbb) are found at test runtime.
-          CONAN_LIB_DIRS=$(grep -rh '^libdir=' builddir/conan/*.pc 2>/dev/null \
-            | sed 's/^libdir=//' | sort -u | tr '\n' ':')
+          # Use pkg-config to resolve library directories from conan .pc files
+          # so shared libs (e.g. libtbb) are found at test runtime.
+          # The .pc files use ${prefix} variables that raw grep cannot resolve.
+          export PKG_CONFIG_PATH="builddir/conan:${PKG_CONFIG_PATH:-}"
+          CONAN_LIB_DIRS=""
+          for pc in builddir/conan/*.pc; do
+            pkg=$(basename "$pc" .pc)
+            dirs=$(pkg-config --libs-only-L "$pkg" 2>/dev/null | tr ' ' '\n' | sed 's/^-L//' | tr '\n' ':')
+            CONAN_LIB_DIRS="${CONAN_LIB_DIRS}${dirs}"
+          done
+          # Deduplicate
+          CONAN_LIB_DIRS=$(echo "$CONAN_LIB_DIRS" | tr ':' '\n' | sort -u | tr '\n' ':' | sed 's/:$//')
           echo "LD_LIBRARY_PATH=${CONAN_LIB_DIRS}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
       - name: Test

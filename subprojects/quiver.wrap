@@ -1,3 +1,6 @@
 [wrap-git]
 url = https://github.com/mtao/quiver.git
-revision = fix/mdspan-apple-clang
+# Points to fix/msvc-compat until PR #14 is merged to main.
+# This branch includes cpp_std=c++26,vc++latest, StoredAttribute concept
+# fixes (C2244), and CofacetTraverser specialization fixes (C2753).
+revision = fix/msvc-compat
