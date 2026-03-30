@@ -55,6 +55,7 @@ subprojects/*.wrap
 !subprojects/cli11.wrap
 !subprojects/colormap_shaders.wrap
 !subprojects/eigen.wrap
+!subprojects/fmt.wrap
 !subprojects/imgui.wrap
 !subprojects/nlohmann_json.wrap
 !subprojects/partio.wrap
