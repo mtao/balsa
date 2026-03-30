@@ -40,10 +40,12 @@ jobs:
             image: ubuntu-24.04
             cc: gcc-15
             cxx: g++-15
+            extra_args: ""
           - name: macOS (Clang)
             image: macos-latest
             cc: clang
             cxx: clang++
+            extra_args: "-Dimgui=false"
     env:
       MESON_VERSION: "1.7.2"
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -70,7 +72,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-15 g++-15 ccache
           sudo apt-get install -y \
-            libfmt-dev libspdlog-dev libeigen3-dev \
+            libeigen3-dev \
             nlohmann-json3-dev catch2 libtbb-dev libreadline-dev \
             libvulkan-dev glslang-dev libshaderc-dev \
             libglfw3-dev \
@@ -127,6 +129,7 @@ jobs:
           --buildtype=${{ matrix.build_type }}
           --wrap-mode=forcefallback
           -Dtesting=true
+          ${{ matrix.platform.extra_args }}
 
       - name: Build
         run: meson compile -C build/
