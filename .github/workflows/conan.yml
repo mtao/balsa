@@ -36,10 +36,9 @@ jobs:
             image: ubuntu-24.04
             cc: gcc-15
             cxx: g++-15
-          - name: macOS (Clang)
-            image: macos-latest
-            cc: clang
-            cxx: clang++
+          # macOS disabled: Apple Clang cannot build quiver (missing
+          # std::ranges::iota, consteval support, std::submdspan,
+          # std::execution::par).
           - name: Windows (MSVC)
             image: windows-latest
             cc: cl
@@ -92,10 +91,6 @@ jobs:
             libxcb-dri3-dev uuid-dev libxcb-cursor-dev libxcb-dri2-0-dev \
             libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev \
             libxcb-res0-dev libxcb-util-dev
-
-      - name: Install ccache (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ccache
 
       - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
@@ -181,6 +176,16 @@ jobs:
       - name: ccache stats
         if: runner.os != 'Windows'
         run: ccache -s
+
+      - name: Set conan library path (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Extract library directories from conan .pc files so shared libs
+          # (e.g. libtbb) are found at test runtime.
+          CONAN_LIB_DIRS=$(grep -rh '^libdir=' builddir/conan/*.pc 2>/dev/null \
+            | sed 's/^libdir=//' | sort -u | tr '\n' ':')
+          echo "LD_LIBRARY_PATH=${CONAN_LIB_DIRS}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
       - name: Test
         run: meson test -C builddir/ -v

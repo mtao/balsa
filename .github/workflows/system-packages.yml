@@ -41,11 +41,9 @@ jobs:
             cc: gcc-15
             cxx: g++-15
             extra_args: ""
-          - name: macOS (Clang)
-            image: macos-latest
-            cc: clang
-            cxx: clang++
-            extra_args: "-Dimgui=false"
+          # macOS disabled: Apple Clang cannot build quiver (missing
+          # std::ranges::iota, consteval support, std::submdspan,
+          # std::execution::par).
     env:
       MESON_VERSION: "1.7.2"
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -66,7 +64,6 @@ jobs:
 
       # -- Toolchain & packages --
       - name: Install packages (Linux)
-        if: runner.os == 'Linux'
         run: |
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update
@@ -90,10 +87,6 @@ jobs:
             libxcb-dri3-dev uuid-dev libxcb-cursor-dev libxcb-dri2-0-dev \
             libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev \
             libxcb-res0-dev libxcb-util-dev
-
-      - name: Install packages (macOS)
-        if: runner.os == 'macOS'
-        run: brew install spdlog fmt catch2 nlohmann-json cli11 eigen qt@6 tbb ccache shaderc glfw vulkan-loader molten-vk
 
       - name: Install Meson and Ninja
         run: python -m pip install meson==${{ env.MESON_VERSION }} ninja

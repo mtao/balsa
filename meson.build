@@ -3,7 +3,7 @@ project('balsa', 'cpp',
   default_options : ['warning_level=3', 'cpp_std=c++26,vc++latest'])
 
 cc = meson.get_compiler('cpp')
-dl_lib = cc.find_library('dl')
+dl_lib = cc.find_library('dl', required: false)
 
 # ── Core dependencies (system or WrapDB subproject fallback) ──────────────
 # Force spdlog to static when building as subproject: spdlog's wrapdb meson.build
