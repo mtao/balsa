@@ -53,7 +53,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Configure git for private subprojects
-        if: env.SUBPROJECT_PAT != ''
+        if: ${{ secrets.SUBPROJECT_PAT != '' }}
         env:
           SUBPROJECT_PAT: ${{ secrets.SUBPROJECT_PAT }}
         run: git config --global url."https://x-access-token:${SUBPROJECT_PAT}@github.com/".insteadOf "https://github.com/"
