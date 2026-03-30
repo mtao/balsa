@@ -47,15 +47,14 @@ jobs:
     env:
       MESON_VERSION: "1.7.2"
       CCACHE_DIR: ${{ github.workspace }}/.ccache
+      SUBPROJECT_PAT: ${{ secrets.SUBPROJECT_PAT }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Configure git for private subprojects
-        if: ${{ secrets.SUBPROJECT_PAT != '' }}
-        env:
-          SUBPROJECT_PAT: ${{ secrets.SUBPROJECT_PAT }}
+        if: env.SUBPROJECT_PAT != ''
         run: git config --global url."https://x-access-token:${SUBPROJECT_PAT}@github.com/".insteadOf "https://github.com/"
 
       - name: Set up Python
