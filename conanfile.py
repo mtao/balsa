@@ -24,7 +24,9 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
     ("qt",       [True, False], True,  ["qt/6.8.3"]),
     ("protobuf", [True, False], True,  ["protobuf/5.27.0"]),
     ("openvdb",  [True, False], False, ["openvdb/11.0.0"]),
-    ("alembic",  [True, False], True,  ["alembic/1.8.6"]),
+    # Alembic's conan package does not produce a pkg-config file on Windows,
+    # so meson cannot find it.  Disable by default until upstream is fixed.
+    ("alembic",  [True, False], False, ["alembic/1.8.6"]),
     ("embree",   [True, False], False, ["embree3/3.13.5"]),
     ("perfetto", [True, False], False, ["perfetto/50.1"]),
     ("pngpp",    [True, False], False, ["pngpp/0.2.10"]),
