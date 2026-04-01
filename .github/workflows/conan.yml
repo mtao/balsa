@@ -108,7 +108,17 @@ jobs:
 
       - name: Install pkg-config (Windows)
         if: runner.os == 'Windows'
-        run: choco install pkgconfiglite
+        shell: pwsh
+        run: |
+          # Retry choco install — chocolatey community feed occasionally
+          # returns 504 Gateway Timeout errors.
+          foreach ($i in 1..5) {
+            choco install pkgconfiglite -y
+            if ($LASTEXITCODE -eq 0) { break }
+            Write-Host "Attempt $i failed, retrying in 10s..."
+            Start-Sleep -Seconds 10
+          }
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # -- Conan --
       - name: Create conan profile (Unix)
