@@ -130,6 +130,7 @@ jobs:
           --output-folder=builddir/conan
           --build=missing
           -o qt=False
+          -o visualization=False
           -o protobuf=False
 
       # -- Caches --
