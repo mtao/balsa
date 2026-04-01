@@ -65,7 +65,13 @@ jobs:
       # -- Toolchain & packages --
       - name: Install packages (Linux)
         run: |
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          # Retry PPA setup — Launchpad occasionally returns transient
+          # GPGKeyTemporarilyNotFoundError (HTTP 500) errors.
+          for i in 1 2 3 4 5; do
+            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test && break
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
           sudo apt-get update
           sudo apt-get install -y gcc-15 g++-15 ccache
           sudo apt-get install -y \
