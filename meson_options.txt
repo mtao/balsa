@@ -17,3 +17,4 @@ option('visualization', type : 'boolean', value : true, description : 'Build vis
 option('glfw', type : 'boolean', value : true, description : 'Use glfw')
 option('qt', type : 'boolean', value : true, description : 'Use qt')
 option('quiver', type : 'boolean', value : true, description : 'Use quiver simplicial complex mesh library')
+option('lua', type : 'boolean', value : false, description : 'Enable Lua REPL (requires quiver)')

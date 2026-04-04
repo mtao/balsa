@@ -57,6 +57,11 @@ if get_option('quiver')
   geometry_required_deps += quiver_dep
 endif
 
+if get_option('lua')
+  geometry_required_deps += lua_deps
+  geometry_sources += 'src/lua/geometry_bindings.cpp'
+endif
+
 include_dir = [include_directories('include')]
 
 geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)

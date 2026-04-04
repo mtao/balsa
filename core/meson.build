@@ -37,6 +37,11 @@ if get_option('json')
   core_required_deps += nlohmann_json_dep
 endif
 
+if get_option('lua')
+  core_required_deps += lua_deps
+  core_sources += 'src/lua/lua_repl.cpp'
+endif
+
 core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
 
 core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)

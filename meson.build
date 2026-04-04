@@ -12,6 +12,19 @@ eigen_dep  = dependency('eigen3', version: '>=3.4.0')
 zipper_proj = subproject('zipper', default_options: {'testing': false})
 zipper_dep = zipper_proj.get_variable('zipper_dep')
 
+# ── Optional: Lua (sol2) ─────────────────────────────────────────────
+# Fetch sol2 early so core/ can link against it (before subdir('core')).
+lua_deps = []
+if get_option('lua')
+  if not get_option('quiver')
+    error('lua=true requires quiver=true')
+  endif
+  add_project_arguments('-DBALSA_HAS_LUA=1', language: 'cpp')
+  sol2_proj = subproject('sol2')
+  sol2_dep = sol2_proj.get_variable('sol2_dep')
+  lua_deps += sol2_dep
+endif
+
 core_required_deps = [spdlog_dep, eigen_dep, zipper_dep]
 
 # ── Optional dependencies (system only -- enable via Conan or system packages) ──
