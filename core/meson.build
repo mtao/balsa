@@ -12,11 +12,15 @@ filesystem_headers = [
   'include/balsa/filesystem/prepend_to_filename.hpp',
 ]
 
+terminal_sources = [
+  'src/terminal/image_output.cpp',
+]
+
 core_sources = [
   'src/logging/stopwatch.cpp',
   'src/logging/json_sink.cpp', 
   'src/types/get_type_name.cpp',
- ] + filesystem_sources
+ ] + filesystem_sources + terminal_sources
 
 core_headers = [
   'include/eigen/types.hpp'
