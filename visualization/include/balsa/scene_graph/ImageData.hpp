@@ -7,6 +7,7 @@
 #include <span>
 #include <vector>
 
+#include "balsa/geometry/BoundingBox.hpp"
 #include "balsa/scene_graph/AbstractFeature.hpp"
 #include "balsa/visualization/vulkan/texture.hpp"
 
@@ -29,6 +30,7 @@ namespace balsa::scene_graph {
 class ImageData : public AbstractFeature {
   public:
     using Format = visualization::vulkan::VulkanTexture::Format;
+    using DirtyRegion = geometry::BoundingBox<uint32_t, 2>;
 
     ImageData() = default;
 
@@ -72,12 +74,10 @@ class ImageData : public AbstractFeature {
 
     auto version() const -> uint64_t { return _version; }
 
-    // Dirty region: the rectangle that changed since last clear.
-    // If no partial update has been done (or set_pixels was called),
-    // this covers the full image.
-    struct DirtyRegion {
-        uint32_t x, y, w, h;
-    };
+    // Dirty region: the bounding box (in pixel coordinates) that changed
+    // since last clear.  min() gives the top-left corner, width()/height()
+    // give the extent.  If no partial update has been done (or set_pixels
+    // was called), this covers the full image.
     auto dirty_region() const -> std::optional<DirtyRegion> { return _dirty; }
     auto clear_dirty() -> void { _dirty = std::nullopt; }
 

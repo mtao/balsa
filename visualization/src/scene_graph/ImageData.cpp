@@ -35,7 +35,7 @@ auto ImageData::set_pixels(uint32_t width,
     _format = format;
     _pixels.assign(data.begin(), data.begin() + expected);
     ++_version;
-    _dirty = DirtyRegion{0, 0, width, height};
+    _dirty = DirtyRegion(0, 0, width, height);
     _full_dirty = true;
 }
 
@@ -90,13 +90,13 @@ auto ImageData::update_region(uint32_t x,
 
     // Merge with existing dirty region (union of rectangles).
     if (_dirty) {
-        uint32_t x0 = std::min(_dirty->x, x);
-        uint32_t y0 = std::min(_dirty->y, y);
-        uint32_t x1 = std::max(_dirty->x + _dirty->w, x + w);
-        uint32_t y1 = std::max(_dirty->y + _dirty->h, y + h);
-        _dirty = DirtyRegion{x0, y0, x1 - x0, y1 - y0};
+        uint32_t x0 = std::min(_dirty->min(0), x);
+        uint32_t y0 = std::min(_dirty->min(1), y);
+        uint32_t x1 = std::max(_dirty->min(0) + _dirty->width(), x + w);
+        uint32_t y1 = std::max(_dirty->min(1) + _dirty->height(), y + h);
+        _dirty = DirtyRegion(x0, y0, x1, y1);
     } else {
-        _dirty = DirtyRegion{x, y, w, h};
+        _dirty = DirtyRegion(x, y, x + w, y + h);
     }
 }
 

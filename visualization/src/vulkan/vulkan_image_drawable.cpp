@@ -75,7 +75,8 @@ auto VulkanImageDrawable::release() -> void {
 
 // ── VulkanDrawable interface ────────────────────────────────────────
 
-auto VulkanImageDrawable::draw(const scene_graph::Camera &cam, Film &film) -> void {
+auto VulkanImageDrawable::draw(const scene_graph::Camera &cam, Film &film)
+    -> void {
     if (!_initialized) return;
     if (!object().visible) return;
 
@@ -134,29 +135,27 @@ auto VulkanImageDrawable::sync_from_image_data(Film &film) -> void {
             // Partial update: extract the dirty sub-region from the pixel
             // buffer and upload just that rectangle.
             size_t bpp = image_data->bytes_per_pixel();
-            size_t region_bytes =
-                static_cast<size_t>(dirty->w) * dirty->h * bpp;
-            size_t row_bytes = static_cast<size_t>(dirty->w) * bpp;
+            uint32_t dw = dirty->width();
+            uint32_t dh = dirty->height();
+            uint32_t dx = dirty->min(0);
+            uint32_t dy = dirty->min(1);
+            size_t region_bytes = static_cast<size_t>(dw) * dh * bpp;
+            size_t row_bytes = static_cast<size_t>(dw) * bpp;
 
             // Build a tightly-packed buffer for the dirty region.
             std::vector<std::byte> region_data(region_bytes);
             auto pixels = image_data->pixels();
-            for (uint32_t row = 0; row < dirty->h; ++row) {
+            for (uint32_t row = 0; row < dh; ++row) {
                 size_t src_offset =
-                    (static_cast<size_t>(dirty->y + row) * w + dirty->x) * bpp;
+                    (static_cast<size_t>(dy + row) * w + dx) * bpp;
                 size_t dst_offset = static_cast<size_t>(row) * row_bytes;
                 std::memcpy(region_data.data() + dst_offset,
                             pixels.data() + src_offset,
                             row_bytes);
             }
 
-            _texture.update_region(film,
-                                   dirty->x,
-                                   dirty->y,
-                                   dirty->w,
-                                   dirty->h,
-                                   region_data.data(),
-                                   region_data.size());
+            _texture.update_region(
+                film, dx, dy, dw, dh, region_data.data(), region_data.size());
         } else {
             // Full re-upload.
             auto pixels = image_data->pixels();

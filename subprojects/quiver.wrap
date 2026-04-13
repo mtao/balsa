@@ -1,6 +1,6 @@
 [wrap-git]
 url = https://github.com/mtao/quiver.git
-revision = main
+revision = feature/kdop-scalar-type
 
 [provide]
 quiver = quiver_dep

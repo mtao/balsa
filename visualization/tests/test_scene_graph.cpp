@@ -807,10 +807,10 @@ TEST_CASE("ImageData set_pixels_rgba8", "[scene_graph][image]") {
     // Dirty region should cover the full image.
     auto dirty = img.dirty_region();
     REQUIRE(dirty.has_value());
-    CHECK(dirty->x == 0);
-    CHECK(dirty->y == 0);
-    CHECK(dirty->w == 2);
-    CHECK(dirty->h == 3);
+    CHECK(dirty->min(0) == 0);
+    CHECK(dirty->min(1) == 0);
+    CHECK(dirty->width() == 2);
+    CHECK(dirty->height() == 3);
     CHECK(img.is_full_dirty());
 
     // Verify pixel data was copied.
@@ -889,10 +889,10 @@ TEST_CASE("ImageData update_region writes correct pixels",
     // Verify the dirty region.
     auto dirty = img.dirty_region();
     REQUIRE(dirty.has_value());
-    CHECK(dirty->x == 1);
-    CHECK(dirty->y == 1);
-    CHECK(dirty->w == 2);
-    CHECK(dirty->h == 2);
+    CHECK(dirty->min(0) == 1);
+    CHECK(dirty->min(1) == 1);
+    CHECK(dirty->width() == 2);
+    CHECK(dirty->height() == 2);
     CHECK_FALSE(img.is_full_dirty());
 
     // Verify pixel at (1, 1) is red.
@@ -931,10 +931,10 @@ TEST_CASE("ImageData update_region merges dirty rectangles",
     // Dirty region should be the union bounding box: (0,0) to (7,7).
     auto dirty = img.dirty_region();
     REQUIRE(dirty.has_value());
-    CHECK(dirty->x == 0);
-    CHECK(dirty->y == 0);
-    CHECK(dirty->w == 7); // max(0+2, 4+3) - min(0,4) = 7 - 0
-    CHECK(dirty->h == 7);
+    CHECK(dirty->min(0) == 0);
+    CHECK(dirty->min(1) == 0);
+    CHECK(dirty->width() == 7); // max(0+2, 4+3) - min(0,4) = 7 - 0
+    CHECK(dirty->height() == 7);
 }
 
 TEST_CASE("ImageData clear_dirty resets tracking", "[scene_graph][image]") {
