@@ -29,12 +29,9 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
     ("alembic",  [True, False], False, ["alembic/1.8.6"]),
     ("embree",   [True, False], False, ["embree3/3.13.5"]),
     ("perfetto", [True, False], False, ["perfetto/50.1"]),
-    ("pngpp",    [True, False], False, ["pngpp/0.2.10"]),
     # Options with no Conan deps (handled entirely by Meson)
     ("json",   [True, False], True,  []),
     ("partio", [True, False], False, []),  # cmake subproject; disabled in CI
-    ("igl",    [True, False], False, []),  # cmake subproject; disabled in CI
-    ("eltopo", [True, False], False, []),  # cmake subproject; disabled in CI
 ]
 
 __OPTIONS__ = {name: values for name, values, default, deps in __OPTIONAL_FLAGS_WITH_DEPS__}
