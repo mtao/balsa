@@ -24,15 +24,17 @@ __OPTIONAL_FLAGS_WITH_DEPS__ = [
     ("qt",       [True, False], True,  ["qt/6.8.3"]),
     ("protobuf", [True, False], True,  ["protobuf/5.27.0"]),
     ("openvdb",  [True, False], False, ["openvdb/11.0.0"]),
-    ("alembic",  [True, False], True,  ["alembic/1.8.6"]),
+    # Alembic's conan package does not produce a pkg-config file on Windows,
+    # so meson cannot find it.  Disable by default until upstream is fixed.
+    ("alembic",  [True, False], False, ["alembic/1.8.6"]),
     ("embree",   [True, False], False, ["embree3/3.13.5"]),
     ("perfetto", [True, False], False, ["perfetto/50.1"]),
     ("pngpp",    [True, False], False, ["pngpp/0.2.10"]),
     # Options with no Conan deps (handled entirely by Meson)
     ("json",   [True, False], True,  []),
-    ("partio", [True, False], True,  []),
-    ("igl",    [True, False], True,  []),
-    ("eltopo", [True, False], True,  []),
+    ("partio", [True, False], False, []),  # cmake subproject; disabled in CI
+    ("igl",    [True, False], False, []),  # cmake subproject; disabled in CI
+    ("eltopo", [True, False], False, []),  # cmake subproject; disabled in CI
 ]
 
 __OPTIONS__ = {name: values for name, values, default, deps in __OPTIONAL_FLAGS_WITH_DEPS__}
@@ -57,10 +59,12 @@ class Balsa(ConanFile):
         for dep in dependencies(self):
             self.requires(dep)
 
+        # Quiver (pulled as meson subproject) needs TBB for parallel execution.
+        self.requires("onetbb/2022.0.0")
+
         # Pin transitive dependency versions to avoid conflicts.
         self.requires("fmt/11.0.2", override=True)
         self.requires("abseil/20240722.0", override=True)
-        self.requires("onetbb/2022.0.0", override=True)
         self.requires("boost/1.88.0", override=True)
         if self.options.visualization:
             self.requires("vulkan-headers/1.3.268.0", override=True)
@@ -70,6 +74,8 @@ class Balsa(ConanFile):
             self.requires("spirv-headers/1.3.268.0", override=True)
 
     def configure(self):
+        # onetbb requires hwloc as shared library
+        self.options["hwloc"].shared = True
         if self.options.visualization:
             self.options["glfw"].vulkan_static = True
             self.options["qt"].with_vulkan = True
