@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_GEOMETRY_POINT_CLOUD_VDB_POINTS_HPP)
+#define BALSA_GEOMETRY_POINT_CLOUD_VDB_POINTS_HPP
 // Lightweight zipper <-> OpenVDB PointDataGrid conversion utilities.
 //
 // Read/write particle attributes (positions, velocities, radii, etc.)
@@ -301,3 +302,4 @@ inline std::vector<std::pair<std::string, std::string>> list_vdb_grids(
 }
 
 }// namespace balsa::geometry::point_cloud::vdb
+#endif

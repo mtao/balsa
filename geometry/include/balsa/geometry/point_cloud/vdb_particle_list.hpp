@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_GEOMETRY_POINT_CLOUD_VDB_PARTICLE_LIST_HPP)
+#define BALSA_GEOMETRY_POINT_CLOUD_VDB_PARTICLE_LIST_HPP
 #include "balsa/zipper/types.hpp"
 #include <openvdb/Types.h>
 
@@ -56,3 +57,4 @@ struct VDBParticleList_PosRadVec : public VDBParticleList_PosRad {
 };
 
 }// namespace balsa::geometry::point_cloud
+#endif
