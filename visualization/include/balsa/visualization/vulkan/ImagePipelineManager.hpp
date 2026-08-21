@@ -47,11 +47,11 @@ class ImagePipelineManager {
     ImagePipelineManager() = default;
     ~ImagePipelineManager();
 
-    // Non-copyable, movable
+    // Resource address is stable because drawables retain a reference to it.
     ImagePipelineManager(const ImagePipelineManager &) = delete;
     auto operator=(const ImagePipelineManager &) -> ImagePipelineManager & = delete;
-    ImagePipelineManager(ImagePipelineManager &&) noexcept;
-    auto operator=(ImagePipelineManager &&) noexcept -> ImagePipelineManager &;
+    ImagePipelineManager(ImagePipelineManager &&) = delete;
+    auto operator=(ImagePipelineManager &&) -> ImagePipelineManager & = delete;
 
     // Initialise with a Film reference.  Must be called before any
     // other method.
@@ -61,7 +61,7 @@ class ImagePipelineManager {
 
     // Get (or lazily create) the pipeline.  The Film is queried for
     // render-pass / MSAA / depth-stencil info.
-    auto get_or_create(Film &film) -> vk::Pipeline;
+    auto get_or_create() -> vk::Pipeline;
 
     // The shared pipeline layout.
     auto pipeline_layout() const -> vk::PipelineLayout { return _pipeline_layout; }
@@ -114,7 +114,7 @@ class ImagePipelineManager {
     // For simplicity we store a single cached pipeline and
     // invalidate on render pass changes (same as swapchain recreate).
     vk::Pipeline _pipeline;
-    uint64_t _cached_render_pass = 0;
+    vk::RenderPass _cached_render_pass;
     uint32_t _cached_msaa_samples = 0;
     bool _cached_depth_test = false;
 

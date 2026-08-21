@@ -15,7 +15,6 @@ ImageScene::ImageScene() : _scene_root("Root") {
     // Create a camera Object as a child of the root.
     auto &cam_obj = _scene_root.add_child("Camera");
     cam_obj.permanent = true;
-    _camera_object = &cam_obj;
     _camera = &cam_obj.emplace_feature<scene_graph::Camera>();
 
     // Start with a sensible orthographic projection.

@@ -11,47 +11,6 @@ namespace balsa::visualization::vulkan {
 
 ImagePipelineManager::~ImagePipelineManager() { release(); }
 
-ImagePipelineManager::ImagePipelineManager(ImagePipelineManager &&o) noexcept
-  : _device(o._device), _film(o._film),
-    _descriptor_set_layout(o._descriptor_set_layout),
-    _pipeline_layout(o._pipeline_layout), _descriptor_pool(o._descriptor_pool),
-    _pipeline(o._pipeline), _cached_render_pass(o._cached_render_pass),
-    _cached_msaa_samples(o._cached_msaa_samples),
-    _cached_depth_test(o._cached_depth_test), _initialized(o._initialized) {
-    o._device = vk::Device{};
-    o._film = nullptr;
-    o._descriptor_set_layout = vk::DescriptorSetLayout{};
-    o._pipeline_layout = vk::PipelineLayout{};
-    o._descriptor_pool = vk::DescriptorPool{};
-    o._pipeline = vk::Pipeline{};
-    o._initialized = false;
-}
-
-auto ImagePipelineManager::operator=(ImagePipelineManager &&o) noexcept
-    -> ImagePipelineManager & {
-    if (this != &o) {
-        release();
-        _device = o._device;
-        _film = o._film;
-        _descriptor_set_layout = o._descriptor_set_layout;
-        _pipeline_layout = o._pipeline_layout;
-        _descriptor_pool = o._descriptor_pool;
-        _pipeline = o._pipeline;
-        _cached_render_pass = o._cached_render_pass;
-        _cached_msaa_samples = o._cached_msaa_samples;
-        _cached_depth_test = o._cached_depth_test;
-        _initialized = o._initialized;
-        o._device = vk::Device{};
-        o._film = nullptr;
-        o._descriptor_set_layout = vk::DescriptorSetLayout{};
-        o._pipeline_layout = vk::PipelineLayout{};
-        o._descriptor_pool = vk::DescriptorPool{};
-        o._pipeline = vk::Pipeline{};
-        o._initialized = false;
-    }
-    return *this;
-}
-
 auto ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) -> void {
     if (_initialized) { release(); }
     _film = &film;
@@ -100,7 +59,7 @@ auto ImagePipelineManager::invalidate_pipeline() -> void {
         _device.destroyPipeline(_pipeline);
         _pipeline = vk::Pipeline{};
     }
-    _cached_render_pass = 0;
+    _cached_render_pass = vk::RenderPass{};
     _cached_msaa_samples = 0;
     _cached_depth_test = false;
     spdlog::info("ImagePipelineManager: pipeline invalidated");
@@ -231,14 +190,14 @@ auto ImagePipelineManager::free_descriptor_set(vk::DescriptorSet ds) -> void {
 
 // ── Pipeline access ─────────────────────────────────────────────────
 
-auto ImagePipelineManager::get_or_create(Film &film) -> vk::Pipeline {
-    if (!_initialized) {
+auto ImagePipelineManager::get_or_create() -> vk::Pipeline {
+    if (!_initialized || !_film) {
         throw std::runtime_error("ImagePipelineManager: not initialized");
     }
+    auto &film = *_film;
 
     // Check if the cached pipeline is still valid for this render pass.
-    uint64_t rp = reinterpret_cast<uint64_t>(
-        static_cast<VkRenderPass>(film.default_render_pass()));
+    const vk::RenderPass rp = film.default_render_pass();
     uint32_t msaa = static_cast<uint32_t>(film.sample_count());
     bool depth = film.has_depth_stencil();
 
@@ -381,8 +340,6 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
 
     // ── Assemble ────────────────────────────────────────────────────
 
-    vk::RenderPass rp{reinterpret_cast<VkRenderPass>(_cached_render_pass)};
-
     vk::GraphicsPipelineCreateInfo pipeline_info;
     pipeline_info.setStageCount(2);
     pipeline_info.setPStages(shader_stages);
@@ -395,7 +352,7 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
     pipeline_info.setPColorBlendState(&color_blend);
     pipeline_info.setPDynamicState(&dynamic_state);
     pipeline_info.setLayout(_pipeline_layout);
-    pipeline_info.setRenderPass(rp);
+    pipeline_info.setRenderPass(_cached_render_pass);
     pipeline_info.setSubpass(0);
     pipeline_info.setBasePipelineHandle(VK_NULL_HANDLE);
 

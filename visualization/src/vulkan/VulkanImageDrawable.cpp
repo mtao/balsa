@@ -13,7 +13,7 @@ namespace balsa::visualization::vulkan {
 
 VulkanImageDrawable::VulkanImageDrawable(scene_graph::DrawableGroup &group,
                                          ImagePipelineManager &manager)
-  : VulkanDrawable(group), _manager(&manager) {}
+  : VulkanDrawable(group), _manager(manager) {}
 
 VulkanImageDrawable::~VulkanImageDrawable() { release(); }
 
@@ -47,7 +47,7 @@ auto VulkanImageDrawable::init(Film &film) -> void {
         // Allocate descriptor set.  We cannot write it yet because the
         // texture may not exist.  We will write/update descriptors in
         // sync_from_image_data() once the texture is created.
-        _descriptor_sets[i] = _manager->allocate_descriptor_set();
+        _descriptor_sets[i] = _manager.allocate_descriptor_set();
     }
 
     _initialized = true;
@@ -62,10 +62,8 @@ auto VulkanImageDrawable::release() -> void {
     for (auto &ubo : _params_ubos) ubo.release();
     _params_ubos.clear();
 
-    if (_manager) {
-        for (auto ds : _descriptor_sets) {
-            if (ds) _manager->free_descriptor_set(ds);
-        }
+    for (auto ds : _descriptor_sets) {
+        if (ds) _manager.free_descriptor_set(ds);
     }
     _descriptor_sets.clear();
 
@@ -115,11 +113,11 @@ auto VulkanImageDrawable::sync_from_image_data(Film &film) -> void {
 
         // Upload the full image.
         auto pixels = image_data->pixels();
-        _texture.upload(film, pixels.data(), pixels.size());
+        _texture.upload(pixels);
 
         // Write descriptor sets now that texture exists.
         for (int i = 0; i < static_cast<int>(_descriptor_sets.size()); ++i) {
-            _manager->write_descriptor_set(_descriptor_sets[i],
+            _manager.write_descriptor_set(_descriptor_sets[i],
                                            _transform_ubos[i].buffer(),
                                            sizeof(ImageTransformUBO),
                                            _params_ubos[i].buffer(),
@@ -154,12 +152,11 @@ auto VulkanImageDrawable::sync_from_image_data(Film &film) -> void {
                             row_bytes);
             }
 
-            _texture.update_region(
-                film, dx, dy, dw, dh, region_data.data(), region_data.size());
+            _texture.update_region(dx, dy, dw, dh, region_data);
         } else {
             // Full re-upload.
             auto pixels = image_data->pixels();
-            _texture.upload(film, pixels.data(), pixels.size());
+            _texture.upload(pixels);
         }
     }
 
@@ -218,7 +215,7 @@ auto VulkanImageDrawable::record_draw_commands(Film &film) -> void {
     auto cb = film.current_command_buffer();
     const int fi = film.current_frame();
 
-    auto pipeline = _manager->get_or_create(film);
+    auto pipeline = _manager.get_or_create();
     if (!pipeline) return;
 
     auto extent = film.swapchain_image_size();
@@ -240,7 +237,7 @@ auto VulkanImageDrawable::record_draw_commands(Film &film) -> void {
     cb.setScissor(0, {scissor});
 
     cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                          _manager->pipeline_layout(),
+                           _manager.pipeline_layout(),
                           0,
                           {_descriptor_sets[fi]},
                           {});

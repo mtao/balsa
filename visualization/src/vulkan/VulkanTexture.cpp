@@ -289,8 +289,11 @@ auto VulkanTexture::transition_layout(vk::CommandBuffer cmd,
 // ── One-shot command buffer ─────────────────────────────────────────
 
 auto VulkanTexture::one_shot_command(
-    Film &film,
     std::function<void(vk::CommandBuffer)> record_fn) -> void {
+    if (!_film) {
+        throw std::runtime_error("VulkanTexture: texture not created");
+    }
+    auto &film = *_film;
     vk::CommandBufferAllocateInfo cmd_alloc;
     cmd_alloc.setCommandPool(film.graphics_command_pool());
     cmd_alloc.setLevel(vk::CommandBufferLevel::ePrimary);
@@ -320,26 +323,23 @@ auto VulkanTexture::one_shot_command(
 
 // ── Full upload ─────────────────────────────────────────────────────
 
-auto VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) -> void {
+auto VulkanTexture::upload(std::span<const std::byte> pixels) -> void {
     if (!is_valid()) {
         throw std::runtime_error("VulkanTexture::upload: texture not created");
     }
 
     size_t expected = checked_byte_size(_width, _height, bytes_per_pixel());
-    if (byte_count < expected) {
+    if (pixels.size() < expected) {
         throw std::runtime_error("VulkanTexture::upload: insufficient data");
-    }
-    if (!pixels) {
-        throw std::runtime_error("VulkanTexture::upload: null pixel data");
     }
 
     // Copy into staging buffer.
     void *mapped = _device.mapMemory(_staging_memory, 0, _staging_size);
-    std::memcpy(mapped, pixels, expected);
+    std::memcpy(mapped, pixels.data(), expected);
     _device.unmapMemory(_staging_memory);
 
     // Record one-shot commands: transition, copy, transition.
-    one_shot_command(film, [&](vk::CommandBuffer cmd) {
+    one_shot_command([&](vk::CommandBuffer cmd) {
         transition_layout(cmd,
                            _layout,
                            vk::ImageLayout::eTransferDstOptimal);
@@ -371,13 +371,11 @@ auto VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) ->
 
 // ── Partial region update ───────────────────────────────────────────
 
-auto VulkanTexture::update_region(Film &film,
-                                  uint32_t x,
+auto VulkanTexture::update_region(uint32_t x,
                                   uint32_t y,
                                   uint32_t w,
                                   uint32_t h,
-                                  const void *pixels,
-                                  size_t byte_count) -> void {
+                                  std::span<const std::byte> pixels) -> void {
     if (!is_valid()) {
         throw std::runtime_error(
             "VulkanTexture::update_region: texture not created");
@@ -400,21 +398,17 @@ auto VulkanTexture::update_region(Film &film,
         throw std::runtime_error(
             "VulkanTexture::update_region: region exceeds staging buffer");
     }
-    if (byte_count < expected) {
+    if (pixels.size() < expected) {
         throw std::runtime_error(
             "VulkanTexture::update_region: insufficient data");
-    }
-    if (!pixels) {
-        throw std::runtime_error(
-            "VulkanTexture::update_region: null pixel data");
     }
 
     // Copy region data into the staging buffer at offset 0.
     void *mapped = _device.mapMemory(_staging_memory, 0, expected);
-    std::memcpy(mapped, pixels, expected);
+    std::memcpy(mapped, pixels.data(), expected);
     _device.unmapMemory(_staging_memory);
 
-    one_shot_command(film, [&](vk::CommandBuffer cmd) {
+    one_shot_command([&](vk::CommandBuffer cmd) {
         // SHADER_READ_ONLY -> TRANSFER_DST
         transition_layout(cmd,
                           vk::ImageLayout::eShaderReadOnlyOptimal,

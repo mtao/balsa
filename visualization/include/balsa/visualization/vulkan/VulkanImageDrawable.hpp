@@ -85,7 +85,7 @@ class VulkanImageDrawable : public VulkanDrawable {
     // Issue fullscreen quad draw commands.
     auto record_draw_commands(Film &film) -> void;
 
-    ImagePipelineManager *_manager;
+    ImagePipelineManager &_manager;
     VulkanTexture _texture;
 
     // Per-frame UBO buffers and descriptor sets — one per concurrent

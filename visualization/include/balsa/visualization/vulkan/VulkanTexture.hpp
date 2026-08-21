@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <vulkan/vulkan.hpp>
 
 namespace balsa::visualization::vulkan {
@@ -47,18 +48,16 @@ class VulkanTexture {
     // copies to device-local memory via a one-shot command buffer.
     // The image layout is transitioned:
     //   UNDEFINED -> TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
-    auto upload(Film &film, const void *pixels, size_t byte_count) -> void;
+    auto upload(std::span<const std::byte> pixels) -> void;
 
     // Partial update: upload a rectangular sub-region.
     // For progressive rendering — avoids re-uploading the entire image.
     // Layout: SHADER_READ_ONLY -> TRANSFER_DST -> SHADER_READ_ONLY.
-    auto update_region(Film &film,
-                       uint32_t x,
+    auto update_region(uint32_t x,
                        uint32_t y,
                        uint32_t w,
                        uint32_t h,
-                       const void *pixels,
-                       size_t byte_count) -> void;
+                       std::span<const std::byte> pixels) -> void;
 
     // Accessors for descriptor set binding
     auto image_view() const -> vk::ImageView { return _image_view; }
@@ -80,8 +79,8 @@ class VulkanTexture {
 
     // Execute a one-shot command buffer (record -> submit -> waitIdle).
     // The callback receives the command buffer to record into.
-    auto one_shot_command(Film &film,
-                          std::function<void(vk::CommandBuffer)> record_fn) -> void;
+    auto one_shot_command(std::function<void(vk::CommandBuffer)> record_fn)
+        -> void;
 
     // Return the VkFormat corresponding to our Format enum.
     auto vk_format() const -> vk::Format;

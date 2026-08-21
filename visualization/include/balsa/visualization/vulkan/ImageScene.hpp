@@ -129,7 +129,6 @@ class ImageScene : public SceneBase {
 
     // Scene graph
     scene_graph::Object _scene_root;
-    scene_graph::Object *_camera_object = nullptr;
     scene_graph::Camera *_camera = nullptr;
     scene_graph::Object *_image_object = nullptr;
     scene_graph::DrawableGroup _drawable_group;
