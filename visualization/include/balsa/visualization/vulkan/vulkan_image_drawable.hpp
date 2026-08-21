@@ -27,7 +27,7 @@ class ImagePipelineManager;
 //   1. Attach to an Object that already has an ImageData feature
 //   2. Call init(film) once Vulkan is ready
 //   3. Each frame: draw(camera, film) — syncs texture if dirty,
-//      updates UBOs, and issues a fullscreen triangle draw
+//      updates UBOs, and issues a fullscreen quad draw
 //   4. On teardown: release() or let destructor handle it
 //
 // Thread-safety: NOT thread-safe — call only from the rendering thread.
@@ -61,7 +61,7 @@ class VulkanImageDrawable : public VulkanDrawable {
 
     // Draw this image with the given camera.  Syncs from ImageData if
     // dirty, updates UBOs with the MVP and tone-mapping params, then
-    // issues a fullscreen triangle draw.
+    // issues a fullscreen quad draw.
     auto draw(const scene_graph::Camera &cam, Film &film) -> void override;
 
     // ── MVP override ────────────────────────────────────────────────
@@ -82,7 +82,7 @@ class VulkanImageDrawable : public VulkanDrawable {
     // Upload TransformUBO (MVP) and ImageParamsUBO (tone mapping).
     auto update_ubos(const scene_graph::Camera &cam, Film &film) -> void;
 
-    // Issue fullscreen triangle draw commands.
+    // Issue fullscreen quad draw commands.
     auto record_draw_commands(Film &film) -> void;
 
     ImagePipelineManager *_manager;

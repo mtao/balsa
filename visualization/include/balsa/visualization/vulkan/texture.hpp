@@ -105,6 +105,7 @@ class VulkanTexture {
 
     uint32_t _width = 0, _height = 0;
     Format _format = Format::RGBA8;
+    vk::ImageLayout _layout = vk::ImageLayout::eUndefined;
 };
 
 } // namespace balsa::visualization::vulkan

@@ -3,6 +3,7 @@
 #include "balsa/visualization/vulkan/vulkan_image_drawable.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <spdlog/spdlog.h>
 
@@ -34,6 +35,7 @@ auto ImageScene::initialize(Film &film) -> void {
         4 * static_cast<uint32_t>(film.concurrent_frame_count());
     _pipeline_manager.init(film, max_sets);
     _initialized = true;
+    update_mvp();
 
     // Init any VulkanImageDrawables that were added before initialize().
     for (auto *drawable : _drawable_group) {
@@ -47,6 +49,9 @@ auto ImageScene::initialize(Film &film) -> void {
 
 auto ImageScene::draw(Film &film) -> void {
     if (!_initialized) return;
+
+    // Keep fit scaling current when the swapchain is resized.
+    update_mvp();
 
     for (auto *drawable : _drawable_group) {
         auto *vid = dynamic_cast<VulkanImageDrawable *>(drawable);
@@ -135,11 +140,13 @@ auto ImageScene::has_image() const -> bool {
 // ── 2D navigation ───────────────────────────────────────────────────
 
 auto ImageScene::set_zoom(float zoom) -> void {
+    if (!std::isfinite(zoom)) return;
     _zoom = std::max(0.01f, zoom);
     update_mvp();
 }
 
 auto ImageScene::set_pan(float x, float y) -> void {
+    if (!std::isfinite(x) || !std::isfinite(y)) return;
     _pan_x = x;
     _pan_y = y;
     update_mvp();
@@ -165,8 +172,8 @@ auto ImageScene::update_mvp() -> void {
     auto *vid = _image_object->find_feature<VulkanImageDrawable>();
     if (!vid) return;
 
-    // The fullscreen triangle shader maps gl_VertexIndex {0,1,2} to a
-    // triangle covering the entire [-1,1] clip space and UV [0,1].
+    // The vertex shader maps six generated vertices to a quad covering the
+    // entire [-1,1] clip space and UV [0,1].
     // With an identity MVP, the image fills the viewport.
     //
     // To apply pan/zoom, we construct an MVP that:
@@ -178,10 +185,28 @@ auto ImageScene::update_mvp() -> void {
     //
     // So the MVP is a simple 2D scale + translate matrix.
 
+    float fit_x = 1.0f;
+    float fit_y = 1.0f;
+    const auto *image = image_data();
+    if (_film && image && image->width() > 0 && image->height() > 0) {
+        const auto extent = _film->swapchain_image_size();
+        if (extent[0] > 0 && extent[1] > 0) {
+            const float image_aspect =
+                static_cast<float>(image->width()) / image->height();
+            const float viewport_aspect =
+                static_cast<float>(extent[0]) / extent[1];
+            if (image_aspect > viewport_aspect) {
+                fit_y = viewport_aspect / image_aspect;
+            } else {
+                fit_x = image_aspect / viewport_aspect;
+            }
+        }
+    }
+
     scene_graph::Mat4f mvp;
     // Start with identity
-    mvp(0, 0) = _zoom;
-    mvp(1, 1) = _zoom;
+    mvp(0, 0) = _zoom * fit_x;
+    mvp(1, 1) = _zoom * fit_y;
     mvp(2, 2) = 1.0f;
     mvp(3, 3) = 1.0f;
 

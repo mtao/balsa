@@ -37,7 +37,7 @@ static_assert(sizeof(ImageParamsUBO) == 32, "ImageParamsUBO must be 32 bytes");
 //   binding 1: ImageParamsUBO     (uniform buffer, fragment stage)
 //   binding 2: combined image sampler (fragment stage)
 //
-// The pipeline uses the fullscreen triangle technique (3 vertices,
+// The pipeline uses a generated fullscreen quad (6 vertices,
 // no vertex buffer) with the image.vert / image.frag shaders.
 //
 // Thread-safety: NOT thread-safe — call only from the rendering thread.

@@ -2,9 +2,24 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace balsa::scene_graph {
+
+namespace {
+auto checked_image_size(uint32_t width, uint32_t height, size_t bpp) -> size_t {
+    constexpr auto max = std::numeric_limits<size_t>::max();
+    if (height != 0 && width > max / height) {
+        throw std::runtime_error("ImageData: image dimensions overflow");
+    }
+    const size_t pixels = static_cast<size_t>(width) * height;
+    if (bpp != 0 && pixels > max / bpp) {
+        throw std::runtime_error("ImageData: image byte size overflow");
+    }
+    return pixels * bpp;
+}
+} // namespace
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -24,8 +39,11 @@ auto ImageData::set_pixels(uint32_t width,
                            uint32_t height,
                            Format format,
                            std::span<const std::byte> data) -> void {
+    if (width == 0 || height == 0) {
+        throw std::runtime_error("ImageData::set_pixels: dimensions must be nonzero");
+    }
     size_t bpp = (format == Format::RGBAF32) ? 16 : 4;
-    size_t expected = static_cast<size_t>(width) * height * bpp;
+    size_t expected = checked_image_size(width, height, bpp);
     if (data.size() < expected) {
         throw std::runtime_error("ImageData::set_pixels: insufficient data");
     }
@@ -63,15 +81,18 @@ auto ImageData::update_region(uint32_t x,
     if (_pixels.empty()) {
         throw std::runtime_error("ImageData::update_region: no image set");
     }
+    if (w == 0 || h == 0) {
+        throw std::runtime_error(
+            "ImageData::update_region: dimensions must be nonzero");
+    }
 
-    // Clamp region to image bounds.
-    if (x + w > _width || y + h > _height) {
+    if (x > _width || y > _height || w > _width - x || h > _height - y) {
         throw std::runtime_error(
             "ImageData::update_region: region exceeds image bounds");
     }
 
     size_t bpp = bytes_per_pixel();
-    size_t expected = static_cast<size_t>(w) * h * bpp;
+    size_t expected = checked_image_size(w, h, bpp);
     if (data.size() < expected) {
         throw std::runtime_error("ImageData::update_region: insufficient data");
     }

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -38,9 +39,10 @@ auto load_ppm(const std::string &path)
 
 // Save an RGBA8 image as a PPM (P6) file.  Alpha channel is discarded.
 auto save_ppm(const std::string &path,
-              uint32_t width,
-              uint32_t height,
-              const uint8_t *rgba_pixels) -> std::expected<void, ImageIOError>;
+               uint32_t width,
+               uint32_t height,
+               std::span<const uint8_t> rgba_pixels)
+    -> std::expected<void, ImageIOError>;
 
 } // namespace balsa::visualization
 

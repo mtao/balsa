@@ -245,8 +245,7 @@ auto VulkanImageDrawable::record_draw_commands(Film &film) -> void {
                           {_descriptor_sets[fi]},
                           {});
 
-    // Fullscreen triangle: 3 vertices, no vertex buffer.
-    cb.draw(3, 1, 0, 0);
+    cb.draw(6, 1, 0, 0);
 }
 
 } // namespace balsa::visualization::vulkan

@@ -16,6 +16,7 @@
 
 #include <array>
 #include <cstdio>
+#include <limits>
 #include <memory>
 
 // ── Helper: create a quiver Mesh<2> with positions and normals ──────
@@ -961,6 +962,10 @@ TEST_CASE("ImageData display parameters", "[scene_graph][image]") {
 
     img.set_gamma(1.0f);
     CHECK(img.gamma() == Catch::Approx(1.0f));
+    img.set_gamma(0.0f);
+    CHECK(img.gamma() == Catch::Approx(1.0f));
+    img.set_gamma(std::numeric_limits<float>::infinity());
+    CHECK(img.gamma() == Catch::Approx(1.0f));
 
     img.set_channel_mode(ImageData::ChannelMode::Red);
     CHECK(img.channel_mode() == ImageData::ChannelMode::Red);
@@ -994,6 +999,7 @@ TEST_CASE("ImageData set_pixels throws on insufficient data",
     // 4x4 RGBA8 needs 64 bytes, only provide 10.
     std::vector<uint8_t> too_small(10, 0);
     CHECK_THROWS(img.set_pixels_rgba8(4, 4, too_small));
+    CHECK_THROWS(img.set_pixels_rgba8(0, 4, {}));
 }
 
 TEST_CASE("ImageData update_region throws on out-of-bounds",
@@ -1008,6 +1014,14 @@ TEST_CASE("ImageData update_region throws on out-of-bounds",
     std::vector<uint8_t> patch(3 * 3 * 4, 100);
     CHECK_THROWS(img.update_region(
         2, 2, 3, 3, std::as_bytes(std::span<const uint8_t>(patch))));
+    CHECK_THROWS(img.update_region(
+        std::numeric_limits<uint32_t>::max(),
+        0,
+        2,
+        1,
+        std::as_bytes(std::span<const uint8_t>(patch))));
+    CHECK_THROWS(img.update_region(
+        0, 0, 0, 1, std::as_bytes(std::span<const uint8_t>(patch))));
 }
 
 TEST_CASE("ImageData update_region throws when no image set",
@@ -1039,7 +1053,7 @@ TEST_CASE("PPM round-trip save and load", "[image_io]") {
     }
 
     std::string path = "/tmp/balsa_test_ppm_roundtrip.ppm";
-    auto save_result = save_ppm(path, w, h, rgba.data());
+    auto save_result = save_ppm(path, w, h, rgba);
     REQUIRE(save_result.has_value());
 
     auto load_result = load_ppm(path);
@@ -1063,6 +1077,36 @@ TEST_CASE("PPM round-trip save and load", "[image_io]") {
 
     // Cleanup.
     std::remove(path.c_str());
+}
+
+TEST_CASE("PPM loads comments and scales maxval", "[image_io]") {
+    using namespace balsa::visualization;
+
+    std::string path = "/tmp/balsa_test_ppm_comments.ppm";
+    {
+        std::FILE *f = std::fopen(path.c_str(), "wb");
+        REQUIRE(f != nullptr);
+        std::fprintf(f, "P6\n# dimensions\n2 1\n# range\n100\n");
+        const std::array<uint8_t, 6> pixels{0, 50, 100, 100, 0, 50};
+        REQUIRE(std::fwrite(pixels.data(), 1, pixels.size(), f)
+                == pixels.size());
+        std::fclose(f);
+    }
+
+    auto result = load_ppm(path);
+    REQUIRE(result.has_value());
+    CHECK(result->pixels
+          == std::vector<uint8_t>{0, 128, 255, 255, 255, 0, 128, 255});
+    std::remove(path.c_str());
+}
+
+TEST_CASE("PPM save validates input", "[image_io]") {
+    using namespace balsa::visualization;
+
+    const std::array<uint8_t, 3> too_small{};
+    auto result = save_ppm("/tmp/balsa_test_invalid_save.ppm", 1, 1, too_small);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error() == ImageIOError::InvalidFormat);
 }
 
 TEST_CASE("PPM load nonexistent file", "[image_io]") {

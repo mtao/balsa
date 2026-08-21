@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <optional>
 #include <span>
 #include <vector>
@@ -89,10 +90,14 @@ class ImageData : public AbstractFeature {
     // Tone mapping (for HDR float images).
 
     auto exposure() const -> float { return _exposure; }
-    auto set_exposure(float ev) -> void { _exposure = ev; }
+    auto set_exposure(float ev) -> void {
+        if (std::isfinite(ev)) _exposure = ev;
+    }
 
     auto gamma() const -> float { return _gamma; }
-    auto set_gamma(float g) -> void { _gamma = g; }
+    auto set_gamma(float g) -> void {
+        if (std::isfinite(g) && g > 0.0f) _gamma = g;
+    }
 
     // Channel display mode.
     enum class ChannelMode : int {

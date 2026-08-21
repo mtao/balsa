@@ -2,21 +2,36 @@
 #include "balsa/visualization/vulkan/film.hpp"
 
 #include <cstring>
+#include <limits>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace balsa::visualization::vulkan {
+
+namespace {
+auto checked_byte_size(uint32_t width, uint32_t height, size_t bpp) -> size_t {
+    constexpr auto max = std::numeric_limits<size_t>::max();
+    if (height != 0 && width > max / height) {
+        throw std::runtime_error("VulkanTexture: image dimensions overflow");
+    }
+    const size_t pixels = static_cast<size_t>(width) * height;
+    if (bpp != 0 && pixels > max / bpp) {
+        throw std::runtime_error("VulkanTexture: image byte size overflow");
+    }
+    return pixels * bpp;
+}
+} // namespace
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 auto VulkanTexture::vk_format() const -> vk::Format {
     switch (_format) {
     case Format::RGBA8:
-        return vk::Format::eR8G8B8A8Unorm;
+        return vk::Format::eR8G8B8A8Srgb;
     case Format::RGBAF32:
         return vk::Format::eR32G32B32A32Sfloat;
     }
-    return vk::Format::eR8G8B8A8Unorm;
+    return vk::Format::eR8G8B8A8Srgb;
 }
 
 auto VulkanTexture::bytes_per_pixel() const -> size_t {
@@ -38,7 +53,7 @@ VulkanTexture::VulkanTexture(VulkanTexture &&o) noexcept
     _image_view(o._image_view), _sampler(o._sampler),
     _staging_buffer(o._staging_buffer), _staging_memory(o._staging_memory),
     _staging_size(o._staging_size), _width(o._width), _height(o._height),
-    _format(o._format) {
+    _format(o._format), _layout(o._layout) {
     o._device = vk::Device{};
     o._film = nullptr;
     o._image = vk::Image{};
@@ -50,6 +65,7 @@ VulkanTexture::VulkanTexture(VulkanTexture &&o) noexcept
     o._staging_size = 0;
     o._width = 0;
     o._height = 0;
+    o._layout = vk::ImageLayout::eUndefined;
 }
 
 auto VulkanTexture::operator=(VulkanTexture &&o) noexcept -> VulkanTexture & {
@@ -67,6 +83,7 @@ auto VulkanTexture::operator=(VulkanTexture &&o) noexcept -> VulkanTexture & {
         _width = o._width;
         _height = o._height;
         _format = o._format;
+        _layout = o._layout;
         o._device = vk::Device{};
         o._film = nullptr;
         o._image = vk::Image{};
@@ -78,12 +95,15 @@ auto VulkanTexture::operator=(VulkanTexture &&o) noexcept -> VulkanTexture & {
         o._staging_size = 0;
         o._width = 0;
         o._height = 0;
+        o._layout = vk::ImageLayout::eUndefined;
     }
     return *this;
 }
 
 auto VulkanTexture::release() -> void {
     if (!_device) return;
+
+    _device.waitIdle();
 
     if (_sampler) {
         _device.destroySampler(_sampler);
@@ -113,6 +133,7 @@ auto VulkanTexture::release() -> void {
     _staging_size = 0;
     _width = 0;
     _height = 0;
+    _layout = vk::ImageLayout::eUndefined;
 }
 
 // ── Create ──────────────────────────────────────────────────────────
@@ -128,6 +149,9 @@ auto VulkanTexture::create(Film &film,
     _width = width;
     _height = height;
     _format = format;
+    if (width == 0 || height == 0) {
+        throw std::runtime_error("VulkanTexture::create: dimensions must be nonzero");
+    }
 
     // 1. Create the VkImage (device-local, transfer-dst + sampled).
     vk::ImageCreateInfo image_ci;
@@ -189,8 +213,7 @@ auto VulkanTexture::create(Film &film,
     _sampler = _device.createSampler(sampler_ci);
 
     // 5. Persistent staging buffer (host-visible + host-coherent).
-    _staging_size =
-        static_cast<vk::DeviceSize>(width) * height * bytes_per_pixel();
+    _staging_size = checked_byte_size(width, height, bytes_per_pixel());
 
     vk::BufferCreateInfo staging_ci;
     staging_ci.setSize(_staging_size);
@@ -302,9 +325,12 @@ auto VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) ->
         throw std::runtime_error("VulkanTexture::upload: texture not created");
     }
 
-    size_t expected = static_cast<size_t>(_width) * _height * bytes_per_pixel();
+    size_t expected = checked_byte_size(_width, _height, bytes_per_pixel());
     if (byte_count < expected) {
         throw std::runtime_error("VulkanTexture::upload: insufficient data");
+    }
+    if (!pixels) {
+        throw std::runtime_error("VulkanTexture::upload: null pixel data");
     }
 
     // Copy into staging buffer.
@@ -314,10 +340,9 @@ auto VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) ->
 
     // Record one-shot commands: transition, copy, transition.
     one_shot_command(film, [&](vk::CommandBuffer cmd) {
-        // UNDEFINED -> TRANSFER_DST
         transition_layout(cmd,
-                          vk::ImageLayout::eUndefined,
-                          vk::ImageLayout::eTransferDstOptimal);
+                           _layout,
+                           vk::ImageLayout::eTransferDstOptimal);
 
         // Copy staging buffer -> image.
         vk::BufferImageCopy region;
@@ -341,6 +366,7 @@ auto VulkanTexture::upload(Film &film, const void *pixels, size_t byte_count) ->
                           vk::ImageLayout::eTransferDstOptimal,
                           vk::ImageLayout::eShaderReadOnlyOptimal);
     });
+    _layout = vk::ImageLayout::eShaderReadOnlyOptimal;
 }
 
 // ── Partial region update ───────────────────────────────────────────
@@ -356,12 +382,31 @@ auto VulkanTexture::update_region(Film &film,
         throw std::runtime_error(
             "VulkanTexture::update_region: texture not created");
     }
+    if (w == 0 || h == 0) {
+        throw std::runtime_error(
+            "VulkanTexture::update_region: dimensions must be nonzero");
+    }
+
+    if (x > _width || y > _height || w > _width - x || h > _height - y
+        || x > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())
+        || y > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())) {
+        throw std::runtime_error(
+            "VulkanTexture::update_region: region exceeds image bounds");
+    }
 
     size_t bpp = bytes_per_pixel();
-    size_t expected = static_cast<size_t>(w) * h * bpp;
+    size_t expected = checked_byte_size(w, h, bpp);
+    if (expected > _staging_size) {
+        throw std::runtime_error(
+            "VulkanTexture::update_region: region exceeds staging buffer");
+    }
     if (byte_count < expected) {
         throw std::runtime_error(
             "VulkanTexture::update_region: insufficient data");
+    }
+    if (!pixels) {
+        throw std::runtime_error(
+            "VulkanTexture::update_region: null pixel data");
     }
 
     // Copy region data into the staging buffer at offset 0.
@@ -398,6 +443,7 @@ auto VulkanTexture::update_region(Film &film,
                           vk::ImageLayout::eTransferDstOptimal,
                           vk::ImageLayout::eShaderReadOnlyOptimal);
     });
+    _layout = vk::ImageLayout::eShaderReadOnlyOptimal;
 }
 
 } // namespace balsa::visualization::vulkan

@@ -249,6 +249,7 @@ auto ImagePipelineManager::get_or_create(Film &film) -> vk::Pipeline {
 
     // Invalidate and recreate.
     if (_pipeline) {
+        _device.waitIdle();
         _device.destroyPipeline(_pipeline);
         _pipeline = vk::Pipeline{};
     }
@@ -306,7 +307,7 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
         fs.setPName(entry.c_str());
     }
 
-    // ── Vertex input: EMPTY (fullscreen triangle, no vertex buffer) ──
+    // ── Vertex input: EMPTY (generated quad, no vertex buffer) ───────
 
     vk::PipelineVertexInputStateCreateInfo vertex_input;
     // No binding or attribute descriptions.
