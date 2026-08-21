@@ -60,6 +60,7 @@ jobs:
       - name: Configure
         run: >
           meson setup build
+          --wrap-mode=forcefallback
           --native-file build/conan/conan_meson_native.ini
           --native-file build/compiler.ini
           -Dvisualization=false

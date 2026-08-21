@@ -490,33 +490,34 @@ void MeshData::discover_attributes() {
     _discovered.clear();
     if (!_mesh) return;
 
-    auto entries = _mesh->attribute_entries();
-    for (const auto &entry : entries) {
-        if (!entry.attribute) continue;
+    _mesh->for_each_attribute(
+        [this](std::string_view name, const qattr::AttributeBase &attribute) {
+            auto *stored =
+                dynamic_cast<const qattr::StoredAttributeBase *>(&attribute);
+            if (!stored) return;
 
-        auto *stored = dynamic_cast<const qattr::StoredAttributeBase *>(
-            entry.attribute.get());
-        if (!stored) continue;
+            auto dimension = _mesh->dimension_of(attribute);
+            if (!dimension) return;
 
-        // Create a type-erased handle to this attribute.
-        auto handle = qattr::ConstTypeErasedAttributeHandle(*stored);
+            // Create a type-erased handle to this attribute.
+            auto handle = qattr::ConstTypeErasedAttributeHandle(*stored);
 
-        // Probe the concrete type via dynamic_cast.
-        auto probe = probe_type(handle);
-        if (probe.component_count == 0) continue; // unrecognised type
+            // Probe the concrete type via dynamic_cast.
+            auto probe = probe_type(handle);
+            if (probe.component_count == 0) return; // unrecognised type
 
-        DiscoveredAttribute da;
-        da.handle = handle;
-        da.name = entry.name;
-        da.dimension = entry.dim;
-        da.type_id = probe.type_id;
-        da.element_size = probe.element_size;
-        da.count = stored->size();
-        da.component_count = probe.component_count;
-        da.is_floating_point = probe.is_floating_point;
+            DiscoveredAttribute da;
+            da.handle = handle;
+            da.name = name;
+            da.dimension = *dimension;
+            da.type_id = probe.type_id;
+            da.element_size = probe.element_size;
+            da.count = stored->size();
+            da.component_count = probe.component_count;
+            da.is_floating_point = probe.is_floating_point;
 
-        _discovered.push_back(std::move(da));
-    }
+            _discovered.push_back(std::move(da));
+        });
 }
 
 // ── Topology index extraction ───────────────────────────────────────
