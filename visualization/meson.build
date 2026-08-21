@@ -33,8 +33,7 @@ if get_option('imgui')
   endif
 endif
 
-colormap_proj = subproject('colormap_shaders')
-colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep')
+colormap_shaders_dep = dependency('colormap_shaders')
 
 # Public deps: propagated to consumers via declare_dependency().
 visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
@@ -58,6 +57,12 @@ visualization_sources = [
   'src/scene_graph/MeshData.cpp',
   'src/scene_graph/BVHData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
+  'src/scene_graph/ImageData.cpp',
+  'src/vulkan/VulkanTexture.cpp',
+  'src/vulkan/ImagePipelineManager.cpp',
+  'src/vulkan/VulkanImageDrawable.cpp',
+  'src/vulkan/ImageScene.cpp',
+  'src/image_io.cpp',
 ]
 
 if get_option('qt')
@@ -102,12 +107,15 @@ if get_option('imgui')
   visualization_public_deps += imgui_dep
   visualization_sources += 'src/vulkan/imgui_integration.cpp'
   visualization_sources += 'src/vulkan/imgui/mesh_controls_panel.cpp'
+  visualization_sources += 'src/vulkan/imgui/image_controls_panel.cpp'
   visualization_sources += imgui_backend_sources
 endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
-visualization_public_deps += quiver_dep
+if get_option('quiver')
+  visualization_public_deps += quiver_dep
+endif
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,
@@ -116,6 +124,7 @@ visualization_lib = library('balsaVisualization', visualization_sources,
 
 # For consumers: propagate public deps (including imgui shared library).
 visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir)
+meson.override_dependency('balsaVisualization', visualization_dep)
 
 if get_option('testing')
   subdir('tests')

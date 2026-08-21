@@ -11,13 +11,13 @@
 namespace {
 
 
-static VKAPI_ATTR vk::Bool32 VKAPI_CALL
-  debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                vk::DebugUtilsMessageTypeFlagsEXT messageType,
-                const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+  debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                VkDebugUtilsMessageTypeFlagsEXT messageType,
+                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
                 void * /*pUserData*/) {
     spdlog::level::level_enum slevel = spdlog::level::debug;
-    switch (messageSeverity) {
+    switch (static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity)) {
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
         slevel = spdlog::level::debug;
         break;
@@ -38,18 +38,19 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL
         logger = spdlog::default_logger();
     }
 
+    auto typeFlags = static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(messageType);
     std::string_view type;
-    if (messageType & vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation) {
+    if (typeFlags & vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation) {
         type = "Validation";
-    } else if (messageType & vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance) {
+    } else if (typeFlags & vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance) {
         type = "Performance";
-    } else if (messageType & vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding) {
+    } else if (typeFlags & vk::DebugUtilsMessageTypeFlagBitsEXT::eDeviceAddressBinding) {
         type = "DeviceAddressBinding";
     } else {
         type = "General";
     }
     logger->log(slevel, "Vk{}: {}", type, pCallbackData->pMessage);
-    return vk::False;
+    return VK_FALSE;
 }
 }// namespace
 

@@ -6,5 +6,7 @@
     <file>triangle.frag</file>
     <file>mesh.vert</file>
     <file>mesh.frag</file>
+    <file>image.vert</file>
+    <file>image.frag</file>
 </qresource>
 </RCC>

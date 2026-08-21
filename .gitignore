@@ -47,4 +47,20 @@ build*
 
 # meson wrap likes to add this file
 .meson-subproject-wrap-hash.txt
+
+# Ignore auto-promoted wrap-redirect files from subprojects.
+# Only directly-needed wraps are whitelisted below.
+subprojects/*.wrap
+!subprojects/catch2.wrap
+!subprojects/cli11.wrap
+!subprojects/colormap_shaders.wrap
+!subprojects/eigen.wrap
+!subprojects/fmt.wrap
+!subprojects/imgui.wrap
+!subprojects/nlohmann_json.wrap
+!subprojects/partio.wrap
+!subprojects/quiver.wrap
+!subprojects/spdlog.wrap
+!subprojects/zipper.wrap
+
 docs/

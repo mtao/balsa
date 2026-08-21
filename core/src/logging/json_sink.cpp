@@ -14,7 +14,9 @@ void set_json_format(spdlog::logger &logger, bool messages_are_json) {
     }
 }
 std::shared_ptr<spdlog::logger> make_json_file_logger(const std::string &name, const std::filesystem::path &path, bool messages_are_json) {
-    auto logger = spdlog::basic_logger_mt(name, path);
+    // spdlog::basic_logger_mt expects filename_t (std::wstring on Windows),
+    // so convert std::filesystem::path via .string() for portability.
+    auto logger = spdlog::basic_logger_mt(name, path.string());
     set_json_format(*logger, messages_are_json);
     return logger;
 }

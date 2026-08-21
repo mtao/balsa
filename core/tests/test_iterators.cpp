@@ -59,6 +59,7 @@ TEST_CASE("ranges heterogeneous line", "[ranges]") {
     for (auto &&num : nums) {
         std::cout << num << std::endl;
     }
+#if defined(__cpp_lib_ranges_concat)
     std::array<float, 6> ret;
     auto inp = std::views::concat(nums, std::views::repeat(float(0))) | std::views::take(6);
     std::ranges::copy(inp, ret.begin());
@@ -66,4 +67,5 @@ TEST_CASE("ranges heterogeneous line", "[ranges]") {
         std::cout << v << " ";
     }
     std::cout << std::endl;
+#endif
 }

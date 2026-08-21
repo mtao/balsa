@@ -1,4 +1,5 @@
-#pragma once
+#if !defined(BALSA_EIGEN_STL2EIGEN_HPP)
+#define BALSA_EIGEN_STL2EIGEN_HPP
 #include "balsa/eigen/types.hpp"
 #include "balsa/eigen/container_size.hpp"
 #include <ranges>
@@ -73,3 +74,4 @@ auto stl2eigen(const Container &vec) {
 }
 
 }// namespace balsa::eigen
+#endif
