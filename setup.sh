@@ -3,9 +3,10 @@ set -euo pipefail
 
 usage() {
     cat <<EOF
-Usage: $0 [--build-dir DIR] [MESON_OPTIONS...]
+Usage: $0 [--conan [profile]] [--build-dir DIR] [MESON_OPTIONS...]
 
 Options:
+  --conan [profile]   Resolve dependencies with Conan (default profile: default).
   --build-dir DIR     Build directory (default: "build").
   -h, --help          Show this help.
 
@@ -15,10 +16,19 @@ EOF
 }
 
 build_folder="build"
+use_conan=false
+conan_profile="default"
 meson_options=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --conan)
+            use_conan=true
+            if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                conan_profile="$2"
+                shift
+            fi
+            ;;
         --build-dir)
             if [[ -z "${2:-}" ]]; then
                 echo "--build-dir requires a value" >&2
@@ -37,6 +47,14 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if $use_conan; then
+    conan install . \
+        --output-folder="$build_folder/conan" \
+        --build=missing \
+        --profile="$conan_profile"
+    meson_options+=("--native-file" "$build_folder/conan/conan_meson_native.ini")
+fi
 
 meson setup "$build_folder" "${meson_options[@]}"
 meson compile -C "$build_folder"

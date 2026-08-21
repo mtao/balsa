@@ -1,0 +1,63 @@
+name: Conan CI
+
+on:
+  pull_request:
+    paths:
+      - "conanfile.py"
+      - ".github/workflows/conan.yml"
+  push:
+    branches: [main]
+    paths:
+      - "conanfile.py"
+      - ".github/workflows/conan.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-15
+      CXX: g++-15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure git for private subprojects
+        if: env.SUBPROJECT_PAT != ''
+        shell: bash
+        env:
+          SUBPROJECT_PAT: ${{ secrets.SUBPROJECT_PAT }}
+        run: git config --global url."https://x-access-token:${SUBPROJECT_PAT}@github.com/".insteadOf "https://github.com/"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install tools
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install -y gcc-15 g++-15 libreadline-dev
+          python -m pip install meson ninja conan
+
+      - name: Configure Conan
+        run: |
+          conan profile detect
+          profile=$(conan profile path default)
+          echo "compiler.cppstd=26" >> "$profile"
+          echo "build_type=Debug" >> "$profile"
+
+      - name: Install Conan dependencies
+        run: conan install . --output-folder=build/conan --build=missing
+
+      - name: Configure
+        run: >
+          meson setup build
+          --native-file build/conan/conan_meson_native.ini
+          -Dvisualization=false
+          -Dqt=false
+          -Dexamples=false
+
+      - name: Build and test
+        run: |
+          meson compile -C build
+          meson test -C build -v

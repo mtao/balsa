@@ -15,3 +15,10 @@ meson test -C build -v
 
 The `setup.sh` helper configures and builds the default `build` directory.
 Use `./setup.sh --build-dir build-debug` to select another directory.
+
+Conan is optional. To resolve available dependencies through Conan instead:
+
+```bash
+python -m pip install conan
+./setup.sh --conan --build-dir build-conan
+```
