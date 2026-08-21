@@ -18,13 +18,13 @@ namespace balsa::scene_graph {
 
 // ── Collect BVH node bounds at a given tree depth ───────────────────
 
-template<int8_t SpatialDim, int8_t K, typename DirPolicy>
+template<typename T, int8_t SpatialDim, int8_t K, typename DirPolicy>
 static auto collect_bounds_at_depth(
-  const quiver::spatial::BVH<SpatialDim, K, DirPolicy> &bvh,
+  const quiver::spatial::BVH<T, SpatialDim, K, DirPolicy> &bvh,
   int target_depth)
-  -> std::vector<quiver::spatial::KDOP<SpatialDim, K, DirPolicy>> {
+  -> std::vector<quiver::spatial::KDOP<T, SpatialDim, K, DirPolicy>> {
 
-    using kdop_type = quiver::spatial::KDOP<SpatialDim, K, DirPolicy>;
+    using kdop_type = quiver::spatial::KDOP<T, SpatialDim, K, DirPolicy>;
     std::vector<kdop_type> result;
 
     if (!bvh.is_built() || bvh.node_count() == 0) return result;
@@ -56,7 +56,7 @@ static auto collect_bounds_at_depth(
 template<int8_t K, typename DirPolicy>
 static void set_kdop_wireframe(
   MeshData &mesh_data,
-  const std::vector<quiver::spatial::KDOP<3, K, DirPolicy>> &bounds,
+  const std::vector<quiver::spatial::KDOP<double, 3, K, DirPolicy>> &bounds,
   float uniform_color[4]) {
 
     std::vector<Vec3f> all_positions;
@@ -161,19 +161,20 @@ void BVHData::rebuild_bvh(MeshData &mesh_data) {
     config.max_leaf_size = max_leaf_size;
 
     if (kdop_k == 3) {
-        _bvh_3 = quiver::spatial::make_bvh<2, 3, 3>(mesh, pos, config);
+        _bvh_3 = quiver::spatial::make_bvh<double, 2, 3, 3>(mesh, pos, config);
         _bvh_height = _bvh_3.height();
         spdlog::info("Built AABB BVH: {} nodes, height {}",
                      _bvh_3.node_count(),
                      _bvh_height);
     } else if (kdop_k == 9) {
-        _bvh_9 = quiver::spatial::make_bvh<2, 3, 9>(mesh, pos, config);
+        _bvh_9 = quiver::spatial::make_bvh<double, 2, 3, 9>(mesh, pos, config);
         _bvh_height = _bvh_9.height();
         spdlog::info("Built 9-DOP BVH: {} nodes, height {}",
                      _bvh_9.node_count(),
                      _bvh_height);
     } else {
-        _bvh_13 = quiver::spatial::make_bvh<2, 3, 13>(mesh, pos, config);
+        _bvh_13 =
+          quiver::spatial::make_bvh<double, 2, 3, 13>(mesh, pos, config);
         _bvh_height = _bvh_13.height();
         spdlog::info("Built 13-DOP BVH: {} nodes, height {}",
                      _bvh_13.node_count(),
