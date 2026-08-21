@@ -1,4 +1,4 @@
-#include "balsa/visualization/vulkan/texture.hpp"
+#include "balsa/visualization/vulkan/VulkanTexture.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 
 #include <cstring>

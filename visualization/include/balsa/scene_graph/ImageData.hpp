@@ -10,7 +10,7 @@
 
 #include "balsa/geometry/BoundingBox.hpp"
 #include "balsa/scene_graph/AbstractFeature.hpp"
-#include "balsa/visualization/vulkan/texture.hpp"
+#include "balsa/visualization/vulkan/VulkanTexture.hpp"
 
 namespace balsa::scene_graph {
 

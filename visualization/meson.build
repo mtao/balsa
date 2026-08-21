@@ -58,10 +58,10 @@ visualization_sources = [
   'src/scene_graph/BVHData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
   'src/scene_graph/ImageData.cpp',
-  'src/vulkan/texture.cpp',
-  'src/vulkan/image_pipeline.cpp',
-  'src/vulkan/vulkan_image_drawable.cpp',
-  'src/vulkan/image_scene.cpp',
+  'src/vulkan/VulkanTexture.cpp',
+  'src/vulkan/ImagePipelineManager.cpp',
+  'src/vulkan/VulkanImageDrawable.cpp',
+  'src/vulkan/ImageScene.cpp',
   'src/image_io.cpp',
 ]
 

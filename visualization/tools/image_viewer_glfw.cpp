@@ -24,7 +24,7 @@
 
 #include <balsa/visualization/glfw/vulkan/window.hpp>
 #include <balsa/visualization/image_io.hpp>
-#include <balsa/visualization/vulkan/image_scene.hpp>
+#include <balsa/visualization/vulkan/ImageScene.hpp>
 #include <balsa/visualization/vulkan/imgui/image_controls_panel.hpp>
 #include <balsa/visualization/vulkan/imgui_integration.hpp>
 

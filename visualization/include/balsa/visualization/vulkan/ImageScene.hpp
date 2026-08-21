@@ -10,7 +10,7 @@
 #include "balsa/scene_graph/DrawableGroup.hpp"
 #include "balsa/scene_graph/ImageData.hpp"
 #include "balsa/scene_graph/Object.hpp"
-#include "balsa/visualization/vulkan/image_pipeline.hpp"
+#include "balsa/visualization/vulkan/ImagePipelineManager.hpp"
 #include "balsa/visualization/vulkan/scene_base.hpp"
 
 namespace balsa::visualization::vulkan {

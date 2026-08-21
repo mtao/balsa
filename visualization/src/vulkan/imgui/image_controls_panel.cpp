@@ -1,6 +1,6 @@
 #include "balsa/visualization/vulkan/imgui/image_controls_panel.hpp"
 #include "balsa/scene_graph/ImageData.hpp"
-#include "balsa/visualization/vulkan/image_scene.hpp"
+#include "balsa/visualization/vulkan/ImageScene.hpp"
 
 #include <cstdio>
 #include <imgui.h>

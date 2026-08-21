@@ -7,7 +7,7 @@
 
 #include "balsa/visualization/vulkan/buffer.hpp"
 #include "balsa/visualization/vulkan/drawable.hpp"
-#include "balsa/visualization/vulkan/texture.hpp"
+#include "balsa/visualization/vulkan/VulkanTexture.hpp"
 
 namespace balsa::visualization::vulkan {
 

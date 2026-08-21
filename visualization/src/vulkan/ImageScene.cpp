@@ -1,6 +1,6 @@
-#include "balsa/visualization/vulkan/image_scene.hpp"
+#include "balsa/visualization/vulkan/ImageScene.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
-#include "balsa/visualization/vulkan/vulkan_image_drawable.hpp"
+#include "balsa/visualization/vulkan/VulkanImageDrawable.hpp"
 
 #include <algorithm>
 #include <cmath>

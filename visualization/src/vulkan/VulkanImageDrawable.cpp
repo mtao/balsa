@@ -1,9 +1,9 @@
-#include "balsa/visualization/vulkan/vulkan_image_drawable.hpp"
+#include "balsa/visualization/vulkan/VulkanImageDrawable.hpp"
 #include "balsa/scene_graph/ImageData.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
-#include "balsa/visualization/vulkan/image_pipeline.hpp"
+#include "balsa/visualization/vulkan/ImagePipelineManager.hpp"
 
 #include <spdlog/spdlog.h>
 

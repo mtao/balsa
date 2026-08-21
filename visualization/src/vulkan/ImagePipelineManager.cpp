@@ -1,4 +1,4 @@
-#include "balsa/visualization/vulkan/image_pipeline.hpp"
+#include "balsa/visualization/vulkan/ImagePipelineManager.hpp"
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 
