@@ -113,9 +113,9 @@ class BVHData : public AbstractFeature {
   private:
     // ── BVH storage (one per K variant) ─────────────────────────────
 
-    quiver::spatial::BVH<3, 3> _bvh_3;
-    quiver::spatial::BVH<3, 9> _bvh_9;
-    quiver::spatial::BVH<3, 13> _bvh_13;
+    quiver::spatial::BVH<double, 3, 3> _bvh_3;
+    quiver::spatial::BVH<double, 3, 9> _bvh_9;
+    quiver::spatial::BVH<double, 3, 13> _bvh_13;
 
     int _bvh_height = -1;
 

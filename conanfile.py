@@ -16,6 +16,9 @@ class Balsa(ConanFile):
         "onetbb/2022.0.0",
     ]
 
+    def configure(self):
+        self.options["hwloc"].shared = True
+
     def generate(self):
         meson = MesonToolchain(self)
         meson.generate()
