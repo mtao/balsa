@@ -49,10 +49,19 @@ jobs:
       - name: Install Conan dependencies
         run: conan install . --output-folder=build/conan --build=missing
 
+      - name: Select GCC 15 for Meson
+        run: |
+          cat > build/compiler.ini <<'EOF'
+          [binaries]
+          c = 'gcc-15'
+          cpp = 'g++-15'
+          EOF
+
       - name: Configure
         run: >
           meson setup build
           --native-file build/conan/conan_meson_native.ini
+          --native-file build/compiler.ini
           -Dvisualization=false
           -Dqt=false
           -Dexamples=false
