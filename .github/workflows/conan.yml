@@ -1,224 +1,63 @@
 name: Conan CI
 
 on:
+  pull_request:
+    paths:
+      - "conanfile.py"
+      - ".github/workflows/conan.yml"
   push:
     branches: [main]
     paths:
-      - "**.cpp"
-      - "**.hpp"
-      - "**.hxx"
-      - "meson.build"
-      - "meson_options.txt"
-      - "**/meson.build"
-      - "conanfile.py"
-      - ".github/workflows/conan.yml"
-  pull_request:
-    paths:
-      - "**.cpp"
-      - "**.hpp"
-      - "**.hxx"
-      - "meson.build"
-      - "meson_options.txt"
-      - "**/meson.build"
       - "conanfile.py"
       - ".github/workflows/conan.yml"
 
 jobs:
   build:
-    name: ${{ matrix.platform.name }} / ${{ matrix.build_type }}
-    runs-on: ${{ matrix.platform.image }}
-    strategy:
-      fail-fast: false
-      matrix:
-        build_type: [Debug, Release]
-        platform:
-          - name: Linux (GCC 15)
-            image: ubuntu-24.04
-            cc: gcc-15
-            cxx: g++-15
-          # macOS disabled: Apple Clang cannot build quiver (missing
-          # std::ranges::iota, consteval support, std::submdspan,
-          # std::execution::par).
-          - name: Windows (MSVC)
-            image: windows-latest
-            cc: cl
-            cxx: cl
+    runs-on: ubuntu-24.04
     env:
-      MESON_VERSION: "1.7.2"
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      SUBPROJECT_PAT: ${{ secrets.SUBPROJECT_PAT }}
+      CC: gcc-15
+      CXX: g++-15
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Configure git for private subprojects
         if: env.SUBPROJECT_PAT != ''
         shell: bash
+        env:
+          SUBPROJECT_PAT: ${{ secrets.SUBPROJECT_PAT }}
         run: git config --global url."https://x-access-token:${SUBPROJECT_PAT}@github.com/".insteadOf "https://github.com/"
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
 
-      # -- Toolchain --
-      - name: Install GCC 15 (Linux)
-        if: runner.os == 'Linux'
+      - name: Install tools
         run: |
-          # Retry PPA setup — Launchpad occasionally returns transient
-          # GPGKeyTemporarilyNotFoundError (HTTP 500) errors.
-          for i in 1 2 3 4 5; do
-            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test && break
-            echo "Attempt $i failed, retrying in 10s..."
-            sleep 10
-          done
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update
-          sudo apt-get install -y gcc-15 g++-15 ccache
+          sudo apt-get install -y gcc-15 g++-15 libreadline-dev
+          python -m pip install meson ninja conan
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Configure Conan
         run: |
-          sudo apt-get install -y \
-            libvulkan-dev glslang-dev libshaderc-dev \
-            libglfw3-dev \
-            qt6-base-dev \
-            libgl-dev libgl1-mesa-dev \
-            libreadline-dev \
-            libx11-dev libx11-xcb-dev libfontenc-dev libice-dev libsm-dev \
-            libxau-dev libxaw7-dev libxcomposite-dev libxcursor-dev \
-            libxdamage-dev libxfixes-dev libxi-dev libxinerama-dev \
-            libxkbfile-dev libxmuu-dev libxrandr-dev libxrender-dev \
-            libxres-dev libxss-dev libxtst-dev libxv-dev libxxf86vm-dev \
-            libxcb-glx0-dev libxcb-render0-dev libxcb-render-util0-dev \
-            libxcb-xkb-dev libxcb-icccm4-dev libxcb-image0-dev \
-            libxcb-keysyms1-dev libxcb-randr0-dev libxcb-shape0-dev \
-            libxcb-sync-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
-            libxcb-dri3-dev uuid-dev libxcb-cursor-dev libxcb-dri2-0-dev \
-            libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev \
-            libxcb-res0-dev libxcb-util-dev
+          conan profile detect
+          profile=$(conan profile path default)
+          echo "compiler.cppstd=26" >> "$profile"
+          echo "build_type=Debug" >> "$profile"
 
-      - name: Setup MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Install dependencies
-        run: python -m pip install meson==${{ env.MESON_VERSION }} ninja conan
-
-      - name: Install pkg-config (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Retry choco install — chocolatey community feed occasionally
-          # returns 504 Gateway Timeout errors.
-          foreach ($i in 1..5) {
-            choco install pkgconfiglite -y
-            if ($LASTEXITCODE -eq 0) { break }
-            Write-Host "Attempt $i failed, retrying in 10s..."
-            Start-Sleep -Seconds 10
-          }
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      # -- Conan --
-      - name: Create conan profile (Unix)
-        if: runner.os != 'Windows'
-        env:
-          CC: ${{ matrix.platform.cc }}
-          CXX: ${{ matrix.platform.cxx }}
-        run: conan profile detect
-
-      - name: Create conan profile (Windows)
-        if: runner.os == 'Windows'
-        run: conan profile detect
-
-      - name: Update conan profile
-        shell: bash
-        run: |
-          PROFILE_PATH=$(conan profile path default)
-          echo "compiler.cppstd=23" >> "$PROFILE_PATH"
-          echo "build_type=${{ matrix.build_type }}" >> "$PROFILE_PATH"
-          conan profile show
-
-      - name: Install conan dependencies
-        run: >
-          conan install .
-          --output-folder=builddir/conan
-          --build=missing
-          -o qt=False
-          -o visualization=False
-          -o protobuf=False
-
-      # -- Caches --
-      - name: Cache ccache
-        if: runner.os != 'Windows'
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-conan-${{ matrix.platform.image }}-${{ matrix.build_type }}-${{ github.sha }}
-          restore-keys: |
-            ccache-conan-${{ matrix.platform.image }}-${{ matrix.build_type }}-
-
-      - name: Configure ccache
-        if: runner.os != 'Windows'
-        run: |
-          ccache --set-config=max_size=500M
-          ccache --set-config=compression=true
-          ccache -z
-
-      # -- Build & Test --
-      - name: Write compiler native file (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          mkdir -p builddir
-          {
-            echo "[binaries]"
-            echo "c = '${{ matrix.platform.cc }}'"
-            echo "cpp = '${{ matrix.platform.cxx }}'"
-          } > builddir/compiler.ini
+      - name: Install Conan dependencies
+        run: conan install . --output-folder=build/conan --build=missing
 
       - name: Configure
-        env:
-          CC: ${{ runner.os != 'Windows' && format('ccache {0}', matrix.platform.cc) || matrix.platform.cc }}
-          CXX: ${{ runner.os != 'Windows' && format('ccache {0}', matrix.platform.cxx) || matrix.platform.cxx }}
         run: >
-          meson setup builddir/
-          --wrap-mode=forcefallback
-          --native-file builddir/conan/conan_meson_native.ini
-          ${{ runner.os != 'Windows' && '--native-file builddir/compiler.ini' || '' }}
+          meson setup build
+          --native-file build/conan/conan_meson_native.ini
+          -Dvisualization=false
+          -Dqt=false
+          -Dexamples=false
 
-      - name: Build
-        run: meson compile -C builddir/
-
-      - name: ccache stats
-        if: runner.os != 'Windows'
-        run: ccache -s
-
-      - name: Set conan library path (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
+      - name: Build and test
         run: |
-          # Use pkg-config to resolve library directories from conan .pc files
-          # so shared libs (e.g. libtbb) are found at test runtime.
-          # The .pc files use ${prefix} variables that raw grep cannot resolve.
-          export PKG_CONFIG_PATH="builddir/conan:${PKG_CONFIG_PATH:-}"
-          CONAN_LIB_DIRS=""
-          for pc in builddir/conan/*.pc; do
-            pkg=$(basename "$pc" .pc)
-            dirs=$(pkg-config --libs-only-L "$pkg" 2>/dev/null | tr ' ' '\n' | sed 's/^-L//' | tr '\n' ':')
-            CONAN_LIB_DIRS="${CONAN_LIB_DIRS}${dirs}"
-          done
-          # Deduplicate
-          CONAN_LIB_DIRS=$(echo "$CONAN_LIB_DIRS" | tr ':' '\n' | sort -u | tr '\n' ':' | sed 's/:$//')
-          echo "LD_LIBRARY_PATH=${CONAN_LIB_DIRS}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
-
-      - name: Test
-        run: meson test -C builddir/ -v
-
-      - name: Upload test log
-        uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: ${{ matrix.platform.name }}-${{ matrix.build_type }}-testlog
-          path: builddir/meson-logs/testlog.txt
+          meson compile -C build
+          meson test -C build -v

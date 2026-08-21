@@ -3,22 +3,22 @@ set -euo pipefail
 
 usage() {
     cat <<EOF
-Usage: $0 [--conan [profile]] [--build-dir DIR]
+Usage: $0 [--conan [profile]] [--build-dir DIR] [MESON_OPTIONS...]
 
 Options:
-  --conan [profile]   Run conan install before meson setup (default profile: "default").
-                      Use this for heavy deps (Qt, Vulkan, protobuf, …).
-  --build-dir DIR     Build directory (default: "build", or "build-<profile>" with --conan).
+  --conan [profile]   Resolve dependencies with Conan (default profile: default).
+  --build-dir DIR     Build directory (default: "build").
   -h, --help          Show this help.
 
-Without --conan, dependencies are resolved from system packages and
-Meson WrapDB subprojects.  No package manager required.
+Dependencies are resolved from system packages and Meson subprojects.
+Remaining arguments are forwarded to meson setup.
 EOF
 }
 
+build_folder="build"
 use_conan=false
 conan_profile="default"
-build_folder=""
+meson_options=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +30,10 @@ while [[ $# -gt 0 ]]; do
             fi
             ;;
         --build-dir)
+            if [[ -z "${2:-}" ]]; then
+                echo "--build-dir requires a value" >&2
+                exit 1
+            fi
             build_folder="$2"
             shift
             ;;
@@ -38,34 +42,19 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            echo "Unknown option: $1" >&2
-            usage >&2
-            exit 1
+            meson_options+=("$1")
             ;;
     esac
     shift
 done
 
-# Default build dir
-if [[ -z "$build_folder" ]]; then
-    if $use_conan && [[ "$conan_profile" != "default" ]]; then
-        build_folder="build-$conan_profile"
-    else
-        build_folder="build"
-    fi
-fi
-
-mkdir -p "$build_folder"
-
 if $use_conan; then
-    echo "── conan install (profile: $conan_profile) ──"
-    conan install . --output-folder="$build_folder/conan" --build=missing --profile="$conan_profile"
-    pushd "$build_folder"
-    meson setup --native-file conan/conan_meson_native.ini .. .
-    popd
-else
-    echo "── meson setup (system + subprojects, no conan) ──"
-    meson setup "$build_folder" .
+    conan install . \
+        --output-folder="$build_folder/conan" \
+        --build=missing \
+        --profile="$conan_profile"
+    meson_options+=("--native-file" "$build_folder/conan/conan_meson_native.ini")
 fi
 
-ninja -C "$build_folder"
+meson setup "$build_folder" "${meson_options[@]}"
+meson compile -C "$build_folder"

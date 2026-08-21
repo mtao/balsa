@@ -16,7 +16,7 @@ zipper_dep = dependency('zipper', default_options: ['testing=false'])
 
 core_required_deps = [spdlog_dep, eigen_dep, zipper_dep]
 
-# ── Optional dependencies (system only -- enable via Conan or system packages) ──
+# ── Optional dependencies (system packages) ────────────────────────────────
 if get_option('protobuf')
   protobuf_dep = dependency('protobuf')
   core_required_deps += [protobuf_dep]
@@ -54,15 +54,9 @@ if get_option('qt')
   qt_dep = dependency('qt6', modules: qt_required_modules)
 endif
 
-if get_option('quiver')
-  add_project_arguments('-DBALSA_HAS_QUIVER=1', language: 'cpp')
-endif
-
 subdir('core')
 
-if get_option('quiver')
-  quiver_dep = dependency('quiver', default_options: ['testing=false', 'tools=false', 'examples=false'])
-endif
+quiver_dep = dependency('quiver', default_options: ['testing=false', 'tools=false', 'examples=false'])
 
 subdir('geometry')
 
