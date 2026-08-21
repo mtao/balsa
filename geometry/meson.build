@@ -53,9 +53,7 @@ geometry_sources += 'src/point_cloud/extxyz.cpp'
 
 geometry_required_deps += core_dep
 
-if get_option('quiver')
-  geometry_required_deps += quiver_dep
-endif
+geometry_required_deps += quiver_dep
 
 include_dir = [include_directories('include')]
 

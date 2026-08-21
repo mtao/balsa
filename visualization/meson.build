@@ -13,7 +13,7 @@ shaderc_dep = dependency('shaderc')
 
 # ── ImGui ─────────────────────────────────────────────────────────────────
 # The WrapDB subproject compiles backend implementations (vulkan, glfw, …)
-# directly into the imgui library.  A system / Conan install ships them as
+# directly into the imgui library.  A system install ships them as
 # separate source files that we must compile ourselves.
 #
 # Everything imgui-related is resolved here; the rest of the file just uses
@@ -106,9 +106,7 @@ endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
-if get_option('quiver')
-  visualization_public_deps += quiver_dep
-endif
+visualization_public_deps += quiver_dep
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,
