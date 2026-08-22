@@ -34,7 +34,7 @@ namespace balsa::scene_graph {
 // render pass; the viewer calls apply_pending_update() before the
 // next render pass to rebuild BVH / update wireframe child.
 
-class MeshData;// forward
+class MeshData; // forward
 
 class BVHData : public AbstractFeature {
   public:
@@ -46,7 +46,7 @@ class BVHData : public AbstractFeature {
 
     // BVH build strategy.
     quiver::spatial::BVHBuildStrategy strategy =
-      quiver::spatial::BVHBuildStrategy::sah;
+        quiver::spatial::BVHBuildStrategy::sah;
 
     // Maximum number of primitives per leaf node.
     uint16_t max_leaf_size = 4;
@@ -55,7 +55,7 @@ class BVHData : public AbstractFeature {
     int display_depth = 0;
 
     // Overlay wireframe color (RGBA).
-    float color[4] = { 0.1f, 0.8f, 0.2f, 1.0f };
+    float color[4] = {0.1f, 0.8f, 0.2f, 1.0f};
 
     // Whether the BVH overlay is enabled (visible).
     bool enabled = true;
@@ -132,6 +132,6 @@ class BVHData : public AbstractFeature {
     void update_overlay();
 };
 
-}// namespace balsa::scene_graph
+} // namespace balsa::scene_graph
 
 #endif

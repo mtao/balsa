@@ -57,6 +57,12 @@ visualization_sources = [
   'src/scene_graph/MeshData.cpp',
   'src/scene_graph/BVHData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
+  'src/scene_graph/ImageData.cpp',
+  'src/vulkan/VulkanTexture.cpp',
+  'src/vulkan/ImagePipelineManager.cpp',
+  'src/vulkan/VulkanImageDrawable.cpp',
+  'src/vulkan/ImageScene.cpp',
+  'src/image_io.cpp',
 ]
 
 if get_option('qt')
@@ -101,6 +107,7 @@ if get_option('imgui')
   visualization_public_deps += imgui_dep
   visualization_sources += 'src/vulkan/imgui_integration.cpp'
   visualization_sources += 'src/vulkan/imgui/mesh_controls_panel.cpp'
+  visualization_sources += 'src/vulkan/imgui/image_controls_panel.cpp'
   visualization_sources += imgui_backend_sources
 endif
 

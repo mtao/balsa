@@ -41,8 +41,14 @@ struct MeshPipelineKey {
     bool has_colors = false;
     bool has_scalars = false;
 
+    // Position/normal component counts (1–4).  Affects VkFormat in the
+    // vertex input layout.  Vulkan auto-fills missing components when
+    // the shader declares vec3 but the buffer provides fewer floats.
+    uint8_t position_components = 3;
+    uint8_t normal_components = 3;
+
     // Rasterization state
-    CullMode cull_mode = CullMode::None;// which faces to discard
+    CullMode cull_mode = CullMode::None; // which faces to discard
 
     // Wireframe overlay — when true, the fragment shader uses
     // gl_BaryCoordEXT (VK_KHR_fragment_shader_barycentric) to draw
@@ -52,8 +58,8 @@ struct MeshPipelineKey {
     bool wireframe_overlay = false;
 
     // Render-pass-dependent state (queried from Film)
-    uint32_t msaa_samples = 1;// underlying value of VkSampleCountFlagBits
-    uint64_t render_pass = 0;// VkRenderPass cast to uint64_t for hashing
+    uint32_t msaa_samples = 1; // underlying value of VkSampleCountFlagBits
+    uint64_t render_pass = 0; // VkRenderPass cast to uint64_t for hashing
     bool depth_test = false;
 
     bool operator==(const MeshPipelineKey &) const = default;
@@ -158,11 +164,12 @@ class MeshPipelineManager {
     vk::PipelineLayout _pipeline_layout;
     vk::DescriptorPool _descriptor_pool;
 
-    std::unordered_map<MeshPipelineKey, vk::Pipeline, MeshPipelineKeyHash> _cache;
+    std::unordered_map<MeshPipelineKey, vk::Pipeline, MeshPipelineKeyHash>
+        _cache;
 
     bool _initialized = false;
 };
 
-}// namespace balsa::visualization::vulkan
+} // namespace balsa::visualization::vulkan
 
 #endif

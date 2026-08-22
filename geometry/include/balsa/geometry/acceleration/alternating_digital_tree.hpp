@@ -11,7 +11,7 @@ class AlternatingDigitalTree {
   public:
     using Scalar = double;
     constexpr static int Dim = D;
-    using BoundingBox = geometry::BoundingBox<D>;
+    using BoundingBox = geometry::BoundingBox<Scalar, D>;
 
 
     // void insert(AlignedBox);

@@ -17,13 +17,13 @@ class QBoxLayout;
 namespace balsa::visualization::vulkan {
 class MeshScene;
 struct MeshRenderState;
-}// namespace balsa::visualization::vulkan
+} // namespace balsa::visualization::vulkan
 
 namespace balsa::scene_graph {
 class Object;
 class MeshData;
 class BVHData;
-}// namespace balsa::scene_graph
+} // namespace balsa::scene_graph
 
 namespace balsa::visualization::qt {
 
@@ -107,6 +107,12 @@ class MeshControlsWidget : public QWidget {
     void on_scene_light_dir_changed();
     void on_scene_light_color_clicked();
 
+    // Attribute bindings
+    void on_position_attr_changed(int index);
+    void on_normal_attr_changed(int index);
+    void on_scalar_attr_changed(int index);
+    void on_scalar_component_changed(int index);
+
     // BVH overlay
     void on_bvh_enabled_changed(bool checked);
     void on_bvh_kdop_changed(int index);
@@ -141,6 +147,7 @@ class MeshControlsWidget : public QWidget {
     void build_render_state_group(QWidget *parent, QBoxLayout *layout);
     void build_color_group(QWidget *parent, QBoxLayout *layout);
     void build_layers_group(QWidget *parent, QBoxLayout *layout);
+    void build_attribute_bindings_group(QWidget *parent, QBoxLayout *layout);
     void build_material_group(QWidget *parent, QBoxLayout *layout);
     void build_scene_lighting_group(QWidget *parent, QBoxLayout *layout);
     void build_bvh_group(QWidget *parent, QBoxLayout *layout);
@@ -150,6 +157,7 @@ class MeshControlsWidget : public QWidget {
     void sync_from_state();
     void sync_color_group_visibility();
     void sync_transform_from_object();
+    void sync_attribute_bindings();
 
     // Helper: get the MeshData feature from the selected Object, or nullptr.
     ::balsa::scene_graph::MeshData *selected_mesh_data();
@@ -197,7 +205,7 @@ class MeshControlsWidget : public QWidget {
     QComboBox *_normal_source_combo = nullptr;
     QCheckBox *_two_sided_check = nullptr;
     QComboBox *_cull_mode_combo = nullptr;
-    QWidget *_shading_details_container = nullptr;// shown only when lit
+    QWidget *_shading_details_container = nullptr; // shown only when lit
 
     // ── Color widgets ────────────────────────────────────────────────
     QComboBox *_color_source_combo = nullptr;
@@ -255,8 +263,16 @@ class MeshControlsWidget : public QWidget {
     QLabel *_bvh_depth_label = nullptr;
     QLabel *_bvh_height_label = nullptr;
     QPushButton *_bvh_color_button = nullptr;
+
+    // ── Attribute binding widgets ────────────────────────────────────
+    QGroupBox *_attr_bindings_group = nullptr;
+    QComboBox *_position_attr_combo = nullptr;
+    QComboBox *_normal_attr_combo = nullptr;
+    QComboBox *_scalar_attr_combo = nullptr;
+    QComboBox *_scalar_component_combo = nullptr;
+    QWidget *_scalar_component_container = nullptr;
 };
 
-}// namespace balsa::visualization::qt
+} // namespace balsa::visualization::qt
 
 #endif
