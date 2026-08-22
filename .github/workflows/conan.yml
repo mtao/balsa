@@ -68,6 +68,8 @@ jobs:
           -Dexamples=false
 
       - name: Build and test
+        shell: bash
         run: |
           meson compile -C build
+          source build/conan/conanrun.sh
           meson test -C build -v

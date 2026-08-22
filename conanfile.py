@@ -5,7 +5,7 @@ from conan.tools.meson import MesonToolchain
 
 class Balsa(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
-    generators = "PkgConfigDeps"
+    generators = "PkgConfigDeps", "VirtualRunEnv"
 
     requires = [
         "eigen/3.4.0",
