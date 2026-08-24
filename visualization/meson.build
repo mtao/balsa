@@ -6,6 +6,10 @@ vulkan_dep = dependency('vulkan', required: false)
 
 shaderc_dep = dependency('shaderc')
 
+if get_option('imgui') and not get_option('glfw')
+  error('The ImGui frontend currently requires GLFW; enable -Dglfw=true or disable -Dimgui')
+endif
+
 # Shader source files are part of the dependency contract, so a binary system
 # package cannot satisfy it. Always use the pinned source subproject.
 colormap_proj = subproject('colormap_shaders')
@@ -42,7 +46,28 @@ endif
 imgui_backend_sources = []
 imgui_backend_inc = []
 if get_option('imgui')
-  imgui_dep = dependency('imgui')
+  imgui_dep = dependency(
+    'imgui',
+    default_options: [
+      'dx9=disabled',
+      'dx10=disabled',
+      'dx11=disabled',
+      'dx12=disabled',
+      'metal=disabled',
+      'opengl=disabled',
+      'sdl2_renderer=disabled',
+      'sdl3_renderer=disabled',
+      'sdl3_gpu=disabled',
+      'vulkan=enabled',
+      'webgpu=disabled',
+      'glfw=enabled',
+      'sdl2=disabled',
+      'sdl3=disabled',
+      'osx=disabled',
+      'win=disabled',
+      'allegro5=disabled',
+    ],
+  )
   if imgui_dep.type_name() != 'internal'
     imgui_prefix = imgui_dep.get_variable(pkgconfig: 'prefix')
     imgui_bd = imgui_prefix / 'res' / 'bindings'
@@ -148,7 +173,7 @@ meson.override_dependency('balsaVisualization', visualization_dep)
 if get_option('testing')
   subdir('tests')
 endif
-if get_option('examples')
+if get_option('examples') and get_option('glfw') and get_option('imgui')
   subdir('examples')
 endif
 subdir('tools')
