@@ -5,6 +5,8 @@
 #include <shaderc/shaderc.hpp>
 #include <vulkan/vulkan.hpp>
 #include "balsa/scene_graph/embedding_traits.hpp"
+#include "balsa/visualization/shaders/embedded_sources.hpp"
+#include "balsa/visualization/shaders/shader_library.hpp"
 #include "balsa/visualization/shaders/shader.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
@@ -24,8 +26,10 @@ class MeshShader : public Shader<ET> {
   public:
     MeshShader(const vulkan::MeshRenderState &state,
                vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList,
-               bool wireframe_overlay = false)
-      : _state(&state), _topology(topology), _wireframe_overlay(wireframe_overlay) {}
+               bool wireframe_overlay = false,
+               const ShaderLibrary &library = builtin_shader_library())
+      : _state(&state), _topology(topology), _wireframe_overlay(wireframe_overlay),
+        _library(library) {}
 
     void add_compile_options(shaderc::CompileOptions &opts) const override;
     std::vector<uint32_t> vert_spirv() const override;
@@ -35,6 +39,7 @@ class MeshShader : public Shader<ET> {
     const vulkan::MeshRenderState *_state;
     vk::PrimitiveTopology _topology;
     bool _wireframe_overlay;
+    ShaderLibrary _library;
 };
 
 // ── Implementation ───────────────────────────────────────────────────
@@ -92,29 +97,33 @@ void MeshShader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> MeshShader<ET>::vert_spirv() const {
-    const static std::string fname = ":/glsl/mesh.vert";
-    return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderType::Vertex);
+    const auto source = _library.find("mesh/vertex");
+    return AbstractShader::compile_glsl(
+      source ? std::string_view{*source} : std::string_view{},
+      AbstractShader::ShaderType::Vertex);
 }
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> MeshShader<ET>::frag_spirv() const {
-    // Read the base mesh fragment shader source.
-    std::string frag_source = AbstractShader::read_path_to_string(":/glsl/mesh.frag");
+    const auto source = _library.find("mesh/fragment");
+    std::string frag_source{source ? std::string_view{*source} : std::string_view{}};
 
     if (_state->color_source == vulkan::ColorSource::ScalarField) {
-        // Load the colormap GLSL function from Qt resources.
         // The colormap shaders have NO #version directive — they are pure
         // function definitions exporting `vec4 colormap(float x)`.
-        std::string colormap_path = ":/colormap-shaders/" + _state->colormap_name + ".frag";
-        std::string colormap_source = AbstractShader::read_path_to_string(colormap_path);
+        const auto colormap_source = colormap_shader_source(_state->colormap_name);
+        if (!colormap_source) {
+            return {};
+        }
 
         // Inject the colormap source after the `#version` line.
         // mesh.frag starts with `#version 460 core\n` — find the end of
         // that line and insert the colormap definitions right after it.
         auto version_end = frag_source.find('\n');
         if (version_end != std::string::npos) {
-            frag_source.insert(version_end + 1,
-                               "\n// ── Injected colormap ──\n" + colormap_source + "\n");
+            frag_source.insert(
+              version_end + 1,
+              "\n// Injected colormap\n" + std::string(*colormap_source) + "\n");
         }
     }
 

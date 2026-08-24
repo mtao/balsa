@@ -9,10 +9,13 @@ on:
       - "**.cpp"
       - "**.hpp"
       - "**.hxx"
+      - "**.vert"
+      - "**.frag"
       - "meson.build"
       - "meson_options.txt"
       - "**/meson.build"
       - "subprojects/*.wrap"
+      - "subprojects/packagefiles/**"
       - ".github/workflows/system-packages.yml"
   pull_request:
     paths:
@@ -21,10 +24,13 @@ on:
       - "**.cpp"
       - "**.hpp"
       - "**.hxx"
+      - "**.vert"
+      - "**.frag"
       - "meson.build"
       - "meson_options.txt"
       - "**/meson.build"
       - "subprojects/*.wrap"
+      - "subprojects/packagefiles/**"
       - ".github/workflows/system-packages.yml"
 
 jobs:
@@ -132,6 +138,39 @@ jobs:
 
       - name: Build
         run: meson compile -C build/
+
+      - name: Verify Qt-only frontend
+        if: matrix.build_type == 'debug'
+        env:
+          CC: ccache ${{ matrix.platform.cc }}
+          CXX: ccache ${{ matrix.platform.cxx }}
+        run: |
+          meson setup build-qt-only/ \
+            --buildtype=debug \
+            --wrap-mode=forcefallback \
+            -Dtesting=false -Dexamples=false \
+            -Dqt=true -Dglfw=false -Dimgui=false
+          ninja -C build-qt-only/ \
+            visualization/libbalsaVisualization.so.p/src_qt_vulkan_film.cpp.o \
+            visualization/libbalsaVisualization.so.p/src_qt_vulkan_window.cpp.o \
+            visualization/tools/mesh_viewer_qt.p/mesh_viewer_qt.cpp.o
+
+      - name: Verify GLFW ImGui frontend
+        if: matrix.build_type == 'debug'
+        env:
+          CC: ccache ${{ matrix.platform.cc }}
+          CXX: ccache ${{ matrix.platform.cxx }}
+        run: |
+          meson setup build-glfw-imgui/ \
+            --buildtype=debug \
+            --wrap-mode=forcefallback \
+            -Dtesting=false -Dexamples=false \
+            -Dqt=false -Dglfw=true -Dimgui=true
+          ninja -C build-glfw-imgui/ \
+            visualization/libbalsaVisualization.so.p/src_glfw_vulkan_film.cpp.o \
+            visualization/libbalsaVisualization.so.p/src_glfw_vulkan_window.cpp.o \
+            visualization/libbalsaVisualization.so.p/src_vulkan_imgui_integration.cpp.o \
+            visualization/tools/mesh_viewer_glfw.p/mesh_viewer_glfw.cpp.o
 
       - name: ccache stats
         run: ccache -s

@@ -11,7 +11,8 @@ namespace balsa::visualization::vulkan {
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
-ImageScene::ImageScene() : _scene_root("Root") {
+ImageScene::ImageScene(const shaders::ShaderLibrary &library)
+  : _scene_root("Root"), _pipeline_manager(library) {
     // Create a camera Object as a child of the root.
     auto &cam_obj = _scene_root.add_child("Camera");
     cam_obj.permanent = true;

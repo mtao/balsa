@@ -2,6 +2,7 @@
 #else
 #include <spdlog/spdlog.h>
 #include <balsa/visualization/shaders/flat.hpp>
+#include <balsa/visualization/shaders/embedded_sources.hpp>
 #include "vulkan_scene.hpp"
 #include <imgui.h>
 #pragma GCC diagnostic push
@@ -20,13 +21,17 @@ class TriangleShader : public Shader<ET> {
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
-    const static std::string fname = ":/glsl/triangle.vert";
-    return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderType::Vertex);
+    const auto source = builtin_shader_library().find("examples/triangle/vertex");
+    return AbstractShader::compile_glsl(
+      source ? std::string_view{*source} : std::string_view{},
+      AbstractShader::ShaderType::Vertex);
 }
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
-    const static std::string fname = ":/glsl/triangle.frag";
-    return AbstractShader::compile_glsl_from_path(fname, AbstractShader::ShaderType::Fragment);
+    const auto source = builtin_shader_library().find("examples/triangle/fragment");
+    return AbstractShader::compile_glsl(
+      source ? std::string_view{*source} : std::string_view{},
+      AbstractShader::ShaderType::Fragment);
 }
 }// namespace balsa::visualization::shaders
 

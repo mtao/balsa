@@ -17,8 +17,7 @@
 namespace balsa::visualization::vulkan::imgui {
 
 using visualization::find_colormap_index;
-using visualization::k_colormap_count;
-using visualization::k_colormap_names;
+using visualization::shaders::colormap_names;
 
 // ── Enum combo helpers ───────────────────────────────────────────────
 
@@ -230,15 +229,16 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
 
         if (state.color_source == ColorSource::ScalarField) {
             // Colormap combo box
+            const auto names = colormap_names();
             int cmap_idx = find_colormap_index(state.colormap_name);
             if (ImGui::BeginCombo("Colormap",
                                   cmap_idx >= 0
-                                      ? k_colormap_names[cmap_idx]
+                                      ? names[static_cast<std::size_t>(cmap_idx)].data()
                                       : state.colormap_name.c_str())) {
-                for (int i = 0; i < k_colormap_count; ++i) {
-                    bool selected = (i == cmap_idx);
-                    if (ImGui::Selectable(k_colormap_names[i], selected)) {
-                        state.colormap_name = k_colormap_names[i];
+                for (std::size_t i = 0; i < names.size(); ++i) {
+                    bool selected = (static_cast<int>(i) == cmap_idx);
+                    if (ImGui::Selectable(names[i].data(), selected)) {
+                        state.colormap_name = names[i];
                         changed = true;
                     }
                     if (selected) ImGui::SetItemDefaultFocus();

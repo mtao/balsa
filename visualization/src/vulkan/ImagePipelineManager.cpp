@@ -1,4 +1,5 @@
 #include "balsa/visualization/vulkan/ImagePipelineManager.hpp"
+#include "balsa/visualization/shaders/embedded_sources.hpp"
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 
@@ -21,6 +22,7 @@ auto ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) -> voi
     create_descriptor_pool(max_descriptor_sets);
 
     _initialized = true;
+    _shader_revision = _shader_library.revision();
     spdlog::info("ImagePipelineManager: initialized");
 }
 
@@ -196,6 +198,11 @@ auto ImagePipelineManager::get_or_create() -> vk::Pipeline {
     }
     auto &film = *_film;
 
+    if (_shader_revision != _shader_library.revision()) {
+        invalidate_pipeline();
+        _shader_revision = _shader_library.revision();
+    }
+
     // Check if the cached pipeline is still valid for this render pass.
     const vk::RenderPass rp = film.default_render_pass();
     uint32_t msaa = static_cast<uint32_t>(film.sample_count());
@@ -226,12 +233,15 @@ auto ImagePipelineManager::get_or_create() -> vk::Pipeline {
 auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
     spdlog::info("ImagePipelineManager: creating pipeline");
 
-    // Compile shaders from Qt resources.
     shaders::AbstractShader shader_compiler;
-    auto vert_spv = shader_compiler.compile_glsl_from_path(
-        ":/glsl/image.vert", shaders::AbstractShader::ShaderType::Vertex);
-    auto frag_spv = shader_compiler.compile_glsl_from_path(
-        ":/glsl/image.frag", shaders::AbstractShader::ShaderType::Fragment);
+    const auto vertex_source = _shader_library.find("image/vertex");
+    const auto fragment_source = _shader_library.find("image/fragment");
+    auto vert_spv = shader_compiler.compile_glsl(
+        vertex_source ? std::string_view{*vertex_source} : std::string_view{},
+        shaders::AbstractShader::ShaderType::Vertex);
+    auto frag_spv = shader_compiler.compile_glsl(
+        fragment_source ? std::string_view{*fragment_source} : std::string_view{},
+        shaders::AbstractShader::ShaderType::Fragment);
 
     if (vert_spv.empty() || frag_spv.empty()) {
         spdlog::error(
