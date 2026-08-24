@@ -1,5 +1,8 @@
 */
 !patches/
+!packagefiles/
+!packagefiles/colormap_shaders/
+!packagefiles/colormap_shaders/meson.build
 
 # Auto-generated wrap-redirects from transitive deps
 lua.wrap

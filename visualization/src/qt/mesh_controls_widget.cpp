@@ -40,8 +40,7 @@ namespace vulkan = ::balsa::visualization::vulkan;
 namespace sg = ::balsa::scene_graph;
 
 using visualization::find_colormap_index;
-using visualization::k_colormap_count;
-using visualization::k_colormap_names;
+using visualization::shaders::colormap_names;
 
 // ── Helper: create a labeled slider ─────────────────────────────────
 
@@ -462,8 +461,8 @@ void MeshControlsWidget::build_color_group(QWidget *parent,
     auto *cmap_row = new QHBoxLayout;
     cmap_row->addWidget(new QLabel("Colormap:", _scalar_field_container));
     _colormap_combo = new QComboBox(_scalar_field_container);
-    for (int i = 0; i < k_colormap_count; ++i) {
-        _colormap_combo->addItem(k_colormap_names[i]);
+    for (const auto name : colormap_names()) {
+        _colormap_combo->addItem(QString::fromUtf8(name.data(), static_cast<int>(name.size())));
     }
     cmap_row->addWidget(_colormap_combo);
     sf_layout->addLayout(cmap_row);
@@ -1375,8 +1374,9 @@ void MeshControlsWidget::on_uniform_color_clicked() {
 
 void MeshControlsWidget::on_colormap_changed(int index) {
     auto *md = selected_mesh_data();
-    if (!md || index < 0 || index >= k_colormap_count) return;
-    md->render_state().colormap_name = k_colormap_names[index];
+    const auto names = colormap_names();
+    if (!md || index < 0 || static_cast<std::size_t>(index) >= names.size()) return;
+    md->render_state().colormap_name = names[static_cast<std::size_t>(index)];
     {
         QSignalBlocker block(_colormap_custom_edit);
         _colormap_custom_edit->setText(

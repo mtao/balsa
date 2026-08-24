@@ -9,10 +9,13 @@ on:
       - "**.cpp"
       - "**.hpp"
       - "**.hxx"
+      - "**.vert"
+      - "**.frag"
       - "meson.build"
       - "meson_options.txt"
       - "**/meson.build"
       - "subprojects/*.wrap"
+      - "subprojects/packagefiles/**"
       - ".github/workflows/system-packages.yml"
   pull_request:
     paths:
@@ -21,10 +24,13 @@ on:
       - "**.cpp"
       - "**.hpp"
       - "**.hxx"
+      - "**.vert"
+      - "**.frag"
       - "meson.build"
       - "meson_options.txt"
       - "**/meson.build"
       - "subprojects/*.wrap"
+      - "subprojects/packagefiles/**"
       - ".github/workflows/system-packages.yml"
 
 jobs:

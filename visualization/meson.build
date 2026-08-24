@@ -1,15 +1,36 @@
 
 vulkan_dep = dependency('vulkan', required: false)
 #===========================================
-# Visualization 
+# Visualization
 #===========================================
 
-if not get_option('qt')
-  error('Qt required for shader storage, please enable to use visualization!')
-endif
-
 shaderc_dep = dependency('shaderc')
- subdir('resources')
+
+# Shader source files are part of the dependency contract, so a binary system
+# package cannot satisfy it. Always use the pinned source subproject.
+colormap_proj = subproject('colormap_shaders')
+colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep')
+colormap_shader_dir = colormap_shaders_dep.get_variable(internal: 'shader_dir')
+
+embed_probe = '''
+constexpr unsigned char local_shader[] = {
+#embed "flat.vert"
+};
+constexpr unsigned char colormap_shader[] = {
+#embed "MATLAB_jet.frag"
+};
+static_assert(sizeof(local_shader) > 0);
+static_assert(sizeof(colormap_shader) > 0);
+'''
+
+embed_args = [
+  '--embed-dir=' + meson.current_source_dir() / 'resources' / 'glsl',
+  '--embed-dir=' + colormap_shader_dir,
+]
+
+if not cc.compiles(embed_probe, args: embed_args, name: 'C++26 #embed shader resources')
+  error('visualization requires C++26 #embed support; disable it with -Dvisualization=false')
+endif
 
 # ── ImGui ─────────────────────────────────────────────────────────────────
 # The WrapDB subproject compiles backend implementations (vulkan, glfw, …)
@@ -33,8 +54,6 @@ if get_option('imgui')
   endif
 endif
 
-colormap_shaders_dep = dependency('colormap_shaders')
-
 # Public deps: propagated to consumers via declare_dependency().
 visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
 # Private deps: used only for building the library (not propagated).
@@ -50,6 +69,8 @@ visualization_sources = [
   'src/vulkan/mesh_scene.cpp',
   'src/vulkan/vulkan_mesh_drawable.cpp',
   'src/shaders/abstract_shader.cpp',
+  'src/shaders/embedded_sources.cpp',
+  'src/shaders/embedded_colormaps.cpp',
   'src/vulkan/native_film.cpp',
   'src/vulkan/window.cpp',
   'src/scene_graph/Object.cpp',
@@ -92,8 +113,6 @@ if get_option('qt')
   visualization_sources += visualization_qt_sources
   visualization_sources += visualization_qt_mocced
 endif
-visualization_sources += glsl_resource_sources
-
 if get_option('glfw')
   glfw_dep = dependency('glfw3')
   visualization_public_deps += glfw_dep
@@ -118,7 +137,8 @@ include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,
   dependencies: visualization_public_deps + visualization_private_deps,
-  include_directories: include_dir + imgui_backend_inc)
+  include_directories: include_dir + imgui_backend_inc,
+  cpp_args: embed_args)
 
 # For consumers: propagate public deps (including imgui shared library).
 visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir)

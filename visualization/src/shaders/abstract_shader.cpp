@@ -1,16 +1,8 @@
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "shaderc/status.h"
-#include <QtCore/QTextStream>
 #include <spdlog/spdlog.h>
-#include <QtCore/QFile>
-#include <iostream>
 #include <shaderc/shaderc.hpp>
-#include <vulkan/vulkan.hpp>
 
-void balsa_visualization_shaders_initialize_resources() {
-    Q_INIT_RESOURCE(glsl);
-    Q_INIT_RESOURCE(shaders);
-}
 namespace balsa::visualization::shaders {
 
 namespace {
@@ -64,10 +56,7 @@ namespace {
 }// namespace
 
 
-AbstractShader::AbstractShader() {
-    balsa_visualization_shaders_initialize_resources();
-}
-std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, ShaderType type) const {
+auto AbstractShader::compile_glsl(std::string_view glsl, ShaderType type) const -> std::vector<uint32_t> {
 
     const std::string &stage_name = get_shader_type_name(type);
     shaderc_shader_kind kind;
@@ -100,23 +89,6 @@ std::vector<uint32_t> AbstractShader::compile_glsl(const std::string &glsl, Shad
 
     return ret;
 }
-std::string AbstractShader::read_path_to_string(const std::string &path) {
-    QFile file(path.c_str());
-    if (!file.open(QFile::ReadOnly | QIODevice::Text)) {
-        spdlog::error("Was unable to read {}", path);
-        return {};
-    }
-
-    QTextStream _ts(&file);
-    QString data = _ts.readAll();
-    return data.toStdString();
-}
-
-std::vector<uint32_t> AbstractShader::compile_glsl_from_path(const std::string &path, ShaderType type) const {
-
-    return compile_glsl(read_path_to_string(path), type);
-}
-
 // namespace {
 //     vk::ShaderModule make_shader_module(const vk::Device &device, const std::vector<uint32_t> &spirv) {
 //         VkShaderModuleCreateInfo createInfo{

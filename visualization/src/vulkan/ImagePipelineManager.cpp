@@ -1,4 +1,5 @@
 #include "balsa/visualization/vulkan/ImagePipelineManager.hpp"
+#include "balsa/visualization/shaders/embedded_sources.hpp"
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 
@@ -226,12 +227,13 @@ auto ImagePipelineManager::get_or_create() -> vk::Pipeline {
 auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
     spdlog::info("ImagePipelineManager: creating pipeline");
 
-    // Compile shaders from Qt resources.
     shaders::AbstractShader shader_compiler;
-    auto vert_spv = shader_compiler.compile_glsl_from_path(
-        ":/glsl/image.vert", shaders::AbstractShader::ShaderType::Vertex);
-    auto frag_spv = shader_compiler.compile_glsl_from_path(
-        ":/glsl/image.frag", shaders::AbstractShader::ShaderType::Fragment);
+    auto vert_spv = shader_compiler.compile_glsl(
+        shaders::embedded_shader_source(shaders::EmbeddedShader::ImageVertex),
+        shaders::AbstractShader::ShaderType::Vertex);
+    auto frag_spv = shader_compiler.compile_glsl(
+        shaders::embedded_shader_source(shaders::EmbeddedShader::ImageFragment),
+        shaders::AbstractShader::ShaderType::Fragment);
 
     if (vert_spv.empty() || frag_spv.empty()) {
         spdlog::error(
