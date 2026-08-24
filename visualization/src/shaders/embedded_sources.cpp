@@ -1,5 +1,7 @@
 #include "balsa/visualization/shaders/embedded_sources.hpp"
 
+#include <array>
+
 namespace balsa::visualization::shaders {
 namespace {
 
@@ -33,20 +35,31 @@ auto as_string_view(const unsigned char (&data)[N]) -> std::string_view {
     return {reinterpret_cast<const char *>(data), N};
 }
 
+struct NamedSource {
+    std::string_view path;
+    std::string_view source;
+};
+
+const std::array shader_sources{
+    NamedSource{"flat/vertex", as_string_view(flat_vertex)},
+    NamedSource{"flat/fragment", as_string_view(flat_fragment)},
+    NamedSource{"examples/triangle/vertex", as_string_view(triangle_vertex)},
+    NamedSource{"examples/triangle/fragment", as_string_view(triangle_fragment)},
+    NamedSource{"mesh/vertex", as_string_view(mesh_vertex)},
+    NamedSource{"mesh/fragment", as_string_view(mesh_fragment)},
+    NamedSource{"image/vertex", as_string_view(image_vertex)},
+    NamedSource{"image/fragment", as_string_view(image_fragment)},
+};
+
 }// namespace
 
-auto embedded_shader_source(EmbeddedShader shader) -> std::string_view {
-    switch (shader) {
-    case EmbeddedShader::FlatVertex: return as_string_view(flat_vertex);
-    case EmbeddedShader::FlatFragment: return as_string_view(flat_fragment);
-    case EmbeddedShader::TriangleVertex: return as_string_view(triangle_vertex);
-    case EmbeddedShader::TriangleFragment: return as_string_view(triangle_fragment);
-    case EmbeddedShader::MeshVertex: return as_string_view(mesh_vertex);
-    case EmbeddedShader::MeshFragment: return as_string_view(mesh_fragment);
-    case EmbeddedShader::ImageVertex: return as_string_view(image_vertex);
-    case EmbeddedShader::ImageFragment: return as_string_view(image_fragment);
+auto shader_source(std::string_view path) -> std::optional<std::string_view> {
+    for (const auto &entry : shader_sources) {
+        if (entry.path == path) {
+            return entry.source;
+        }
     }
-    return {};
+    return std::nullopt;
 }
 
 }// namespace balsa::visualization::shaders

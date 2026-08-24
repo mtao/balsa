@@ -10,23 +10,23 @@
 namespace shaders = balsa::visualization::shaders;
 
 TEST_CASE("embedded_shader_sources_are_available", "[visualization][shaders]") {
-    constexpr std::array embedded_shaders{
-        shaders::EmbeddedShader::FlatVertex,
-        shaders::EmbeddedShader::FlatFragment,
-        shaders::EmbeddedShader::TriangleVertex,
-        shaders::EmbeddedShader::TriangleFragment,
-        shaders::EmbeddedShader::MeshVertex,
-        shaders::EmbeddedShader::MeshFragment,
-        shaders::EmbeddedShader::ImageVertex,
-        shaders::EmbeddedShader::ImageFragment,
+    constexpr std::array paths{
+        "flat/vertex",
+        "flat/fragment",
+        "examples/triangle/vertex",
+        "examples/triangle/fragment",
+        "mesh/vertex",
+        "mesh/fragment",
+        "image/vertex",
+        "image/fragment",
     };
-
-    for (const auto shader : embedded_shaders) {
-        const auto source = shaders::embedded_shader_source(shader);
-        CHECK_FALSE(source.empty());
-        CHECK(source.starts_with("#version"));
-        CHECK(source.contains("void main"));
+    for (const auto path : paths) {
+        const auto source = shaders::shader_source(path);
+        REQUIRE(source.has_value());
+        CHECK(source->starts_with("#version"));
+        CHECK(source->contains("void main"));
     }
+    CHECK_FALSE(shaders::shader_source("missing").has_value());
 }
 
 TEST_CASE("embedded_colormap_registry_is_consistent", "[visualization][shaders]") {
@@ -52,15 +52,21 @@ TEST_CASE("embedded_colormap_registry_is_consistent", "[visualization][shaders]"
 
 TEST_CASE("embedded_shaders_compile", "[visualization][shaders]") {
     shaders::AbstractShader compiler;
+    const auto image_vertex = shaders::shader_source("image/vertex");
+    const auto image_fragment = shaders::shader_source("image/fragment");
+    const auto mesh_fragment = shaders::shader_source("mesh/fragment");
+    REQUIRE(image_vertex.has_value());
+    REQUIRE(image_fragment.has_value());
+    REQUIRE(mesh_fragment.has_value());
 
     CHECK_FALSE(compiler.compile_glsl(
-      shaders::embedded_shader_source(shaders::EmbeddedShader::ImageVertex),
+      *image_vertex,
       shaders::AbstractShader::ShaderType::Vertex).empty());
     CHECK_FALSE(compiler.compile_glsl(
-      shaders::embedded_shader_source(shaders::EmbeddedShader::ImageFragment),
+      *image_fragment,
       shaders::AbstractShader::ShaderType::Fragment).empty());
 
-    std::string fragment{shaders::embedded_shader_source(shaders::EmbeddedShader::MeshFragment)};
+    std::string fragment{*mesh_fragment};
     const auto version_end = fragment.find('\n');
     REQUIRE(version_end != std::string::npos);
     fragment.insert(version_end + 1, *shaders::colormap_shader_source("MATLAB_jet"));

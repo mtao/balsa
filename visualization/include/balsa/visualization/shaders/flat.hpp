@@ -21,12 +21,12 @@ class FlatShader : public Shader<ET> {
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> FlatShader<ET>::vert_spirv() const {
     return AbstractShader::compile_glsl(
-      embedded_shader_source(EmbeddedShader::FlatVertex), AbstractShader::ShaderType::Vertex);
+      shader_source("flat/vertex").value_or(std::string_view{}), AbstractShader::ShaderType::Vertex);
 }
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> FlatShader<ET>::frag_spirv() const {
     return AbstractShader::compile_glsl(
-      embedded_shader_source(EmbeddedShader::FlatFragment), AbstractShader::ShaderType::Fragment);
+      shader_source("flat/fragment").value_or(std::string_view{}), AbstractShader::ShaderType::Fragment);
 }
 }// namespace balsa::visualization::shaders
 #endif

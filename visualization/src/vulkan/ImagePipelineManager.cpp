@@ -229,10 +229,10 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
 
     shaders::AbstractShader shader_compiler;
     auto vert_spv = shader_compiler.compile_glsl(
-        shaders::embedded_shader_source(shaders::EmbeddedShader::ImageVertex),
+        shaders::shader_source("image/vertex").value_or(std::string_view{}),
         shaders::AbstractShader::ShaderType::Vertex);
     auto frag_spv = shader_compiler.compile_glsl(
-        shaders::embedded_shader_source(shaders::EmbeddedShader::ImageFragment),
+        shaders::shader_source("image/fragment").value_or(std::string_view{}),
         shaders::AbstractShader::ShaderType::Fragment);
 
     if (vert_spv.empty() || frag_spv.empty()) {

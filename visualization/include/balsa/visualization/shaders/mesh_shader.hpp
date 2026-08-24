@@ -94,12 +94,12 @@ void MeshShader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> MeshShader<ET>::vert_spirv() const {
     return AbstractShader::compile_glsl(
-      embedded_shader_source(EmbeddedShader::MeshVertex), AbstractShader::ShaderType::Vertex);
+      shader_source("mesh/vertex").value_or(std::string_view{}), AbstractShader::ShaderType::Vertex);
 }
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> MeshShader<ET>::frag_spirv() const {
-    std::string frag_source{embedded_shader_source(EmbeddedShader::MeshFragment)};
+    std::string frag_source{shader_source("mesh/fragment").value_or(std::string_view{})};
 
     if (_state->color_source == vulkan::ColorSource::ScalarField) {
         // The colormap shaders have NO #version directive — they are pure
