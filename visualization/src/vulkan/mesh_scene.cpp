@@ -12,8 +12,8 @@ namespace balsa::visualization::vulkan {
 
 // ── Constructor / Destructor ─────────────────────────────────────────
 
-MeshScene::MeshScene()
-  : _scene_root("Root") {
+MeshScene::MeshScene(const shaders::ShaderLibrary &library)
+  : _scene_root("Root"), _pipeline_manager(library) {
     // Create a camera Object as a child of the root.
     auto &cam_obj = _scene_root.add_child("Camera");
     cam_obj.permanent = true;// internal fixture — hidden from UI, cannot be deleted

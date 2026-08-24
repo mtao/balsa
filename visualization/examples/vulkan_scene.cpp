@@ -21,14 +21,16 @@ class TriangleShader : public Shader<ET> {
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::vert_spirv() const {
+    const auto source = builtin_shader_library().find("examples/triangle/vertex");
     return AbstractShader::compile_glsl(
-      shader_source("examples/triangle/vertex").value_or(std::string_view{}),
+      source ? std::string_view{*source} : std::string_view{},
       AbstractShader::ShaderType::Vertex);
 }
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> TriangleShader<ET>::frag_spirv() const {
+    const auto source = builtin_shader_library().find("examples/triangle/fragment");
     return AbstractShader::compile_glsl(
-      shader_source("examples/triangle/fragment").value_or(std::string_view{}),
+      source ? std::string_view{*source} : std::string_view{},
       AbstractShader::ShaderType::Fragment);
 }
 }// namespace balsa::visualization::shaders

@@ -43,7 +43,8 @@ class VulkanImageDrawable;
 
 class ImageScene : public SceneBase {
   public:
-    ImageScene();
+    explicit ImageScene(
+      const shaders::ShaderLibrary &library = shaders::builtin_shader_library());
     ~ImageScene() override;
 
     // Non-copyable, non-movable

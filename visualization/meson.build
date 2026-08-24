@@ -69,6 +69,7 @@ visualization_sources = [
   'src/vulkan/mesh_scene.cpp',
   'src/vulkan/vulkan_mesh_drawable.cpp',
   'src/shaders/abstract_shader.cpp',
+  'src/shaders/shader_library.cpp',
   'src/shaders/embedded_sources.cpp',
   'src/shaders/embedded_colormaps.cpp',
   'src/vulkan/native_film.cpp',

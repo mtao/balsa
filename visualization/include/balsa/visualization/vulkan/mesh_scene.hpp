@@ -41,7 +41,8 @@ class VulkanMeshDrawable;
 
 class MeshScene : public SceneBase {
   public:
-    MeshScene();
+    explicit MeshScene(
+      const shaders::ShaderLibrary &library = shaders::builtin_shader_library());
     ~MeshScene() override;
 
     // Non-copyable, non-movable (holds Vulkan resources + raw Film pointer)

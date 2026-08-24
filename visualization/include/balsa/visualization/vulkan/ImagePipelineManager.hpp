@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "balsa/scene_graph/types.hpp"
+#include "balsa/visualization/shaders/shader_library.hpp"
 
 namespace balsa::visualization::vulkan {
 
@@ -44,7 +45,9 @@ static_assert(sizeof(ImageParamsUBO) == 32, "ImageParamsUBO must be 32 bytes");
 
 class ImagePipelineManager {
   public:
-    ImagePipelineManager() = default;
+    explicit ImagePipelineManager(
+      const shaders::ShaderLibrary &library = shaders::builtin_shader_library())
+      : _shader_library(library) {}
     ~ImagePipelineManager();
 
     // Resource address is stable because drawables retain a reference to it.
@@ -56,6 +59,7 @@ class ImagePipelineManager {
     // Initialise with a Film reference.  Must be called before any
     // other method.
     auto init(Film &film, uint32_t max_descriptor_sets = 16) -> void;
+    auto shader_library() const -> const shaders::ShaderLibrary & { return _shader_library; }
 
     // ── Pipeline access ─────────────────────────────────────────────
 
@@ -105,6 +109,8 @@ class ImagePipelineManager {
 
     vk::Device _device;
     Film *_film = nullptr;
+    shaders::ShaderLibrary _shader_library;
+    std::uint64_t _shader_revision = 0;
 
     vk::DescriptorSetLayout _descriptor_set_layout;
     vk::PipelineLayout _pipeline_layout;

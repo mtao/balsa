@@ -22,6 +22,7 @@ auto ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) -> voi
     create_descriptor_pool(max_descriptor_sets);
 
     _initialized = true;
+    _shader_revision = _shader_library.revision();
     spdlog::info("ImagePipelineManager: initialized");
 }
 
@@ -197,6 +198,11 @@ auto ImagePipelineManager::get_or_create() -> vk::Pipeline {
     }
     auto &film = *_film;
 
+    if (_shader_revision != _shader_library.revision()) {
+        invalidate_pipeline();
+        _shader_revision = _shader_library.revision();
+    }
+
     // Check if the cached pipeline is still valid for this render pass.
     const vk::RenderPass rp = film.default_render_pass();
     uint32_t msaa = static_cast<uint32_t>(film.sample_count());
@@ -228,11 +234,13 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
     spdlog::info("ImagePipelineManager: creating pipeline");
 
     shaders::AbstractShader shader_compiler;
+    const auto vertex_source = _shader_library.find("image/vertex");
+    const auto fragment_source = _shader_library.find("image/fragment");
     auto vert_spv = shader_compiler.compile_glsl(
-        shaders::shader_source("image/vertex").value_or(std::string_view{}),
+        vertex_source ? std::string_view{*vertex_source} : std::string_view{},
         shaders::AbstractShader::ShaderType::Vertex);
     auto frag_spv = shader_compiler.compile_glsl(
-        shaders::shader_source("image/fragment").value_or(std::string_view{}),
+        fragment_source ? std::string_view{*fragment_source} : std::string_view{},
         shaders::AbstractShader::ShaderType::Fragment);
 
     if (vert_spv.empty() || frag_spv.empty()) {

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
+#include "balsa/visualization/shaders/shader_library.hpp"
 
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
@@ -92,7 +93,9 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
 
 class MeshPipelineManager {
   public:
-    MeshPipelineManager() = default;
+    explicit MeshPipelineManager(
+      const shaders::ShaderLibrary &library = shaders::builtin_shader_library())
+      : _shader_library(library) {}
     ~MeshPipelineManager();
 
     // Non-copyable, movable
@@ -105,6 +108,7 @@ class MeshPipelineManager {
     // other method.  Safe to call again after release() to re-init
     // for a new device/render-pass.
     void init(Film &film, uint32_t max_descriptor_sets = 32);
+    auto shader_library() const -> const shaders::ShaderLibrary & { return _shader_library; }
 
     // ── Pipeline access ─────────────────────────────────────────────
 
@@ -159,6 +163,8 @@ class MeshPipelineManager {
 
     vk::Device _device;
     Film *_film = nullptr;
+    shaders::ShaderLibrary _shader_library;
+    std::uint64_t _shader_revision = 0;
 
     vk::DescriptorSetLayout _descriptor_set_layout;
     vk::PipelineLayout _pipeline_layout;

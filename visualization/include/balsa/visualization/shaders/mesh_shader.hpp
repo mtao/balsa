@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.hpp>
 #include "balsa/scene_graph/embedding_traits.hpp"
 #include "balsa/visualization/shaders/embedded_sources.hpp"
+#include "balsa/visualization/shaders/shader_library.hpp"
 #include "balsa/visualization/shaders/shader.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
@@ -25,8 +26,10 @@ class MeshShader : public Shader<ET> {
   public:
     MeshShader(const vulkan::MeshRenderState &state,
                vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList,
-               bool wireframe_overlay = false)
-      : _state(&state), _topology(topology), _wireframe_overlay(wireframe_overlay) {}
+               bool wireframe_overlay = false,
+               const ShaderLibrary &library = builtin_shader_library())
+      : _state(&state), _topology(topology), _wireframe_overlay(wireframe_overlay),
+        _library(library) {}
 
     void add_compile_options(shaderc::CompileOptions &opts) const override;
     std::vector<uint32_t> vert_spirv() const override;
@@ -36,6 +39,7 @@ class MeshShader : public Shader<ET> {
     const vulkan::MeshRenderState *_state;
     vk::PrimitiveTopology _topology;
     bool _wireframe_overlay;
+    ShaderLibrary _library;
 };
 
 // ── Implementation ───────────────────────────────────────────────────
@@ -93,13 +97,16 @@ void MeshShader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> MeshShader<ET>::vert_spirv() const {
+    const auto source = _library.find("mesh/vertex");
     return AbstractShader::compile_glsl(
-      shader_source("mesh/vertex").value_or(std::string_view{}), AbstractShader::ShaderType::Vertex);
+      source ? std::string_view{*source} : std::string_view{},
+      AbstractShader::ShaderType::Vertex);
 }
 
 template<scene_graph::concepts::embedding_traits ET>
 std::vector<uint32_t> MeshShader<ET>::frag_spirv() const {
-    std::string frag_source{shader_source("mesh/fragment").value_or(std::string_view{})};
+    const auto source = _library.find("mesh/fragment");
+    std::string frag_source{source ? std::string_view{*source} : std::string_view{}};
 
     if (_state->color_source == vulkan::ColorSource::ScalarField) {
         // The colormap shaders have NO #version directive — they are pure

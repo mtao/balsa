@@ -1,7 +1,5 @@
 #include "balsa/visualization/shaders/embedded_sources.hpp"
 
-#include <array>
-
 namespace balsa::visualization::shaders {
 namespace {
 
@@ -35,31 +33,26 @@ auto as_string_view(const unsigned char (&data)[N]) -> std::string_view {
     return {reinterpret_cast<const char *>(data), N};
 }
 
-struct NamedSource {
-    std::string_view path;
-    std::string_view source;
-};
-
-const std::array shader_sources{
-    NamedSource{"flat/vertex", as_string_view(flat_vertex)},
-    NamedSource{"flat/fragment", as_string_view(flat_fragment)},
-    NamedSource{"examples/triangle/vertex", as_string_view(triangle_vertex)},
-    NamedSource{"examples/triangle/fragment", as_string_view(triangle_fragment)},
-    NamedSource{"mesh/vertex", as_string_view(mesh_vertex)},
-    NamedSource{"mesh/fragment", as_string_view(mesh_fragment)},
-    NamedSource{"image/vertex", as_string_view(image_vertex)},
-    NamedSource{"image/fragment", as_string_view(image_fragment)},
-};
-
 }// namespace
 
-auto shader_source(std::string_view path) -> std::optional<std::string_view> {
-    for (const auto &entry : shader_sources) {
-        if (entry.path == path) {
-            return entry.source;
-        }
-    }
-    return std::nullopt;
+auto builtin_shader_library() -> const ShaderLibrary & {
+    static ShaderLibrary library;
+    static const bool initialized = [&] {
+        (void)library.add_shader("flat/vertex", std::string{as_string_view(flat_vertex)});
+        (void)library.add_shader("flat/fragment", std::string{as_string_view(flat_fragment)});
+        (void)library.add_shader(
+          "examples/triangle/vertex", std::string{as_string_view(triangle_vertex)});
+        (void)library.add_shader(
+          "examples/triangle/fragment", std::string{as_string_view(triangle_fragment)});
+        (void)library.add_shader("mesh/vertex", std::string{as_string_view(mesh_vertex)});
+        (void)library.add_shader("mesh/fragment", std::string{as_string_view(mesh_fragment)});
+        (void)library.add_shader("image/vertex", std::string{as_string_view(image_vertex)});
+        (void)library.add_shader("image/fragment", std::string{as_string_view(image_fragment)});
+        library.make_read_only();
+        return true;
+    }();
+    (void)initialized;
+    return library;
 }
 
 }// namespace balsa::visualization::shaders

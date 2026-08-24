@@ -93,7 +93,8 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
 MeshPipelineManager::~MeshPipelineManager() { release(); }
 
 MeshPipelineManager::MeshPipelineManager(MeshPipelineManager &&o) noexcept
-  : _device(o._device), _film(o._film),
+  : _device(o._device), _film(o._film), _shader_library(o._shader_library),
+    _shader_revision(o._shader_revision),
     _descriptor_set_layout(o._descriptor_set_layout),
     _pipeline_layout(o._pipeline_layout), _descriptor_pool(o._descriptor_pool),
     _cache(std::move(o._cache)), _initialized(o._initialized) {
@@ -111,6 +112,8 @@ MeshPipelineManager &
         release();
         _device = o._device;
         _film = o._film;
+        _shader_library = o._shader_library;
+        _shader_revision = o._shader_revision;
         _descriptor_set_layout = o._descriptor_set_layout;
         _pipeline_layout = o._pipeline_layout;
         _descriptor_pool = o._descriptor_pool;
@@ -136,6 +139,7 @@ void MeshPipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
     create_descriptor_pool(max_descriptor_sets);
 
     _initialized = true;
+    _shader_revision = _shader_library.revision();
     spdlog::info("MeshPipelineManager: initialized");
 }
 
@@ -298,6 +302,10 @@ vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
     if (!_initialized) {
         throw std::runtime_error("MeshPipelineManager: not initialized");
     }
+    if (_shader_revision != _shader_library.revision()) {
+        invalidate_pipelines();
+        _shader_revision = _shader_library.revision();
+    }
     auto key =
         make_pipeline_key(state, topology, buffers, film, wireframe_overlay);
     auto it = _cache.find(key);
@@ -327,7 +335,7 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
 
     using ET3F = scene_graph::embedding_traits3F;
     shaders::MeshShader<ET3F> shader(
-        temp_state, key.topology, key.wireframe_overlay);
+        temp_state, key.topology, key.wireframe_overlay, _shader_library);
     auto vert_spv = shader.vert_spirv();
     auto frag_spv = shader.frag_spirv();
 
