@@ -6,10 +6,10 @@ option('openvdb', type : 'boolean', value : false, description : 'Build openvdb 
 option('json', type : 'boolean', value : true, description : 'Use json')
 option('protobuf', type : 'boolean', value : false, description : 'Use protobuf')
 option('partio', type : 'boolean', value : false, description : 'Use partio')
-option('imgui', type : 'boolean', value : true, description : 'Use imgui')
+option('imgui', type : 'boolean', value : true, description : 'Build the ImGui UI frontend (currently requires GLFW)')
 option('alembic', type : 'boolean', value : false, description : 'Use alembic')
 option('perfetto', type : 'boolean', value : false, description : 'Use perfetto')
 
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
-option('glfw', type : 'boolean', value : true, description : 'Use glfw')
-option('qt', type : 'boolean', value : true, description : 'Use qt')
+option('glfw', type : 'boolean', value : true, description : 'Build the GLFW window backend')
+option('qt', type : 'boolean', value : true, description : 'Build the Qt window and widget frontend')
