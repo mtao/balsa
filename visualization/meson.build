@@ -14,7 +14,7 @@ endif
 # package cannot satisfy it. Always use the pinned source subproject.
 colormap_proj = subproject('colormap_shaders')
 colormap_shaders_dep = colormap_proj.get_variable('colormap_shaders_dep')
-colormap_shader_dir = colormap_shaders_dep.get_variable(internal: 'shader_dir')
+colormap_shader_dir = meson.current_source_dir() / '..' / 'subprojects' / 'colormap_shaders' / 'shaders' / 'glsl'
 
 embed_probe = '''
 constexpr unsigned char local_shader[] = {
