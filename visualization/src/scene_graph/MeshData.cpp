@@ -106,14 +106,14 @@ auto MeshData::owns(const MeshAttributeHandle &attr) const -> bool {
 
 // ── Topology ────────────────────────────────────────────────────────
 
-auto MeshData::set_triangle_indices(std::span<const uint32_t> indices) -> void {
-    _tri_indices.assign(indices.begin(), indices.end());
+auto MeshData::assign_triangles(std::vector<uint32_t> flat) -> void {
+    _tri_indices = std::move(flat);
     if (!_explicit_edges) derive_edges();
     ++_version;
 }
 
-auto MeshData::set_edge_indices(std::span<const uint32_t> indices) -> void {
-    _edge_indices.assign(indices.begin(), indices.end());
+auto MeshData::assign_edges(std::vector<uint32_t> flat) -> void {
+    _edge_indices = std::move(flat);
     _explicit_edges = true;
     ++_version;
 }

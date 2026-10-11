@@ -13,6 +13,9 @@
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "types.hpp"
 
+#include <zipper/storage/layout_types.hpp>
+#include <zipper/types.hpp>
+
 namespace balsa::scene_graph {
 
 // ── AttributeDomain ─────────────────────────────────────────────────
@@ -144,9 +147,23 @@ class MeshData : public AbstractFeature {
 
     // ── Topology ────────────────────────────────────────────────────
 
-    auto set_triangle_indices(std::span<const uint32_t> indices) -> void;
+    // Element vertex indices as any rank-2 integral mdspan, in either
+    // orientation: N x 3 (one row per triangle) or 3 x N (one column per
+    // triangle).  Orientation is taken from whichever extent is 3 (rows
+    // win if both are).  Any layout is accepted; element-ordered memory
+    // (N x 3 row-major or 3 x N column-major) is copied directly.
+    // Returns false (and changes nothing) if neither extent is 3.
+    template <typename T, typename Extents, typename Layout, typename Accessor>
+        requires(Extents::rank() == 2)
+    auto set_triangle_indices(
+        ::zipper::mdspan<T, Extents, Layout, Accessor> indices) -> bool;
     // Explicit edges override edges derived from triangles.
-    auto set_edge_indices(std::span<const uint32_t> indices) -> void;
+    // Same conventions as set_triangle_indices with 2 indices per edge.
+    template <typename T, typename Extents, typename Layout, typename Accessor>
+        requires(Extents::rank() == 2)
+    auto
+        set_edge_indices(::zipper::mdspan<T, Extents, Layout, Accessor> indices)
+            -> bool;
 
     auto triangle_indices() const -> std::span<const uint32_t> {
         return _tri_indices;
@@ -218,6 +235,8 @@ class MeshData : public AbstractFeature {
     // Re-validate bindings that reference attr after it changed in place.
     auto refresh_bindings(const MeshAttributeHandle &attr) -> void;
     auto derive_edges() -> void;
+    auto assign_triangles(std::vector<uint32_t> flat) -> void;
+    auto assign_edges(std::vector<uint32_t> flat) -> void;
 
     static auto bind_vector(const MeshAttributeHandle &attr,
                             uint8_t min_components) -> RoleBinding;
@@ -240,5 +259,7 @@ class MeshData : public AbstractFeature {
 };
 
 } // namespace balsa::scene_graph
+
+#include "MeshData.hxx"
 
 #endif

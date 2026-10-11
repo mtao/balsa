@@ -11,10 +11,12 @@
 #include <balsa/visualization/image_io.hpp>
 
 
+#include <zipper/storage/layout_types.hpp>
 #include <zipper/transform/common.hpp>
 #include <zipper/transform/model.hpp>
 #include <zipper/transform/quaternion_transform.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <limits>
@@ -26,6 +28,15 @@
 // ── Helpers: fill MeshData with plain buffers ───────────────────────
 
 // Two-triangle quad (vertices 0-3), optionally with normals.
+// Test-local mdspan shorthands (MeshData accepts any rank-2 mdspan).
+using DynIdx = ::zipper::mdspan<const uint32_t, ::zipper::dextents<2>>;
+static auto TriangleIndices(const uint32_t *p, std::size_t n) -> DynIdx {
+    return DynIdx(p, n, 3);
+}
+static auto EdgeIndices(const uint32_t *p, std::size_t n) -> DynIdx {
+    return DynIdx(p, n, 2);
+}
+
 static auto fill_quad(balsa::scene_graph::MeshData &md,
                       bool with_normals = false) -> void {
     using balsa::scene_graph::AttributeDomain;
@@ -38,7 +49,7 @@ static auto fill_quad(balsa::scene_graph::MeshData &md,
         md.add_attribute("vertex_normals", AttributeDomain::Vertex, 3, nrm);
     }
     const std::array<uint32_t, 6> tris = {0, 1, 2, 0, 2, 3};
-    md.set_triangle_indices(tris);
+    md.set_triangle_indices(TriangleIndices(tris.data(), tris.size() / 3));
 }
 
 static auto fill_single_tri(balsa::scene_graph::MeshData &md) -> void {
@@ -46,7 +57,7 @@ static auto fill_single_tri(balsa::scene_graph::MeshData &md) -> void {
     const std::array<double, 9> pos = {0, 0, 0, 1, 0, 0, 0, 1, 0};
     md.add_attribute("vertex_positions", AttributeDomain::Vertex, 3, pos);
     const std::array<uint32_t, 3> tris = {0, 1, 2};
-    md.set_triangle_indices(tris);
+    md.set_triangle_indices(TriangleIndices(tris.data(), tris.size() / 3));
 }
 
 TEST_CASE("Object creation and hierarchy", "[scene_graph]") {
@@ -176,7 +187,7 @@ TEST_CASE("MeshData edge-only mesh has no triangles", "[scene_graph]") {
     const std::array<float, 9> pos = {0, 0, 0, 1, 0, 0, 2, 0, 0};
     md.add_attribute("vertex_positions", AttributeDomain::Vertex, 3, pos);
     const std::array<uint32_t, 4> edges = {0, 1, 1, 2};
-    md.set_edge_indices(edges);
+    md.set_edge_indices(EdgeIndices(edges.data(), edges.size() / 2));
 
     // Edge mesh: has edges but no triangles.
     CHECK_FALSE(md.has_triangle_indices());
@@ -254,12 +265,12 @@ TEST_CASE("MeshData explicit edges override derived", "[scene_graph]") {
     CHECK(md.edge_count() == 5);
 
     const std::array<uint32_t, 4> edges = {0, 1, 2, 3};
-    md.set_edge_indices(edges);
+    md.set_edge_indices(EdgeIndices(edges.data(), edges.size() / 2));
     CHECK(md.edge_count() == 2);
 
     // Re-setting triangles keeps the explicit edges.
     const std::array<uint32_t, 3> tri = {0, 1, 2};
-    md.set_triangle_indices(tri);
+    md.set_triangle_indices(TriangleIndices(tri.data(), tri.size() / 3));
     CHECK(md.edge_count() == 2);
 }
 
@@ -354,6 +365,77 @@ TEST_CASE("to_mesh_data converts OBJ into MeshData", "[scene_graph]") {
     CHECK(md.triangle_count() == 2);
     CHECK(md.edge_count() == 5);
     CHECK_FALSE(md.has_normals());
+}
+
+TEST_CASE("MeshData accepts indices in any orientation and layout",
+          "[scene_graph]") {
+    using namespace balsa::scene_graph;
+    namespace zs = ::zipper::storage;
+    using ::zipper::dynamic_extent;
+    using ::zipper::extents;
+    using ::zipper::mdspan;
+
+    // Two triangles (0,1,2), (0,2,3).
+    const std::array<uint32_t, 6> expected = {0, 1, 2, 0, 2, 3};
+
+    auto check = [&](MeshData &md) {
+        CHECK(std::ranges::equal(md.triangle_indices(), expected));
+        CHECK(md.edge_count() == 5);
+    };
+
+    SECTION("N x 3 row-major") {
+        MeshData md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const uint32_t, extents<dynamic_extent, 3>, zs::layout_right>(
+                expected.data(), 2)));
+        check(md);
+    }
+    SECTION("3 x N column-major (same buffer)") {
+        MeshData md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const uint32_t, extents<3, dynamic_extent>, zs::layout_left>(
+                expected.data(), 2)));
+        check(md);
+    }
+    SECTION("3 x N row-major (vertex-major buffer, transposed)") {
+        const std::array<uint32_t, 6> buf = {0, 0, 1, 2, 2, 3};
+        MeshData md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const uint32_t, extents<3, dynamic_extent>, zs::layout_right>(
+                buf.data(), 2)));
+        check(md);
+    }
+    SECTION("fully dynamic extents, int64 values") {
+        const std::array<int64_t, 6> buf = {0, 1, 2, 0, 2, 3};
+        MeshData md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const int64_t, ::zipper::dextents<2>>(buf.data(), 2, 3)));
+        check(md);
+    }
+    SECTION("strided column slice of a wider table") {
+        // Rows: tri id, v0, v1, v2 -> take columns 1..3 via layout_stride.
+        const std::array<uint32_t, 8> table = {7, 0, 1, 2, 8, 0, 2, 3};
+        using E = extents<dynamic_extent, 3>;
+        zs::layout_stride::mapping<E> map(E(2), std::array<std::size_t, 2>{4, 1});
+        MeshData md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const uint32_t, E, zs::layout_stride>(table.data() + 1, map)));
+        check(md);
+    }
+    SECTION("wrong shape is rejected") {
+        MeshData md;
+        CHECK_FALSE(md.set_triangle_indices(
+            mdspan<const uint32_t, ::zipper::dextents<2>>(expected.data(), 2, 2)));
+        CHECK_FALSE(md.has_triangle_indices());
+    }
+    SECTION("edges, 2 x N column-major") {
+        const std::array<uint32_t, 4> e = {0, 1, 2, 3};
+        MeshData md;
+        REQUIRE(md.set_edge_indices(
+            mdspan<const uint32_t, extents<2, dynamic_extent>, zs::layout_left>(
+                e.data(), 2)));
+        CHECK(std::ranges::equal(md.edge_indices(), e));
+    }
 }
 
 TEST_CASE("MeshData as Object feature", "[scene_graph]") {
