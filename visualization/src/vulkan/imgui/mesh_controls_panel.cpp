@@ -730,8 +730,8 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     for (int i = 0; i < static_cast<int>(discovered.size());
                          ++i) {
                         if (binding.is_bound()
-                            && binding.source == discovered[i].name) {
-                            current_label = discovered[i].name.c_str();
+                            && binding.attribute() == discovered[i]) {
+                            current_label = discovered[i]->name.c_str();
                             current_idx = i;
                             break;
                         }
@@ -753,13 +753,13 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                                 item_label,
                                 sizeof(item_label),
                                 "%s (dim%d, %u comp, %zu elts)",
-                                discovered[i].name.c_str(),
-                                static_cast<int>(discovered[i].domain),
+                                discovered[i]->name.c_str(),
+                                static_cast<int>(discovered[i]->domain),
                                 static_cast<unsigned>(
-                                    discovered[i].component_count),
-                                discovered[i].count());
+                                    discovered[i]->component_count),
+                                discovered[i]->count());
                             if (ImGui::Selectable(item_label, selected)) {
-                                assign_fn(discovered[i].name);
+                                assign_fn(discovered[i]);
                                 role_changed = true;
                             }
                             if (selected) ImGui::SetItemDefaultFocus();
@@ -776,9 +776,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     mesh_data->position_binding(),
                     [&](auto h) { mesh_data->assign_position(h); },
                     [&]() { mesh_data->clear_position(); },
-                    [](const scene_graph::MeshAttribute &da) {
-                        return da.domain == scene_graph::AttributeDomain::Vertex
-                               && da.component_count >= 1;
+                    [](const scene_graph::MeshAttributeHandle &da) {
+                        return da->domain == scene_graph::AttributeDomain::Vertex
+                               && da->component_count >= 1;
                     });
 
                 // Normal role: any floating-point attribute with 2+ components.
@@ -787,9 +787,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     mesh_data->normal_binding(),
                     [&](auto h) { mesh_data->assign_normal(h); },
                     [&]() { mesh_data->clear_normal(); },
-                    [](const scene_graph::MeshAttribute &da) {
-                        return da.domain == scene_graph::AttributeDomain::Vertex
-                               && da.component_count >= 2;
+                    [](const scene_graph::MeshAttributeHandle &da) {
+                        return da->domain == scene_graph::AttributeDomain::Vertex
+                               && da->component_count >= 2;
                     });
 
                 // Scalar role: any vertex attribute.
@@ -801,9 +801,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                                                  mesh_data->scalar_component());
                     },
                     [&]() { mesh_data->clear_scalar(); },
-                    [](const scene_graph::MeshAttribute &da) {
-                        return da.domain == scene_graph::AttributeDomain::Vertex
-                               && da.component_count >= 1;
+                    [](const scene_graph::MeshAttributeHandle &da) {
+                        return da->domain == scene_graph::AttributeDomain::Vertex
+                               && da->component_count >= 1;
                     });
 
                 // Scalar component selector (only if scalar is bound to a
@@ -811,9 +811,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                 if (mesh_data->has_scalar_field()) {
                     // Find the source attribute's component count.
                     const auto &scl_bind = mesh_data->scalar_binding();
-                    const auto *src = mesh_data->find_attribute(scl_bind.source);
+                    const auto &src = scl_bind.attribute();
                     uint8_t src_components =
-                        src != nullptr ? src->component_count : 0;
+                        src ? src->component_count : 0;
                     if (src_components > 1) {
                         int comp = mesh_data->scalar_component();
                         const char *comp_labels[] = {
@@ -829,7 +829,7 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                                          comp_labels,
                                          max_items)) {
                             int new_comp = combo_idx - 1;
-                            mesh_data->assign_scalar(scl_bind.source, new_comp);
+                            mesh_data->set_scalar_component(new_comp);
                             changed = true;
                         }
                     }
@@ -840,10 +840,10 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     for (const auto &da : discovered) {
                         ImGui::BulletText(
                             "%s: dim=%d, %u comp, %zu elts",
-                            da.name.c_str(),
-                            static_cast<int>(da.domain),
-                            static_cast<unsigned>(da.component_count),
-                            da.count());
+                            da->name.c_str(),
+                            static_cast<int>(da->domain),
+                            static_cast<unsigned>(da->component_count),
+                            da->count());
                     }
                     ImGui::TreePop();
                 }

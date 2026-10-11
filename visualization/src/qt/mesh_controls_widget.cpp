@@ -1036,13 +1036,13 @@ void MeshControlsWidget::sync_attribute_bindings() {
 
             QString label =
                 QStringLiteral("%1 (dim%2, %3 comp, %4 elts)")
-                    .arg(QString::fromStdString(discovered[i].name))
-                    .arg(static_cast<int>(discovered[i].domain))
-                    .arg(static_cast<unsigned>(discovered[i].component_count))
-                    .arg(static_cast<quint64>(discovered[i].count()));
+                    .arg(QString::fromStdString(discovered[i]->name))
+                    .arg(static_cast<int>(discovered[i]->domain))
+                    .arg(static_cast<unsigned>(discovered[i]->component_count))
+                    .arg(static_cast<quint64>(discovered[i]->count()));
             combo->addItem(label, QVariant(i)); // userData = discovered index
 
-            if (binding.is_bound() && binding.source == discovered[i].name) {
+            if (binding.is_bound() && binding.attribute() == discovered[i]) {
                 current_idx = combo->count() - 1;
             }
         }
@@ -1052,27 +1052,27 @@ void MeshControlsWidget::sync_attribute_bindings() {
     // Position: vertex attribute, 1+ components
     int pos_idx = populate_combo(_position_attr_combo,
                                  mesh_data->position_binding(),
-                                 [](const sg::MeshAttribute &da) {
-                                     return da.domain == sg::AttributeDomain::Vertex
-                                            && da.component_count >= 1;
+                                 [](const sg::MeshAttributeHandle &da) {
+                                     return da->domain == sg::AttributeDomain::Vertex
+                                            && da->component_count >= 1;
                                  });
     _position_attr_combo->setCurrentIndex(pos_idx);
 
     // Normal: vertex attribute, 2+ components
     int norm_idx = populate_combo(_normal_attr_combo,
                                   mesh_data->normal_binding(),
-                                  [](const sg::MeshAttribute &da) {
-                                      return da.domain == sg::AttributeDomain::Vertex
-                                             && da.component_count >= 2;
+                                  [](const sg::MeshAttributeHandle &da) {
+                                      return da->domain == sg::AttributeDomain::Vertex
+                                             && da->component_count >= 2;
                                   });
     _normal_attr_combo->setCurrentIndex(norm_idx);
 
     // Scalar: any vertex attribute
     int scl_idx = populate_combo(_scalar_attr_combo,
                                  mesh_data->scalar_binding(),
-                                 [](const sg::MeshAttribute &da) {
-                                     return da.domain == sg::AttributeDomain::Vertex
-                                            && da.component_count >= 1;
+                                 [](const sg::MeshAttributeHandle &da) {
+                                     return da->domain == sg::AttributeDomain::Vertex
+                                            && da->component_count >= 1;
                                  });
     _scalar_attr_combo->setCurrentIndex(scl_idx);
 
@@ -1080,8 +1080,8 @@ void MeshControlsWidget::sync_attribute_bindings() {
     bool show_component = false;
     if (mesh_data->has_scalar_field()) {
         const auto &scl_bind = mesh_data->scalar_binding();
-        const auto *src = mesh_data->find_attribute(scl_bind.source);
-        uint8_t src_components = src != nullptr ? src->component_count : 0;
+        const auto &src = scl_bind.attribute();
+        uint8_t src_components = src ? src->component_count : 0;
         if (src_components > 1) {
             show_component = true;
             _scalar_component_combo->clear();
@@ -1280,7 +1280,7 @@ void MeshControlsWidget::on_position_attr_changed(int index) {
             const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_position(discovered[disc_idx].name);
+                md->assign_position(discovered[disc_idx]);
             }
         }
     }
@@ -1301,7 +1301,7 @@ void MeshControlsWidget::on_normal_attr_changed(int index) {
             const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_normal(discovered[disc_idx].name);
+                md->assign_normal(discovered[disc_idx]);
             }
         }
     }
@@ -1322,7 +1322,7 @@ void MeshControlsWidget::on_scalar_attr_changed(int index) {
             const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_scalar(discovered[disc_idx].name,
+                md->assign_scalar(discovered[disc_idx],
                                   md->scalar_component());
             }
         }
@@ -1337,7 +1337,7 @@ void MeshControlsWidget::on_scalar_component_changed(int combo_idx) {
 
     // Map combo index: 0 -> -1 (Magnitude), 1 -> 0 (X), 2 -> 1 (Y), ...
     int new_comp = combo_idx - 1;
-    md->assign_scalar(md->scalar_binding().source, new_comp);
+    md->set_scalar_component(new_comp);
     emit scene_changed();
 }
 

@@ -13,10 +13,8 @@ namespace balsa::scene_graph {
 // ── RoleBinding ─────────────────────────────────────────────────────
 
 auto RoleBinding::clear() -> void {
-    source.clear();
-    component_count = 0;
-    _data = nullptr;
-    _count = 0;
+    _attr = {};
+    _extracts = false;
     _extracted.clear();
 }
 
@@ -28,78 +26,87 @@ auto MeshData::add_attribute(std::string name,
                              AttributeDomain domain,
                              uint8_t component_count,
                              std::span<const float> data)
-    -> const MeshAttribute & {
-    return insert_attribute(MeshAttribute{std::move(name),
-                                          domain,
-                                          component_count,
-                                          {data.begin(), data.end()}});
+    -> MeshAttributeHandle {
+    return insert_attribute(MeshAttribute{
+        std::move(name), domain, component_count, {data.begin(), data.end()}});
 }
 
 auto MeshData::add_attribute(std::string name,
                              AttributeDomain domain,
                              uint8_t component_count,
                              std::span<const double> data)
-    -> const MeshAttribute & {
+    -> MeshAttributeHandle {
     MeshAttribute attr{std::move(name), domain, component_count, {}};
-    attr.data.assign_range(
-        data | std::views::transform([](double v) {
-            return static_cast<float>(v);
-        }));
+    attr.data.assign_range(data | std::views::transform([](double v) {
+                               return static_cast<float>(v);
+                           }));
     return insert_attribute(std::move(attr));
 }
 
-auto MeshData::insert_attribute(MeshAttribute attr) -> const MeshAttribute & {
+auto MeshData::insert_attribute(MeshAttribute attr) -> MeshAttributeHandle {
     if (attr.component_count == 0
         || attr.data.size() % attr.component_count != 0) {
-        spdlog::warn("MeshData: attribute '{}' has {} values, not a multiple "
-                     "of {} components",
-                     attr.name,
-                     attr.data.size(),
-                     attr.component_count);
+        spdlog::warn(
+            "MeshData: attribute '{}' has {} values, not a multiple "
+            "of {} components",
+            attr.name,
+            attr.data.size(),
+            attr.component_count);
     }
 
-    auto it = std::ranges::find(_attributes, attr.name, &MeshAttribute::name);
-    MeshAttribute *slot = nullptr;
+    auto it = std::ranges::find_if(
+        _attributes, [&](const auto &a) { return a->name == attr.name; });
+    MeshAttributeHandle handle;
     if (it != _attributes.end()) {
-        *it = std::move(attr);
-        slot = &*it;
+        // Replace in place: existing handles/bindings keep referring to it.
+        **it = std::move(attr);
+        handle = MeshAttributeHandle(*it);
+        refresh_bindings(handle);
     } else {
-        slot = &_attributes.emplace_back(std::move(attr));
-    }
-    const std::string name = slot->name;
-
-    // Storage may have moved; refresh existing bindings first.
-    rebind_all();
-
-    if (name == "vertex_positions" && !_position.is_bound()) {
-        assign_position(name);
-    } else if (name == "vertex_normals" && !_normal.is_bound()) {
-        assign_normal(name);
+        handle = MeshAttributeHandle(_attributes.emplace_back(
+            std::make_shared<MeshAttribute>(std::move(attr))));
+        if (handle->name == "vertex_positions" && !_position.is_bound()) {
+            assign_position(handle);
+        } else if (handle->name == "vertex_normals" && !_normal.is_bound()) {
+            assign_normal(handle);
+        }
     }
 
     ++_version;
-    return *find_attribute(name);
+    return handle;
 }
 
 auto MeshData::remove_attribute(std::string_view name) -> bool {
-    auto it = std::ranges::find(_attributes, name, &MeshAttribute::name);
+    auto it = std::ranges::find_if(
+        _attributes, [&](const auto &a) { return a->name == name; });
     if (it == _attributes.end()) return false;
+    const MeshAttributeHandle removed(*it);
+    for (auto *b : {&_position, &_normal, &_scalar}) {
+        if (b->attribute() == removed) b->clear();
+    }
+    if (!_scalar.is_bound()) _scalar_component = -1;
     _attributes.erase(it);
-    rebind_all();
     ++_version;
     return true;
 }
 
 auto MeshData::find_attribute(std::string_view name) const
-    -> const MeshAttribute * {
-    auto it = std::ranges::find(_attributes, name, &MeshAttribute::name);
-    return it == _attributes.end() ? nullptr : &*it;
+    -> MeshAttributeHandle {
+    auto it = std::ranges::find_if(
+        _attributes, [&](const auto &a) { return a->name == name; });
+    return it == _attributes.end() ? MeshAttributeHandle{}
+                                   : MeshAttributeHandle(*it);
+}
+
+auto MeshData::owns(const MeshAttributeHandle &attr) const -> bool {
+    return attr && std::ranges::any_of(_attributes, [&](const auto &a) {
+               return a.get() == attr._attr.get();
+           });
 }
 
 // ── Topology ────────────────────────────────────────────────────────
 
-auto MeshData::set_triangle_indices(std::span<const uint32_t> indices)
-    -> void {
+auto MeshData::set_triangle_indices(std::span<const uint32_t> indices) -> void {
     _tri_indices.assign(indices.begin(), indices.end());
     if (!_explicit_edges) derive_edges();
     ++_version;
@@ -147,22 +154,56 @@ auto MeshData::clear() -> void {
 // ── Role assignment ─────────────────────────────────────────────────
 
 auto MeshData::assign_position(std::string_view name) -> bool {
-    _position = bind_vector(find_attribute(name), 1);
+    auto a = find_attribute(name);
+    if (!a) {
+        clear_position();
+        return false;
+    }
+    return assign_position(a);
+}
+
+auto MeshData::assign_normal(std::string_view name) -> bool {
+    auto a = find_attribute(name);
+    if (!a) {
+        clear_normal();
+        return false;
+    }
+    return assign_normal(a);
+}
+
+auto MeshData::assign_scalar(std::string_view name, int component) -> bool {
+    auto a = find_attribute(name);
+    if (!a) {
+        clear_scalar();
+        return false;
+    }
+    return assign_scalar(a, component);
+}
+
+auto MeshData::assign_position(const MeshAttributeHandle &attr) -> bool {
+    _position = owns(attr) ? bind_vector(attr, 1) : RoleBinding{};
     ++_version;
     return _position.is_bound();
 }
 
-auto MeshData::assign_normal(std::string_view name) -> bool {
-    _normal = bind_vector(find_attribute(name), 2);
+auto MeshData::assign_normal(const MeshAttributeHandle &attr) -> bool {
+    _normal = owns(attr) ? bind_vector(attr, 2) : RoleBinding{};
     ++_version;
     return _normal.is_bound();
 }
 
-auto MeshData::assign_scalar(std::string_view name, int component) -> bool {
+auto MeshData::assign_scalar(const MeshAttributeHandle &attr, int component)
+    -> bool {
     _scalar_component = component;
-    _scalar = bind_scalar(find_attribute(name), component);
+    _scalar = owns(attr) ? bind_scalar(attr, component) : RoleBinding{};
     ++_version;
     return _scalar.is_bound();
+}
+
+auto MeshData::set_scalar_component(int component) -> bool {
+    auto a = _scalar.attribute(); // copy: assign_scalar replaces _scalar
+    if (!a) return false;
+    return assign_scalar(a, component);
 }
 
 auto MeshData::clear_position() -> void {
@@ -181,45 +222,38 @@ auto MeshData::clear_scalar() -> void {
     ++_version;
 }
 
-auto MeshData::rebind_all() -> void {
-    if (!_position.source.empty()) {
-        _position = bind_vector(find_attribute(_position.source), 1);
-    }
-    if (!_normal.source.empty()) {
-        _normal = bind_vector(find_attribute(_normal.source), 2);
-    }
-    if (!_scalar.source.empty()) {
-        _scalar = bind_scalar(find_attribute(_scalar.source), _scalar_component);
+auto MeshData::refresh_bindings(const MeshAttributeHandle &attr) -> void {
+    if (_position.attribute() == attr) _position = bind_vector(attr, 1);
+    if (_normal.attribute() == attr) _normal = bind_vector(attr, 2);
+    if (_scalar.attribute() == attr) {
+        _scalar = bind_scalar(attr, _scalar_component);
     }
 }
 
 // ── Binding builders ────────────────────────────────────────────────
 
-auto MeshData::bind_vector(const MeshAttribute *attr, uint8_t min_components)
-    -> RoleBinding {
+auto MeshData::bind_vector(const MeshAttributeHandle &attr,
+                           uint8_t min_components) -> RoleBinding {
     RoleBinding binding;
-    if (attr == nullptr) return binding;
+    if (!attr) return binding;
     if (attr->domain != AttributeDomain::Vertex
         || attr->component_count < min_components) {
-        spdlog::warn("MeshData: attribute '{}' is not a vertex attribute with "
-                     ">= {} components",
-                     attr->name,
-                     min_components);
+        spdlog::warn(
+            "MeshData: attribute '{}' is not a vertex attribute with "
+            ">= {} components",
+            attr->name,
+            min_components);
         return binding;
     }
-    binding.source = attr->name;
-    binding.component_count = attr->component_count;
-    binding._data = attr->data.data();
-    binding._count = attr->count();
+    binding._attr = attr;
     return binding;
 }
 
-auto MeshData::bind_scalar(const MeshAttribute *attr, int component)
+auto MeshData::bind_scalar(const MeshAttributeHandle &attr, int component)
     -> RoleBinding {
     RoleBinding binding;
-    if (attr == nullptr) return binding;
-    if (attr->domain != AttributeDomain::Vertex
-        || attr->component_count == 0) {
+    if (!attr) return binding;
+    if (attr->domain != AttributeDomain::Vertex || attr->component_count == 0) {
         spdlog::warn("MeshData: attribute '{}' is not a vertex attribute",
                      attr->name);
         return binding;
@@ -231,14 +265,10 @@ auto MeshData::bind_scalar(const MeshAttribute *attr, int component)
         return binding;
     }
 
-    binding.source = attr->name;
-    binding.component_count = 1;
-    binding._count = attr->count();
+    binding._attr = attr;
+    if (attr->component_count == 1) return binding;
 
-    if (attr->component_count == 1) {
-        binding._data = attr->data.data();
-        return binding;
-    }
+    binding._extracts = true;
 
     auto elements = attr->data | std::views::chunk(attr->component_count);
     if (component >= 0) {
@@ -253,7 +283,6 @@ auto MeshData::bind_scalar(const MeshAttribute *attr, int component)
                     std::inner_product(e.begin(), e.end(), e.begin(), 0.0f));
             }));
     }
-    binding._data = binding._extracted.data();
     return binding;
 }
 

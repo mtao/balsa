@@ -247,7 +247,7 @@ class MeshViewerMainWindow : public QMainWindow {
             const auto &pos_bind = mesh_data->position_binding();
             const auto *fdata = static_cast<const float *>(pos_bind.raw_data());
             std::size_t n = pos_bind.size();
-            uint8_t comp = pos_bind.component_count;
+            uint8_t comp = pos_bind.component_count();
 
             if (fdata && n > 0 && comp >= 1) {
                 // Compute AABB in up to 3 dimensions.

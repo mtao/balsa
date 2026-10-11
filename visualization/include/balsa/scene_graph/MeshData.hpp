@@ -1,8 +1,9 @@
 #if !defined(BALSA_SCENE_GRAPH_MESH_DATA_HPP)
 #define BALSA_SCENE_GRAPH_MESH_DATA_HPP
 
-#include <concepts>
 #include <cstdint>
+#include <memory>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -42,36 +43,56 @@ struct MeshAttribute {
     }
 };
 
+// ── MeshAttributeHandle ─────────────────────────────────────────────
+//
+// Cheap, copyable reference to an attribute owned by a MeshData.
+// Compares by identity.  Keeps the attribute's data alive even if it
+// is later removed from the MeshData (it is then simply detached).
+
+class MeshAttributeHandle {
+  public:
+    MeshAttributeHandle() = default;
+
+    auto valid() const -> bool { return _attr != nullptr; }
+    explicit operator bool() const { return valid(); }
+    auto operator*() const -> const MeshAttribute & { return *_attr; }
+    auto operator->() const -> const MeshAttribute * { return _attr.get(); }
+    auto operator==(const MeshAttributeHandle &o) const -> bool {
+        return _attr == o._attr;
+    }
+
+  private:
+    friend class MeshData;
+    explicit MeshAttributeHandle(std::shared_ptr<const MeshAttribute> a)
+      : _attr(std::move(a)) {}
+    std::shared_ptr<const MeshAttribute> _attr;
+};
+
 // ── RoleBinding ─────────────────────────────────────────────────────
 //
-// Binds a visualization role (positions, normals, scalar field) to a
-// named attribute.  raw_data() points either into the attribute's
-// buffer or, for scalar component/magnitude extraction, into an owned
-// extracted buffer.
+// Binds a visualization role (positions, normals, scalar field) to an
+// attribute via a MeshAttributeHandle, so raw_data()/size() are direct
+// reads with no name lookup.  For scalar component/magnitude
+// extraction, raw_data() points into an owned extracted buffer.
 
 struct RoleBinding {
-    // Name of the bound attribute (empty if unbound).
-    std::string source;
-
+    auto is_bound() const -> bool { return _attr.valid(); }
+    auto attribute() const -> const MeshAttributeHandle & { return _attr; }
     // Number of float components per element in raw_data().
-    uint8_t component_count = 0;
-
-    // Move-only: raw_data() may point into this binding's own buffer.
-    RoleBinding() = default;
-    RoleBinding(RoleBinding &&) = default;
-    auto operator=(RoleBinding &&) -> RoleBinding & = default;
-    RoleBinding(const RoleBinding &) = delete;
-    auto operator=(const RoleBinding &) -> RoleBinding & = delete;
-
-    auto is_bound() const -> bool { return _data != nullptr; }
-    auto size() const -> std::size_t { return _count; }
-    auto raw_data() const -> const void * { return _data; }
+    auto component_count() const -> uint8_t {
+        return !_attr ? 0 : _extracts ? 1 : _attr->component_count;
+    }
+    auto size() const -> std::size_t { return !_attr ? 0 : _attr->count(); }
+    auto raw_data() const -> const void * {
+        if (!_attr) return nullptr;
+        return _extracts ? _extracted.data() : _attr->data.data();
+    }
     auto clear() -> void;
 
   private:
     friend class MeshData;
-    const float *_data = nullptr;
-    std::size_t _count = 0;
+    MeshAttributeHandle _attr;
+    bool _extracts = false; // raw_data() reads _extracted
     std::vector<float> _extracted;
 };
 
@@ -102,18 +123,24 @@ class MeshData : public AbstractFeature {
     auto add_attribute(std::string name,
                        AttributeDomain domain,
                        uint8_t component_count,
-                       std::span<const float> data) -> const MeshAttribute &;
+                       std::span<const float> data) -> MeshAttributeHandle;
     auto add_attribute(std::string name,
                        AttributeDomain domain,
                        uint8_t component_count,
-                       std::span<const double> data) -> const MeshAttribute &;
+                       std::span<const double> data) -> MeshAttributeHandle;
 
     auto remove_attribute(std::string_view name) -> bool;
 
-    auto attributes() const -> const std::vector<MeshAttribute> & {
-        return _attributes;
+    // Random-access view of MeshAttributeHandle.
+    auto attributes() const {
+        return _attributes
+               | std::views::transform(
+                   [](const std::shared_ptr<MeshAttribute> &a) {
+                       return MeshAttributeHandle(a);
+                   });
     }
-    auto find_attribute(std::string_view name) const -> const MeshAttribute *;
+    // Invalid handle if not found.
+    auto find_attribute(std::string_view name) const -> MeshAttributeHandle;
 
     // ── Topology ────────────────────────────────────────────────────
 
@@ -133,8 +160,9 @@ class MeshData : public AbstractFeature {
 
     // ── Role assignment ─────────────────────────────────────────────
     //
-    // Bind a named attribute to a role.  Returns false (and leaves the
-    // role unbound) if the attribute is missing or incompatible:
+    // Bind an attribute (by name, or by handle from attributes()) to a
+    // role.  Returns false (and leaves the role unbound) if the attribute
+    // is missing, not owned by this MeshData, or incompatible:
     // position/normal require a vertex attribute with >= 1 / >= 2
     // components; scalar requires a vertex attribute.
     //
@@ -144,6 +172,12 @@ class MeshData : public AbstractFeature {
     auto assign_position(std::string_view name) -> bool;
     auto assign_normal(std::string_view name) -> bool;
     auto assign_scalar(std::string_view name, int component = -1) -> bool;
+    auto assign_position(const MeshAttributeHandle &attr) -> bool;
+    auto assign_normal(const MeshAttributeHandle &attr) -> bool;
+    auto assign_scalar(const MeshAttributeHandle &attr, int component = -1)
+        -> bool;
+    // Change the extracted component of the current scalar binding.
+    auto set_scalar_component(int component) -> bool;
 
     auto clear_position() -> void;
     auto clear_normal() -> void;
@@ -179,17 +213,18 @@ class MeshData : public AbstractFeature {
     auto render_state() const -> const RenderState & { return _render_state; }
 
   private:
-    auto insert_attribute(MeshAttribute attr) -> const MeshAttribute &;
-    // Re-resolve all role bindings (attribute storage may have moved).
-    auto rebind_all() -> void;
+    auto insert_attribute(MeshAttribute attr) -> MeshAttributeHandle;
+    auto owns(const MeshAttributeHandle &attr) const -> bool;
+    // Re-validate bindings that reference attr after it changed in place.
+    auto refresh_bindings(const MeshAttributeHandle &attr) -> void;
     auto derive_edges() -> void;
 
-    static auto bind_vector(const MeshAttribute *attr, uint8_t min_components)
-        -> RoleBinding;
-    static auto bind_scalar(const MeshAttribute *attr, int component)
+    static auto bind_vector(const MeshAttributeHandle &attr,
+                            uint8_t min_components) -> RoleBinding;
+    static auto bind_scalar(const MeshAttributeHandle &attr, int component)
         -> RoleBinding;
 
-    std::vector<MeshAttribute> _attributes;
+    std::vector<std::shared_ptr<MeshAttribute>> _attributes;
 
     RoleBinding _position;
     RoleBinding _normal;

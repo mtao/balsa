@@ -229,17 +229,17 @@ TEST_CASE("MeshData attributes", "[scene_graph]") {
     bool found_pos = false;
     bool found_nrm = false;
     for (const auto &da : discovered) {
-        if (da.name == "vertex_positions") {
+        if (da->name == "vertex_positions") {
             found_pos = true;
-            CHECK(da.domain == AttributeDomain::Vertex);
-            CHECK(da.component_count == 3);
-            CHECK(da.count() == 4);
+            CHECK(da->domain == AttributeDomain::Vertex);
+            CHECK(da->component_count == 3);
+            CHECK(da->count() == 4);
         }
-        if (da.name == "vertex_normals") {
+        if (da->name == "vertex_normals") {
             found_nrm = true;
-            CHECK(da.domain == AttributeDomain::Vertex);
-            CHECK(da.component_count == 3);
-            CHECK(da.count() == 4);
+            CHECK(da->domain == AttributeDomain::Vertex);
+            CHECK(da->component_count == 3);
+            CHECK(da->count() == 4);
         }
     }
     CHECK(found_pos);
@@ -273,7 +273,7 @@ TEST_CASE("MeshData scalar binding extracts components", "[scene_graph]") {
 
     REQUIRE(md.assign_scalar("uv", 0));
     const auto &b = md.scalar_binding();
-    CHECK(b.component_count == 1);
+    CHECK(b.component_count() == 1);
     REQUIRE(b.size() == 4);
     auto data = static_cast<const float *>(b.raw_data());
     CHECK(data[0] == 3.0f);
@@ -301,19 +301,25 @@ TEST_CASE("MeshData rebinds when attributes change", "[scene_graph]") {
         const std::array<float, 4> s = {0, 1, 2, 3};
         md.add_attribute("s" + std::to_string(i), AttributeDomain::Vertex, 1, s);
     }
-    const auto *pos = md.find_attribute("vertex_positions");
-    REQUIRE(pos != nullptr);
+    auto pos = md.find_attribute("vertex_positions");
+    REQUIRE(pos);
+    CHECK(md.position_binding().attribute() == pos);
     CHECK(md.position_binding().raw_data() == pos->data.data());
 
     // Replacing the bound attribute updates the binding.
     const std::array<float, 6> pos2 = {0, 0, 1, 1, 2, 2};
     md.add_attribute("vertex_positions", AttributeDomain::Vertex, 2, pos2);
     CHECK(md.vertex_count() == 3);
-    CHECK(md.position_binding().component_count == 2);
+    CHECK(md.position_binding().component_count() == 2);
 
-    // Removing it unbinds.
+    // Replacing in place keeps handle identity.
+    CHECK(md.position_binding().attribute() == pos);
+
+    // Removing it unbinds; a held handle stays readable but detached.
     CHECK(md.remove_attribute("vertex_positions"));
     CHECK_FALSE(md.has_positions());
+    CHECK(pos->count() == 3);
+    CHECK_FALSE(md.assign_position(pos));
 }
 
 TEST_CASE("MeshData face attributes are stored but not bindable", "[scene_graph]") {
@@ -324,8 +330,8 @@ TEST_CASE("MeshData face attributes are stored but not bindable", "[scene_graph]
     const std::array<float, 2> area = {0.5f, 0.5f};
     md.add_attribute("face_area", AttributeDomain::Face, 1, area);
 
-    const auto *a = md.find_attribute("face_area");
-    REQUIRE(a != nullptr);
+    auto a = md.find_attribute("face_area");
+    REQUIRE(a);
     CHECK(a->domain == AttributeDomain::Face);
     CHECK(a->count() == 2);
     CHECK_FALSE(md.assign_scalar("face_area"));
