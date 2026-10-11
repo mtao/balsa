@@ -56,8 +56,6 @@ endif
 
 subdir('core')
 
-quiver_dep = dependency('quiver', default_options: ['testing=false', 'tools=false', 'examples=false'])
-
 subdir('geometry')
 
 if get_option('visualization')

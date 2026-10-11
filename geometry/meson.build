@@ -53,8 +53,6 @@ geometry_sources += 'src/point_cloud/extxyz.cpp'
 
 geometry_required_deps += core_dep
 
-geometry_required_deps += quiver_dep
-
 include_dir = [include_directories('include')]
 
 geometry_lib = library('balsaGeometry', geometry_sources, include_directories: include_dir, dependencies: geometry_required_deps)

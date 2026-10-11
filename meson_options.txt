@@ -13,3 +13,4 @@ option('perfetto', type : 'boolean', value : false, description : 'Use perfetto'
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
 option('glfw', type : 'boolean', value : true, description : 'Build the GLFW window backend')
 option('qt', type : 'boolean', value : true, description : 'Build the Qt window and widget frontend')
+option('parallel', type : 'feature', value : 'auto', description : 'balsa::parallel via std::execution (requires TBB)')

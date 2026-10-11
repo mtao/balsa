@@ -21,10 +21,10 @@ test_welzl = executable('test_welzl_smallest_sphere',
   dependencies: [geometry_dep, catch2_with_main_dep])
 test('welzl smallest sphere test', test_welzl)
 
-test_quiver_bridge = executable('test_quiver_bridge',
-  'test_quiver_bridge.cpp',
-  dependencies: [geometry_dep, catch2_with_main_dep])
-test('quiver bridge test', test_quiver_bridge)
+foreach t : ['simplex', 'kdop', 'kdop_geometry', 'bvh']
+  test(t, executable('test_' + t, 'test_' + t + '.cpp',
+    dependencies: [geometry_dep, catch2_with_main_dep]))
+endforeach
 
 test_extxyz = executable('test_extxyz',
   'test_extxyz.cpp',

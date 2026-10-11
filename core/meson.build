@@ -37,9 +37,17 @@ if get_option('json')
   core_required_deps += nlohmann_json_dep
 endif
 
+# balsa::parallel dispatches to std::execution::par when TBB is available.
+tbb_dep = dependency('tbb', required: get_option('parallel'))
+core_compile_args = []
+if tbb_dep.found()
+  core_required_deps += tbb_dep
+  core_compile_args += '-DBALSA_PARALLEL'
+endif
+
 core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
 
-core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir)
+core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir, compile_args: core_compile_args)
 meson.override_dependency('balsaCore', core_dep)
 if get_option('testing')
   subdir('tests')
