@@ -20,6 +20,7 @@ geometry_sources = [
   'src/point_cloud/read_xyz.cpp', 
   'src/polygon_mesh/read_obj.cpp', 
   'src/triangle_mesh/read_obj.cpp', 
+  'src/io/MshData.cpp',
 ]
 
 geometry_required_deps = core_required_deps 
@@ -52,6 +53,7 @@ geometry_sources += 'src/point_cloud/write_xyz.cpp'
 geometry_sources += 'src/point_cloud/extxyz.cpp'
 
 geometry_required_deps += core_dep
+geometry_required_deps += dependency('mshio', default_options: ['examples=false', 'testing=false'])
 
 include_dir = [include_directories('include')]
 

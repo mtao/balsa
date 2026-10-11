@@ -21,7 +21,7 @@ test_welzl = executable('test_welzl_smallest_sphere',
   dependencies: [geometry_dep, catch2_with_main_dep])
 test('welzl smallest sphere test', test_welzl)
 
-foreach t : ['simplex', 'kdop', 'kdop_geometry', 'bvh']
+foreach t : ['simplex', 'kdop', 'kdop_geometry', 'bvh', 'msh']
   test(t, executable('test_' + t, 'test_' + t + '.cpp',
     dependencies: [geometry_dep, catch2_with_main_dep]))
 endforeach
