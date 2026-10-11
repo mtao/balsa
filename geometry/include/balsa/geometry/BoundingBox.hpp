@@ -1,12 +1,12 @@
 #pragma once
 
 // ============================================================================
-// BoundingBox<T, Dim> — thin wrapper around quiver::spatial::AABB<T, Dim>
+// BoundingBox<T, Dim> — thin wrapper around spatial::AABB<T, Dim>
 // ============================================================================
 //
 // Provides a zipper-vector-based API (min(), max(), range(), corner(),
-// expand(), contains()) on top of quiver's AABB.  The scalar type T is
-// explicit — no default — matching quiver's convention.
+// expand(), contains()) on top of spatial::AABB.  The scalar type T is
+// explicit — no default — matching spatial::AABB.
 //
 // Per-axis accessors: min(axis), max(axis), range(axis).
 // Convenience names:  width(), height(), depth().
@@ -19,7 +19,7 @@
 #include <zipper/Vector.hpp>
 #include <zipper/concepts/Vector.hpp>
 
-#include <quiver/spatial/KDOP.hpp>
+#include "balsa/geometry/spatial/KDOP.hpp"
 
 namespace balsa::geometry {
 
@@ -27,7 +27,7 @@ template <typename T, ::zipper::rank_type Dim>
 class BoundingBox {
   public:
     using value_type = T;
-    using aabb_type = quiver::spatial::AABB<T, static_cast<int8_t>(Dim)>;
+    using aabb_type = spatial::AABB<T, static_cast<int8_t>(Dim)>;
 
     // ── Construction ────────────────────────────────────────────────
 
