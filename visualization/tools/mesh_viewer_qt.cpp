@@ -45,7 +45,8 @@
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <balsa/scene_graph/mesh_io.hpp>
+#include <balsa/geometry/triangle_mesh/read_obj.hpp>
+#include <balsa/visualization/mesh_conversion.hpp>
 
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
 #define emit
@@ -217,14 +218,22 @@ class MeshViewerMainWindow : public QMainWindow {
     void load_mesh(const std::filesystem::path &path) {
         spdlog::info("Loading mesh: {}", path.string());
 
+        if (!std::filesystem::exists(path)) {
+            spdlog::error("Failed to load mesh: file not found: {}",
+                          path.string());
+            return;
+        }
+        auto obj = balsa::geometry::triangle_mesh::read_objF(path);
+        if (obj.position.vertices.cols() == 0) {
+            spdlog::error("Failed to load mesh: no vertices in {}",
+                          path.string());
+            return;
+        }
+
         // Add a mesh Object to the scene graph and fill its MeshData.
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
         auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
-        if (auto res = sg::load_mesh(*mesh_data, path); !res) {
-            spdlog::error("Failed to load mesh: {}", res.error());
-            _scene->remove_mesh(&mesh_obj);
-            return;
-        }
+        viz::to_mesh_data(obj, *mesh_data);
 
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.

@@ -4,7 +4,8 @@
 #include <balsa/scene_graph/Camera.hpp>
 #include <balsa/scene_graph/ImageData.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
-#include <balsa/scene_graph/mesh_io.hpp>
+#include <balsa/geometry/triangle_mesh/read_obj.hpp>
+#include <balsa/visualization/mesh_conversion.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/types.hpp>
 #include <balsa/visualization/image_io.hpp>
@@ -330,7 +331,7 @@ TEST_CASE("MeshData face attributes are stored but not bindable", "[scene_graph]
     CHECK_FALSE(md.assign_scalar("face_area"));
 }
 
-TEST_CASE("load_mesh reads OBJ into MeshData", "[scene_graph]") {
+TEST_CASE("to_mesh_data converts OBJ into MeshData", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
     auto path = std::filesystem::temp_directory_path() / "balsa_quad.obj";
@@ -338,17 +339,15 @@ TEST_CASE("load_mesh reads OBJ into MeshData", "[scene_graph]") {
         std::ofstream f(path);
         f << "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3\nf 1 3 4\n";
     }
+    auto obj = balsa::geometry::triangle_mesh::read_objF(path);
+    std::filesystem::remove(path);
 
     MeshData md;
-    auto res = load_mesh(md, path);
-    REQUIRE(res.has_value());
+    balsa::visualization::to_mesh_data(obj, md);
     CHECK(md.vertex_count() == 4);
     CHECK(md.triangle_count() == 2);
     CHECK(md.edge_count() == 5);
     CHECK_FALSE(md.has_normals());
-
-    CHECK_FALSE(load_mesh(md, path.replace_extension(".msh")).has_value());
-    std::filesystem::remove(path.replace_extension(".obj"));
 }
 
 TEST_CASE("MeshData as Object feature", "[scene_graph]") {

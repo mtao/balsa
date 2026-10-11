@@ -1,13 +1,12 @@
-#include "balsa/scene_graph/mesh_io.hpp"
+#include "balsa/visualization/mesh_conversion.hpp"
 
 #include "balsa/scene_graph/MeshData.hpp"
 
-#include <balsa/geometry/triangle_mesh/read_obj.hpp>
-
 #include <cstdint>
+#include <span>
 #include <vector>
 
-namespace balsa::scene_graph {
+namespace balsa::visualization {
 
 namespace {
 
@@ -27,21 +26,11 @@ namespace {
 
 } // namespace
 
-auto load_mesh(MeshData &mesh_data, const std::filesystem::path &path)
-    -> std::expected<void, std::string> {
-    if (!std::filesystem::exists(path)) {
-        return std::unexpected("file not found: " + path.string());
-    }
-    auto ext = path.extension().string();
-    if (ext != ".obj" && ext != ".OBJ") {
-        return std::unexpected("unsupported mesh format: " + ext);
-    }
-
-    auto obj = geometry::triangle_mesh::read_objF(path);
+auto to_mesh_data(const geometry::triangle_mesh::OBJMesh<float, 3> &obj,
+                  scene_graph::MeshData &mesh_data) -> void {
+    using scene_graph::AttributeDomain;
     const auto &P = obj.position;
-    if (P.vertices.cols() == 0) {
-        return std::unexpected("no vertices in " + path.string());
-    }
+    const auto &N = obj.normal;
 
     mesh_data.clear();
     mesh_data.add_attribute("vertex_positions",
@@ -50,13 +39,11 @@ auto load_mesh(MeshData &mesh_data, const std::filesystem::path &path)
                             std::span<const float>(
                                 flatten_columns<float>(P.vertices)));
 
-    // Only use normals if they are indexed like the positions; OBJ
-    // allows independent normal indices which do not map per-vertex.
-    const auto &N = obj.normal;
+    // OBJ allows independent normal indices, which do not map
+    // per-vertex; only use normals indexed like the positions.
+    auto tris = flatten_columns<uint32_t>(P.triangles);
     if (N.vertices.cols() == P.vertices.cols()
-        && N.triangles.cols() == P.triangles.cols()
-        && flatten_columns<uint32_t>(N.triangles)
-               == flatten_columns<uint32_t>(P.triangles)) {
+        && flatten_columns<uint32_t>(N.triangles) == tris) {
         mesh_data.add_attribute("vertex_normals",
                                 AttributeDomain::Vertex,
                                 3,
@@ -64,8 +51,7 @@ auto load_mesh(MeshData &mesh_data, const std::filesystem::path &path)
                                     flatten_columns<float>(N.vertices)));
     }
 
-    mesh_data.set_triangle_indices(flatten_columns<uint32_t>(P.triangles));
-    return {};
+    mesh_data.set_triangle_indices(tris);
 }
 
-} // namespace balsa::scene_graph
+} // namespace balsa::visualization
