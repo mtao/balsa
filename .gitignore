@@ -57,9 +57,9 @@ subprojects/*.wrap
 !subprojects/eigen.wrap
 !subprojects/fmt.wrap
 !subprojects/imgui.wrap
+!subprojects/mshio.wrap
 !subprojects/nlohmann_json.wrap
 !subprojects/partio.wrap
-!subprojects/quiver.wrap
 !subprojects/spdlog.wrap
 !subprojects/zipper.wrap
 

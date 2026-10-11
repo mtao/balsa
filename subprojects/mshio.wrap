@@ -1,0 +1,8 @@
+[wrap-git]
+url = https://github.com/mtao/MshIO
+# Points to fix/msvc-cpp-std until PR #1 is merged to the zipper branch.
+revision = fix/msvc-cpp-std
+method = meson
+
+[provide]
+mshio = mshio_dep
