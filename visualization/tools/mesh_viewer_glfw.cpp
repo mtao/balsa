@@ -2,15 +2,11 @@
 //
 // Usage:  mesh_viewer_glfw [--input path/to/model.obj]
 //         mesh_viewer_glfw path/to/model.obj
-//         mesh_viewer_glfw path/to/model.msh
 //
-// Loads an OBJ or MSH mesh via quiver I/O, renders it with Phong
+// Loads an OBJ mesh, renders it with Phong
 // shading, and provides an ImGui panel for tweaking render state
 // (shading model, color source, colormaps, lighting, wireframe, etc.)
 // and selecting which attribute is bound to each visualization role.
-//
-// BVH bounding volume visualization is available via right-click
-// context menu on mesh objects in the scene graph panel.
 //
 // Camera: left-drag orbit, right-drag pan, scroll zoom.
 // File > Open: type a file path in the ImGui dialog to load a mesh.
@@ -39,8 +35,8 @@
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <quiver/attributes/StoredAttribute.hpp>
-#include <quiver/io/mesh_io.hpp>
+#include <balsa/geometry/triangle_mesh/read_obj.hpp>
+#include <balsa/visualization/mesh_conversion.hpp>
 
 namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
@@ -49,9 +45,7 @@ namespace sg = balsa::scene_graph;
 // ── MeshViewerScene ─────────────────────────────────────────────────
 //
 // A MeshScene subclass that adds an ImGui overlay with mesh controls
-// and a main menu bar.  BVH bounding volume visualization is handled
-// per-mesh via BVHData features in the scene graph — the base class
-// MeshScene::begin_render_pass() applies deferred updates automatically.
+// and a main menu bar.
 
 class MeshViewerScene : public vk_viz::MeshScene {
   public:
@@ -202,31 +196,22 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
     void load_mesh(const std::filesystem::path &path) {
         spdlog::info("Loading mesh: {}", path.string());
 
-        // Use quiver's format-dispatching reader (OBJ, MSH, ...).
-        auto result = quiver::io::read_mesh(path);
-        if (!result) {
-            spdlog::error("Failed to load mesh: {}", path.string());
+        if (!std::filesystem::exists(path)) {
+            spdlog::error("Failed to load mesh: file not found: {}",
+                          path.string());
             return;
         }
-        auto mesh = std::move(*result);
+        auto obj = balsa::geometry::triangle_mesh::read_objF(path);
+        if (obj.position.vertices.cols() == 0) {
+            spdlog::error("Failed to load mesh: no vertices in {}",
+                          path.string());
+            return;
+        }
 
-        spdlog::info("  Mesh dimension: {}",
-                     static_cast<int>(mesh->dimension()));
-
-        // Compute bounding box from the position attribute for Object
-        // transform normalization.  Position attribute types may be
-        // array<double,3>, array<double,2>, array<float,3>, etc.
-        // We iterate the discovered attributes after set_mesh() to find
-        // the position binding and compute the AABB.
-
-        // Add a mesh Object to the scene graph.
+        // Add a mesh Object to the scene graph and fill its MeshData.
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
         auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
-
-        // set_mesh() enumerates attributes, auto-assigns roles by
-        // convention name (vertex_positions → position, vertex_normals
-        // → normal), builds skeletons, and extracts topology indices.
-        mesh_data->set_mesh(mesh);
+        viz::to_mesh_data(obj, *mesh_data);
 
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.
@@ -240,7 +225,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
             const auto &pos_bind = mesh_data->position_binding();
             const auto *fdata = static_cast<const float *>(pos_bind.raw_data());
             std::size_t n = pos_bind.size();
-            uint8_t comp = pos_bind.component_count;
+            uint8_t comp = pos_bind.component_count();
 
             if (fdata && n > 0 && comp >= 1) {
                 // Compute AABB in up to 3 dimensions.

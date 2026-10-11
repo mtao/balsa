@@ -3,10 +3,9 @@
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
-// that transitively include TBB (via quiver), then restore it.
+// that transitively include TBB (via zipper <execution>), then restore it.
 #undef emit
 
-#include "balsa/scene_graph/BVHData.hpp"
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
 #include "balsa/scene_graph/Object.hpp"
@@ -123,8 +122,6 @@ void MeshControlsWidget::build_ui() {
     _tab_material = _tabs->addTab(build_material_page(),
                                   QStringLiteral("\u25CF"),
                                   QStringLiteral("Material")); // ●
-    _tab_bvh = _tabs->addTab(
-        build_bvh_page(), QStringLiteral("\u2592"), QStringLiteral("BVH")); // ▒
     _tab_lighting = _tabs->addTab(build_lighting_page(),
                                   QStringLiteral("\u2600"),
                                   QStringLiteral("Lighting")); // ☀
@@ -697,108 +694,6 @@ void MeshControlsWidget::build_material_group(QWidget *parent,
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// Tab 4: BVH
-// ═════════════════════════════════════════════════════════════════════
-
-QWidget *MeshControlsWidget::build_bvh_page() {
-    auto *page = new QWidget;
-    auto *layout = new QVBoxLayout(page);
-    layout->setContentsMargins(4, 4, 4, 4);
-
-    build_bvh_group(page, layout);
-
-    layout->addStretch();
-    return page;
-}
-
-void MeshControlsWidget::build_bvh_group(QWidget *parent, QBoxLayout *layout) {
-    auto *group = new QGroupBox("BVH Overlay", parent);
-    auto *grp_layout = new QVBoxLayout(group);
-
-    // Enabled checkbox
-    _bvh_enabled_check = new QCheckBox("Show Overlay", group);
-    _bvh_enabled_check->setChecked(true);
-    grp_layout->addWidget(_bvh_enabled_check);
-
-    // KDOP type
-    auto *kdop_row = new QHBoxLayout;
-    kdop_row->addWidget(new QLabel("Bounding Volume:", group));
-    _bvh_kdop_combo = new QComboBox(group);
-    _bvh_kdop_combo->addItems({"AABB (K=3)", "9-DOP", "13-DOP"});
-    kdop_row->addWidget(_bvh_kdop_combo);
-    grp_layout->addLayout(kdop_row);
-
-    // Build strategy
-    auto *strat_row = new QHBoxLayout;
-    strat_row->addWidget(new QLabel("Strategy:", group));
-    _bvh_strategy_combo = new QComboBox(group);
-    _bvh_strategy_combo->addItems({"SAH (Best Quality)",
-                                   "Object Median (Balanced)",
-                                   "Spatial Median",
-                                   "LBVH (Fastest)"});
-    strat_row->addWidget(_bvh_strategy_combo);
-    grp_layout->addLayout(strat_row);
-
-    // Max leaf size
-    auto *leaf_row = new QHBoxLayout;
-    _bvh_leaf_size_label = new QLabel("Max Leaf: 4", group);
-    leaf_row->addWidget(_bvh_leaf_size_label);
-    _bvh_leaf_size_slider = make_slider(1, 32, 4, group);
-    leaf_row->addWidget(_bvh_leaf_size_slider);
-    grp_layout->addLayout(leaf_row);
-
-    // BVH height info
-    _bvh_height_label = new QLabel("BVH height: -", group);
-    _bvh_height_label->setStyleSheet("color: gray; font-size: 10px;");
-    grp_layout->addWidget(_bvh_height_label);
-
-    // Display depth
-    auto *depth_row = new QHBoxLayout;
-    _bvh_depth_label = new QLabel("Depth: 0", group);
-    depth_row->addWidget(_bvh_depth_label);
-    _bvh_depth_slider = make_slider(0, 20, 0, group);
-    depth_row->addWidget(_bvh_depth_slider);
-    grp_layout->addLayout(depth_row);
-
-    // Color
-    auto *color_row = new QHBoxLayout;
-    color_row->addWidget(new QLabel("Color:", group));
-    _bvh_color_button = new QPushButton(group);
-    _bvh_color_button->setFixedSize(60, 24);
-    set_button_color(_bvh_color_button, 0.1f, 0.8f, 0.2f, 1.0f);
-    color_row->addWidget(_bvh_color_button);
-    color_row->addStretch();
-    grp_layout->addLayout(color_row);
-
-    layout->addWidget(group);
-
-    connect(_bvh_enabled_check,
-            &QCheckBox::toggled,
-            this,
-            &MeshControlsWidget::on_bvh_enabled_changed);
-    connect(_bvh_kdop_combo,
-            QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this,
-            &MeshControlsWidget::on_bvh_kdop_changed);
-    connect(_bvh_strategy_combo,
-            QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this,
-            &MeshControlsWidget::on_bvh_strategy_changed);
-    connect(_bvh_leaf_size_slider,
-            &QSlider::valueChanged,
-            this,
-            &MeshControlsWidget::on_bvh_leaf_size_changed);
-    connect(_bvh_depth_slider,
-            &QSlider::valueChanged,
-            this,
-            &MeshControlsWidget::on_bvh_depth_changed);
-    connect(_bvh_color_button,
-            &QPushButton::clicked,
-            this,
-            &MeshControlsWidget::on_bvh_color_clicked);
-}
-
-// ═════════════════════════════════════════════════════════════════════
 // Tab 5: Lighting
 // ═════════════════════════════════════════════════════════════════════
 
@@ -881,7 +776,7 @@ void MeshControlsWidget::build_scene_lighting_group(QWidget *parent,
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// selected_mesh_data / selected_bvh_data
+// selected_mesh_data
 // ═════════════════════════════════════════════════════════════════════
 
 sg::MeshData *MeshControlsWidget::selected_mesh_data() {
@@ -889,10 +784,6 @@ sg::MeshData *MeshControlsWidget::selected_mesh_data() {
     return _selected->find_feature<sg::MeshData>();
 }
 
-sg::BVHData *MeshControlsWidget::selected_bvh_data() {
-    if (!_selected) return nullptr;
-    return _selected->find_feature<sg::BVHData>();
-}
 
 // ═════════════════════════════════════════════════════════════════════
 // sync_from_state
@@ -907,7 +798,6 @@ void MeshControlsWidget::sync_from_state() {
     // Show/hide tabs based on selection state.
     // Object tab always visible (shows "no selection" state gracefully).
     // Layers/Material tabs only when a mesh is selected.
-    // BVH tab only when BVH data is present.
     // Lighting tab always visible (scene-global).
     _tabs->setTabVisible(_tab_layers, have_mesh);
 
@@ -924,11 +814,6 @@ void MeshControlsWidget::sync_from_state() {
     if (_shading_details_container) {
         _shading_details_container->setVisible(is_lit);
     }
-
-    // BVH tab
-    auto *bvh_data =
-        have_selection ? obj->find_feature<sg::BVHData>() : nullptr;
-    _tabs->setTabVisible(_tab_bvh, bvh_data != nullptr);
 
     // Mesh info labels visibility
     _vertex_count_label->setVisible(have_mesh);
@@ -1111,48 +996,6 @@ void MeshControlsWidget::sync_from_state() {
                          1.0f);
     }
 
-    // BVH overlay
-    if (bvh_data) {
-        QSignalBlocker bb1(_bvh_enabled_check);
-        QSignalBlocker bb2(_bvh_kdop_combo);
-        QSignalBlocker bb3(_bvh_strategy_combo);
-        QSignalBlocker bb4(_bvh_leaf_size_slider);
-        QSignalBlocker bb5(_bvh_depth_slider);
-
-        _bvh_enabled_check->setChecked(bvh_data->enabled);
-
-        // KDOP combo: 0=K3, 1=K9, 2=K13
-        int kdop_idx = (bvh_data->kdop_k == 3)   ? 0
-                       : (bvh_data->kdop_k == 9) ? 1
-                                                 : 2;
-        _bvh_kdop_combo->setCurrentIndex(kdop_idx);
-
-        _bvh_strategy_combo->setCurrentIndex(
-            static_cast<int>(bvh_data->strategy));
-
-        _bvh_leaf_size_slider->setValue(
-            static_cast<int>(bvh_data->max_leaf_size));
-        _bvh_leaf_size_label->setText(
-            QStringLiteral("Max Leaf: %1").arg(bvh_data->max_leaf_size));
-
-        if (bvh_data->is_built()) {
-            _bvh_height_label->setText(
-                QStringLiteral("BVH height: %1").arg(bvh_data->bvh_height()));
-            _bvh_depth_slider->setRange(0, bvh_data->bvh_height());
-        } else {
-            _bvh_height_label->setText("BVH height: -");
-            _bvh_depth_slider->setRange(0, 20);
-        }
-        _bvh_depth_slider->setValue(bvh_data->display_depth);
-        _bvh_depth_label->setText(
-            QStringLiteral("Depth: %1").arg(bvh_data->display_depth));
-
-        set_button_color(_bvh_color_button,
-                         bvh_data->color[0],
-                         bvh_data->color[1],
-                         bvh_data->color[2],
-                         bvh_data->color[3]);
-    }
 }
 
 void MeshControlsWidget::sync_color_group_visibility() {
@@ -1171,7 +1014,7 @@ void MeshControlsWidget::sync_attribute_bindings() {
     _attr_bindings_group->setVisible(have_mesh);
     if (!have_mesh) return;
 
-    const auto &discovered = mesh_data->discovered_attributes();
+    const auto &discovered = mesh_data->attributes();
 
     // Block signals during repopulation
     QSignalBlocker bp(_position_attr_combo);
@@ -1193,44 +1036,43 @@ void MeshControlsWidget::sync_attribute_bindings() {
 
             QString label =
                 QStringLiteral("%1 (dim%2, %3 comp, %4 elts)")
-                    .arg(QString::fromStdString(discovered[i].name))
-                    .arg(static_cast<int>(discovered[i].dimension))
-                    .arg(static_cast<unsigned>(discovered[i].component_count))
-                    .arg(static_cast<quint64>(discovered[i].count));
+                    .arg(QString::fromStdString(discovered[i]->name))
+                    .arg(static_cast<int>(discovered[i]->domain))
+                    .arg(static_cast<unsigned>(discovered[i]->component_count))
+                    .arg(static_cast<quint64>(discovered[i]->count()));
             combo->addItem(label, QVariant(i)); // userData = discovered index
 
-            if (binding.is_bound()
-                && &binding.source.attribute()
-                       == &discovered[i].handle.attribute()) {
+            if (binding.is_bound() && binding.attribute() == discovered[i]) {
                 current_idx = combo->count() - 1;
             }
         }
         return current_idx;
     };
 
-    // Position: floating-point, 1+ components
+    // Position: vertex attribute, 1+ components
     int pos_idx = populate_combo(_position_attr_combo,
                                  mesh_data->position_binding(),
-                                 [](const sg::DiscoveredAttribute &da) {
-                                     return da.is_floating_point
-                                            && da.component_count >= 1;
+                                 [](const sg::MeshAttributeHandle &da) {
+                                     return da->domain == sg::AttributeDomain::Vertex
+                                            && da->component_count >= 1;
                                  });
     _position_attr_combo->setCurrentIndex(pos_idx);
 
-    // Normal: floating-point, 2+ components
+    // Normal: vertex attribute, 2+ components
     int norm_idx = populate_combo(_normal_attr_combo,
                                   mesh_data->normal_binding(),
-                                  [](const sg::DiscoveredAttribute &da) {
-                                      return da.is_floating_point
-                                             && da.component_count >= 2;
+                                  [](const sg::MeshAttributeHandle &da) {
+                                      return da->domain == sg::AttributeDomain::Vertex
+                                             && da->component_count >= 2;
                                   });
     _normal_attr_combo->setCurrentIndex(norm_idx);
 
-    // Scalar: any attribute with 1+ components
+    // Scalar: any vertex attribute
     int scl_idx = populate_combo(_scalar_attr_combo,
                                  mesh_data->scalar_binding(),
-                                 [](const sg::DiscoveredAttribute &da) {
-                                     return da.component_count >= 1;
+                                 [](const sg::MeshAttributeHandle &da) {
+                                     return da->domain == sg::AttributeDomain::Vertex
+                                            && da->component_count >= 1;
                                  });
     _scalar_attr_combo->setCurrentIndex(scl_idx);
 
@@ -1238,14 +1080,8 @@ void MeshControlsWidget::sync_attribute_bindings() {
     bool show_component = false;
     if (mesh_data->has_scalar_field()) {
         const auto &scl_bind = mesh_data->scalar_binding();
-        uint8_t src_components = 0;
-        for (const auto &da : discovered) {
-            if (scl_bind.is_bound()
-                && &scl_bind.source.attribute() == &da.handle.attribute()) {
-                src_components = da.component_count;
-                break;
-            }
-        }
+        const auto &src = scl_bind.attribute();
+        uint8_t src_components = src ? src->component_count : 0;
         if (src_components > 1) {
             show_component = true;
             _scalar_component_combo->clear();
@@ -1441,10 +1277,10 @@ void MeshControlsWidget::on_position_attr_changed(int index) {
         QVariant data = _position_attr_combo->itemData(index);
         if (data.isValid()) {
             int disc_idx = data.toInt();
-            const auto &discovered = md->discovered_attributes();
+            const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_position(discovered[disc_idx].handle);
+                md->assign_position(discovered[disc_idx]);
             }
         }
     }
@@ -1462,10 +1298,10 @@ void MeshControlsWidget::on_normal_attr_changed(int index) {
         QVariant data = _normal_attr_combo->itemData(index);
         if (data.isValid()) {
             int disc_idx = data.toInt();
-            const auto &discovered = md->discovered_attributes();
+            const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_normal(discovered[disc_idx].handle);
+                md->assign_normal(discovered[disc_idx]);
             }
         }
     }
@@ -1483,10 +1319,10 @@ void MeshControlsWidget::on_scalar_attr_changed(int index) {
         QVariant data = _scalar_attr_combo->itemData(index);
         if (data.isValid()) {
             int disc_idx = data.toInt();
-            const auto &discovered = md->discovered_attributes();
+            const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_scalar(discovered[disc_idx].handle,
+                md->assign_scalar(discovered[disc_idx],
                                   md->scalar_component());
             }
         }
@@ -1501,7 +1337,7 @@ void MeshControlsWidget::on_scalar_component_changed(int combo_idx) {
 
     // Map combo index: 0 -> -1 (Magnitude), 1 -> 0 (X), 2 -> 1 (Y), ...
     int new_comp = combo_idx - 1;
-    md->assign_scalar(md->scalar_binding().source, new_comp);
+    md->set_scalar_component(new_comp);
     emit scene_changed();
 }
 
@@ -1683,79 +1519,6 @@ void MeshControlsWidget::on_scene_light_color_clicked() {
                          static_cast<float>(chosen.greenF()),
                          static_cast<float>(chosen.blueF()),
                          1.0f);
-        emit scene_changed();
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════
-// Slots: BVH overlay
-// ═════════════════════════════════════════════════════════════════════
-
-void MeshControlsWidget::on_bvh_enabled_changed(bool checked) {
-    auto *bvh = selected_bvh_data();
-    if (!bvh) return;
-    bvh->enabled = checked;
-    bvh->mark_overlay_dirty();
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_bvh_kdop_changed(int index) {
-    auto *bvh = selected_bvh_data();
-    if (!bvh) return;
-    static constexpr int k_values[] = {3, 9, 13};
-    if (index >= 0 && index < 3) {
-        bvh->kdop_k = k_values[index];
-        bvh->mark_dirty();
-        emit scene_changed();
-    }
-}
-
-void MeshControlsWidget::on_bvh_strategy_changed(int index) {
-    auto *bvh = selected_bvh_data();
-    if (!bvh) return;
-    if (index >= 0 && index < 4) {
-        bvh->strategy = static_cast<quiver::spatial::BVHBuildStrategy>(index);
-        bvh->mark_dirty();
-        emit scene_changed();
-    }
-}
-
-void MeshControlsWidget::on_bvh_leaf_size_changed(int value) {
-    auto *bvh = selected_bvh_data();
-    if (!bvh) return;
-    bvh->max_leaf_size = static_cast<uint16_t>(value);
-    _bvh_leaf_size_label->setText(QStringLiteral("Max Leaf: %1").arg(value));
-    bvh->mark_dirty();
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_bvh_depth_changed(int value) {
-    auto *bvh = selected_bvh_data();
-    if (!bvh) return;
-    bvh->display_depth = value;
-    _bvh_depth_label->setText(QStringLiteral("Depth: %1").arg(value));
-    bvh->mark_overlay_dirty();
-    emit scene_changed();
-}
-
-void MeshControlsWidget::on_bvh_color_clicked() {
-    auto *bvh = selected_bvh_data();
-    if (!bvh) return;
-    QColor initial = QColor::fromRgbF(
-        bvh->color[0], bvh->color[1], bvh->color[2], bvh->color[3]);
-    QColor chosen = QColorDialog::getColor(
-        initial, this, "BVH Overlay Color", QColorDialog::ShowAlphaChannel);
-    if (chosen.isValid()) {
-        bvh->color[0] = static_cast<float>(chosen.redF());
-        bvh->color[1] = static_cast<float>(chosen.greenF());
-        bvh->color[2] = static_cast<float>(chosen.blueF());
-        bvh->color[3] = static_cast<float>(chosen.alphaF());
-        set_button_color(_bvh_color_button,
-                         bvh->color[0],
-                         bvh->color[1],
-                         bvh->color[2],
-                         bvh->color[3]);
-        bvh->mark_overlay_dirty();
         emit scene_changed();
     }
 }

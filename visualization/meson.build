@@ -102,7 +102,6 @@ visualization_sources = [
   'src/scene_graph/Object.cpp',
   'src/scene_graph/Camera.cpp',
   'src/scene_graph/MeshData.cpp',
-  'src/scene_graph/BVHData.cpp',
   'src/scene_graph/DrawableGroup.cpp',
   'src/scene_graph/ImageData.cpp',
   'src/vulkan/VulkanTexture.cpp',
@@ -110,6 +109,7 @@ visualization_sources = [
   'src/vulkan/VulkanImageDrawable.cpp',
   'src/vulkan/ImageScene.cpp',
   'src/image_io.cpp',
+  'src/mesh_conversion.cpp',
 ]
 
 if get_option('qt')
@@ -158,7 +158,6 @@ endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
-visualization_public_deps += quiver_dep
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,

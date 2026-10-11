@@ -116,12 +116,12 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     if (pos.is_bound()) {
         const void *data = pos.raw_data();
         std::size_t byte_size =
-            pos.size() * pos.component_count * sizeof(float);
+            pos.size() * pos.component_count() * sizeof(float);
         _buffers.upload_positions(film,
                                   data,
                                   byte_size,
                                   static_cast<uint32_t>(pos.size()),
-                                  pos.component_count);
+                                  pos.component_count());
     }
 
     // Upload normals.
@@ -129,8 +129,8 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     if (nrm.is_bound()) {
         const void *data = nrm.raw_data();
         std::size_t byte_size =
-            nrm.size() * nrm.component_count * sizeof(float);
-        _buffers.upload_normals(film, data, byte_size, nrm.component_count);
+            nrm.size() * nrm.component_count() * sizeof(float);
+        _buffers.upload_normals(film, data, byte_size, nrm.component_count());
     }
 
     // Upload scalar field.

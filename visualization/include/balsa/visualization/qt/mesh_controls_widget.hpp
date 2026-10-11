@@ -22,7 +22,6 @@ struct MeshRenderState;
 namespace balsa::scene_graph {
 class Object;
 class MeshData;
-class BVHData;
 } // namespace balsa::scene_graph
 
 namespace balsa::visualization::qt {
@@ -39,9 +38,7 @@ class VerticalTabWidget;
 //                  Shading & Rendering, Color source
 //   3. Material — Material response (ambient, diffuse, specular,
 //                  shininess).  Placeholder for future named materials.
-//   4. BVH      — BVH overlay (enable, KDOP type, strategy, leaf size,
-//                  depth, color)
-//   5. Lighting — Scene-global light (direction, color, enable)
+//   4. Lighting — Scene-global light (direction, color, enable)
 //
 // Does NOT contain scene tree / outliner controls — those belong in
 // SceneGraphWidget.  The host application wires them together:
@@ -113,13 +110,6 @@ class MeshControlsWidget : public QWidget {
     void on_scalar_attr_changed(int index);
     void on_scalar_component_changed(int index);
 
-    // BVH overlay
-    void on_bvh_enabled_changed(bool checked);
-    void on_bvh_kdop_changed(int index);
-    void on_bvh_strategy_changed(int index);
-    void on_bvh_leaf_size_changed(int value);
-    void on_bvh_depth_changed(int value);
-    void on_bvh_color_clicked();
 
     // Object
     void on_name_edited(const QString &text);
@@ -138,7 +128,6 @@ class MeshControlsWidget : public QWidget {
     QWidget *build_object_page();
     QWidget *build_layers_page();
     QWidget *build_material_page();
-    QWidget *build_bvh_page();
     QWidget *build_lighting_page();
 
     // Sub-group builders (called from page builders).
@@ -150,7 +139,6 @@ class MeshControlsWidget : public QWidget {
     void build_attribute_bindings_group(QWidget *parent, QBoxLayout *layout);
     void build_material_group(QWidget *parent, QBoxLayout *layout);
     void build_scene_lighting_group(QWidget *parent, QBoxLayout *layout);
-    void build_bvh_group(QWidget *parent, QBoxLayout *layout);
 
     // Populate widgets from the currently-selected object's state.
     // Blocks signals while setting values to avoid feedback loops.
@@ -162,8 +150,6 @@ class MeshControlsWidget : public QWidget {
     // Helper: get the MeshData feature from the selected Object, or nullptr.
     ::balsa::scene_graph::MeshData *selected_mesh_data();
 
-    // Helper: get the BVHData feature from the selected Object, or nullptr.
-    ::balsa::scene_graph::BVHData *selected_bvh_data();
 
     // ── State ────────────────────────────────────────────────────────
     ::balsa::visualization::vulkan::MeshScene *_scene = nullptr;
@@ -176,7 +162,6 @@ class MeshControlsWidget : public QWidget {
     int _tab_object = -1;
     int _tab_layers = -1;
     int _tab_material = -1;
-    int _tab_bvh = -1;
     int _tab_lighting = -1;
 
     // ── Object info widgets ──────────────────────────────────────────
@@ -253,16 +238,6 @@ class MeshControlsWidget : public QWidget {
     QDoubleSpinBox *_scene_light_z_spin = nullptr;
     QPushButton *_scene_light_color_button = nullptr;
 
-    // ── BVH overlay widgets ──────────────────────────────────────────
-    QCheckBox *_bvh_enabled_check = nullptr;
-    QComboBox *_bvh_kdop_combo = nullptr;
-    QComboBox *_bvh_strategy_combo = nullptr;
-    QSlider *_bvh_leaf_size_slider = nullptr;
-    QLabel *_bvh_leaf_size_label = nullptr;
-    QSlider *_bvh_depth_slider = nullptr;
-    QLabel *_bvh_depth_label = nullptr;
-    QLabel *_bvh_height_label = nullptr;
-    QPushButton *_bvh_color_button = nullptr;
 
     // ── Attribute binding widgets ────────────────────────────────────
     QGroupBox *_attr_bindings_group = nullptr;

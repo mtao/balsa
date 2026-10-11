@@ -3,99 +3,114 @@
 
 #include <cstdint>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <string>
-#include <typeindex>
+#include <string_view>
 #include <vector>
 
 #include "AbstractFeature.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "types.hpp"
 
-#include <quiver/MeshBase.hpp>
-#include <quiver/attributes/AttributeHandle.hpp>
-#include <quiver/attributes/StoredAttributeBase.hpp>
+#include <zipper/storage/layout_types.hpp>
+#include <zipper/types.hpp>
 
 namespace balsa::scene_graph {
 
-// ── DiscoveredAttribute ─────────────────────────────────────────────
+// ── AttributeDomain ─────────────────────────────────────────────────
 //
-// Metadata about a single attribute found in the source MeshBase's
-// AttributeManager.  Populated by MeshData::set_mesh() and exposed
-// for UI enumeration (attribute selector combos, property panels).
+// Which mesh element an attribute is defined on.  The values match
+// simplex dimension so UI code can display them uniformly.
 
-struct DiscoveredAttribute {
-    quiver::attributes::ConstTypeErasedAttributeHandle handle;
-    std::string name; // from AttributeManager::name_of()
-    int8_t dimension = -1; // quiver dim (0=vertex, 1=edge, 2=face, ...)
-    std::type_index type_id; // from StoredAttributeBase::value_type_id()
-    std::size_t element_size = 0; // bytes per element
-    std::size_t count = 0; // number of elements
-    uint8_t component_count =
-        0; // 1 for scalar, 2 for array<T,2>, 3 for array<T,3>, ...
-    bool is_floating_point = false; // true for float/double element types
+enum class AttributeDomain : int8_t {
+    Vertex = 0,
+    Edge = 1,
+    Face = 2,
+};
 
-    DiscoveredAttribute() : type_id(typeid(void)) {}
+// ── MeshAttribute ───────────────────────────────────────────────────
+//
+// A named, flat attribute buffer: count() elements of component_count
+// floats each, stored contiguously.  Input data of any floating-point
+// type is converted to float on insertion so it is GPU-ready.
+
+struct MeshAttribute {
+    std::string name;
+    AttributeDomain domain = AttributeDomain::Vertex;
+    uint8_t component_count = 0;
+    std::vector<float> data;
+
+    auto count() const -> std::size_t {
+        return component_count == 0 ? 0 : data.size() / component_count;
+    }
+};
+
+// ── MeshAttributeHandle ─────────────────────────────────────────────
+//
+// Cheap, copyable reference to an attribute owned by a MeshData.
+// Compares by identity.  Keeps the attribute's data alive even if it
+// is later removed from the MeshData (it is then simply detached).
+
+class MeshAttributeHandle {
+  public:
+    MeshAttributeHandle() = default;
+
+    auto valid() const -> bool { return _attr != nullptr; }
+    explicit operator bool() const { return valid(); }
+    auto operator*() const -> const MeshAttribute & { return *_attr; }
+    auto operator->() const -> const MeshAttribute * { return _attr.get(); }
+    auto operator==(const MeshAttributeHandle &o) const -> bool {
+        return _attr == o._attr;
+    }
+
+  private:
+    friend class MeshData;
+    explicit MeshAttributeHandle(std::shared_ptr<const MeshAttribute> a)
+      : _attr(std::move(a)) {}
+    std::shared_ptr<const MeshAttribute> _attr;
 };
 
 // ── RoleBinding ─────────────────────────────────────────────────────
 //
-// Binds a visualization role (positions, normals, scalar field) to
-// an attribute from the source mesh.
-//
-// When the source attribute is double-typed, a CachedAttribute
-// (TransformAttribute → StoredAttribute<float>) is created to
-// provide GPU-ready float data.  When the source is already float,
-// gpu_ready points directly at the source — zero copy.
-//
-// The sync layer reads raw_data() + component_count from gpu_ready
-// to upload to the GPU with the correct VkFormat.
+// Binds a visualization role (positions, normals, scalar field) to an
+// attribute via a MeshAttributeHandle, so raw_data()/size() are direct
+// reads with no name lookup.  For scalar component/magnitude
+// extraction, raw_data() points into an owned extracted buffer.
 
 struct RoleBinding {
-    // Handle to the original attribute in the source mesh.
-    quiver::attributes::ConstTypeErasedAttributeHandle source;
+    auto is_bound() const -> bool { return _attr.valid(); }
+    auto attribute() const -> const MeshAttributeHandle & { return _attr; }
+    // Number of float components per element in raw_data().
+    auto component_count() const -> uint8_t {
+        return !_attr ? 0 : _extracts ? 1 : _attr->component_count;
+    }
+    auto size() const -> std::size_t { return !_attr ? 0 : _attr->count(); }
+    auto raw_data() const -> const void * {
+        if (!_attr) return nullptr;
+        return _extracts ? _extracted.data() : _attr->data.data();
+    }
+    auto clear() -> void;
 
-    // Owned CachedAttribute that materialises a float conversion
-    // of the source.  Null when source is already float-typed and
-    // gpu_ready points directly at source.
-    std::unique_ptr<quiver::attributes::StoredAttributeBase> cached;
-
-    // Handle to whichever attribute the GPU should read from.
-    // Points to cached (if present) or source.
-    quiver::attributes::ConstTypeErasedAttributeHandle gpu_ready;
-
-    // Number of float components per element in gpu_ready (1, 2, 3, 4).
-    uint8_t component_count = 0;
-
-    // Whether this role is bound to a valid attribute.
-    bool is_bound() const { return gpu_ready.valid(); }
-
-    // Number of elements in the gpu_ready attribute.
-    std::size_t size() const;
-
-    // Raw pointer to contiguous float data for GPU upload.
-    // Returns nullptr if not bound.
-    const void *raw_data() const;
-
-    // Reset the binding to empty.
-    void clear();
+  private:
+    friend class MeshData;
+    MeshAttributeHandle _attr;
+    bool _extracts = false; // raw_data() reads _extracted
+    std::vector<float> _extracted;
 };
 
 // ── MeshData ────────────────────────────────────────────────────────
 //
-// Feature that holds CPU-side mesh geometry and appearance parameters.
+// Feature holding CPU-side mesh geometry and appearance parameters as
+// plain buffers: named attributes, triangle/edge index buffers, and
+// role bindings selecting which attributes drive rendering.
 //
-// Backed by a shared quiver::MeshBase.  All attributes from the mesh
-// are enumerable and assignable to visualization roles (positions,
-// normals, scalar field).  The rendering layer reads GPU-ready data
-// directly from the role bindings' raw_data() pointers.
+// Attributes named "vertex_positions" / "vertex_normals" are bound to
+// the position / normal roles automatically when added.  Edges are
+// derived from triangles unless set explicitly.
 //
-// Topology-derived data (triangle and edge index buffers) is
-// extracted from the mesh's skeletons and stored as flat uint32_t
-// arrays, since quiver's topology representation is not contiguous.
-//
-// The version counter is bumped on set_mesh() and role reassignment
-// so the rendering layer knows when GPU buffers need re-uploading.
+// The version counter is bumped on any change so the rendering layer
+// knows when GPU buffers need re-uploading.
 
 class MeshData : public AbstractFeature {
   public:
@@ -103,126 +118,148 @@ class MeshData : public AbstractFeature {
 
     MeshData();
 
-    // ── Mesh source ─────────────────────────────────────────────────
+    // ── Attributes ──────────────────────────────────────────────────
     //
-    // Store a quiver MeshBase as the source of all attribute data.
-    // Enumerates attributes, auto-assigns roles by convention name
-    // (vertex_positions → position, vertex_normals → normal), builds
-    // skeletons, extracts topology indices.
+    // Add (or replace, if the name exists) an attribute.  data holds
+    // count * component_count values, element-major.
 
-    void set_mesh(std::shared_ptr<quiver::MeshBase> mesh);
+    auto add_attribute(std::string name,
+                       AttributeDomain domain,
+                       uint8_t component_count,
+                       std::span<const float> data) -> MeshAttributeHandle;
+    auto add_attribute(std::string name,
+                       AttributeDomain domain,
+                       uint8_t component_count,
+                       std::span<const double> data) -> MeshAttributeHandle;
 
-    const quiver::MeshBase *mesh() const { return _mesh.get(); }
+    auto remove_attribute(std::string_view name) -> bool;
 
-    // ── Attribute discovery ─────────────────────────────────────────
-
-    const std::vector<DiscoveredAttribute> &discovered_attributes() const {
-        return _discovered;
+    // Random-access view of MeshAttributeHandle.
+    auto attributes() const {
+        return _attributes
+               | std::views::transform(
+                   [](const std::shared_ptr<MeshAttribute> &a) {
+                       return MeshAttributeHandle(a);
+                   });
     }
+    // Invalid handle if not found.
+    auto find_attribute(std::string_view name) const -> MeshAttributeHandle;
+
+    // ── Topology ────────────────────────────────────────────────────
+
+    // Element vertex indices as any rank-2 integral mdspan, in either
+    // orientation: N x 3 (one row per triangle) or 3 x N (one column per
+    // triangle).  Orientation is taken from whichever extent is 3 (rows
+    // win if both are).  Any layout is accepted; element-ordered memory
+    // (N x 3 row-major or 3 x N column-major) is copied directly.
+    // Returns false (and changes nothing) if neither extent is 3.
+    template <typename T, typename Extents, typename Layout, typename Accessor>
+        requires(Extents::rank() == 2)
+    auto set_triangle_indices(
+        ::zipper::mdspan<T, Extents, Layout, Accessor> indices) -> bool;
+    // Explicit edges override edges derived from triangles.
+    // Same conventions as set_triangle_indices with 2 indices per edge.
+    template <typename T, typename Extents, typename Layout, typename Accessor>
+        requires(Extents::rank() == 2)
+    auto
+        set_edge_indices(::zipper::mdspan<T, Extents, Layout, Accessor> indices)
+            -> bool;
+
+    auto triangle_indices() const -> std::span<const uint32_t> {
+        return _tri_indices;
+    }
+    auto edge_indices() const -> std::span<const uint32_t> {
+        return _edge_indices;
+    }
+
+    // Remove all attributes, bindings and topology.
+    auto clear() -> void;
 
     // ── Role assignment ─────────────────────────────────────────────
     //
-    // Bind an attribute to a visualization role.  The handle must
-    // reference an attribute owned by the source mesh's
-    // AttributeManager.  If the attribute type is incompatible
-    // (e.g. non-numeric for positions), the binding is rejected
-    // and the role is left unbound.
+    // Bind an attribute (by name, or by handle from attributes()) to a
+    // role.  Returns false (and leaves the role unbound) if the attribute
+    // is missing, not owned by this MeshData, or incompatible:
+    // position/normal require a vertex attribute with >= 1 / >= 2
+    // components; scalar requires a vertex attribute.
     //
-    // For scalar roles, component selects which element of a
-    // multi-component attribute to use: -1 = magnitude,
-    // 0/1/2/... = specific component.
+    // For the scalar role, component selects which element of a
+    // multi-component attribute to use: -1 = magnitude.
 
-    void assign_position(
-        quiver::attributes::ConstTypeErasedAttributeHandle handle);
-    void assign_normal(
-        quiver::attributes::ConstTypeErasedAttributeHandle handle);
-    void
-        assign_scalar(quiver::attributes::ConstTypeErasedAttributeHandle handle,
-                      int component = -1);
+    auto assign_position(std::string_view name) -> bool;
+    auto assign_normal(std::string_view name) -> bool;
+    auto assign_scalar(std::string_view name, int component = -1) -> bool;
+    auto assign_position(const MeshAttributeHandle &attr) -> bool;
+    auto assign_normal(const MeshAttributeHandle &attr) -> bool;
+    auto assign_scalar(const MeshAttributeHandle &attr, int component = -1)
+        -> bool;
+    // Change the extracted component of the current scalar binding.
+    auto set_scalar_component(int component) -> bool;
 
-    // Clear a role binding.
-    void clear_position();
-    void clear_normal();
-    void clear_scalar();
+    auto clear_position() -> void;
+    auto clear_normal() -> void;
+    auto clear_scalar() -> void;
 
-    // ── Role accessors ──────────────────────────────────────────────
+    auto position_binding() const -> const RoleBinding & { return _position; }
+    auto normal_binding() const -> const RoleBinding & { return _normal; }
+    auto scalar_binding() const -> const RoleBinding & { return _scalar; }
 
-    const RoleBinding &position_binding() const { return _position; }
-    const RoleBinding &normal_binding() const { return _normal; }
-    const RoleBinding &scalar_binding() const { return _scalar; }
-
-    int scalar_component() const { return _scalar_component; }
-
-    // ── Topology index buffers ──────────────────────────────────────
-    //
-    // Extracted from the mesh's skeletons.  Triangle indices come
-    // from Skeleton<0> (simplex-vertex connectivity); edge indices
-    // come from Skeleton<1> + IncidentFaceIndices.
-
-    std::span<const uint32_t> triangle_indices() const;
-    std::span<const uint32_t> edge_indices() const;
+    auto scalar_component() const -> int { return _scalar_component; }
 
     // ── Convenience queries ─────────────────────────────────────────
 
-    bool has_positions() const { return _position.is_bound(); }
-    bool has_normals() const { return _normal.is_bound(); }
-    bool has_scalar_field() const { return _scalar.is_bound(); }
-    bool has_triangle_indices() const { return !_tri_indices.empty(); }
-    bool has_edge_indices() const { return !_edge_indices.empty(); }
+    auto has_positions() const -> bool { return _position.is_bound(); }
+    auto has_normals() const -> bool { return _normal.is_bound(); }
+    auto has_scalar_field() const -> bool { return _scalar.is_bound(); }
+    auto has_triangle_indices() const -> bool { return !_tri_indices.empty(); }
+    auto has_edge_indices() const -> bool { return !_edge_indices.empty(); }
 
-    std::size_t vertex_count() const;
-    std::size_t triangle_count() const { return _tri_indices.size() / 3; }
-    std::size_t edge_count() const { return _edge_indices.size() / 2; }
+    auto vertex_count() const -> std::size_t { return _position.size(); }
+    auto triangle_count() const -> std::size_t {
+        return _tri_indices.size() / 3;
+    }
+    auto edge_count() const -> std::size_t { return _edge_indices.size() / 2; }
 
     // ── Dirty tracking ──────────────────────────────────────────────
 
-    uint64_t version() const { return _version; }
+    auto version() const -> uint64_t { return _version; }
 
     // ── Render state ────────────────────────────────────────────────
 
-    RenderState &render_state() { return _render_state; }
-    const RenderState &render_state() const { return _render_state; }
+    auto render_state() -> RenderState & { return _render_state; }
+    auto render_state() const -> const RenderState & { return _render_state; }
 
   private:
-    // Source mesh (shared ownership with the reader/caller).
-    std::shared_ptr<quiver::MeshBase> _mesh;
+    auto insert_attribute(MeshAttribute attr) -> MeshAttributeHandle;
+    auto owns(const MeshAttributeHandle &attr) const -> bool;
+    // Re-validate bindings that reference attr after it changed in place.
+    auto refresh_bindings(const MeshAttributeHandle &attr) -> void;
+    auto derive_edges() -> void;
+    auto assign_triangles(std::vector<uint32_t> flat) -> void;
+    auto assign_edges(std::vector<uint32_t> flat) -> void;
 
-    // All attributes discovered from the source mesh.
-    std::vector<DiscoveredAttribute> _discovered;
+    static auto bind_vector(const MeshAttributeHandle &attr,
+                            uint8_t min_components) -> RoleBinding;
+    static auto bind_scalar(const MeshAttributeHandle &attr, int component)
+        -> RoleBinding;
 
-    // Role bindings (position, normal, scalar).
+    std::vector<std::shared_ptr<MeshAttribute>> _attributes;
+
     RoleBinding _position;
     RoleBinding _normal;
     RoleBinding _scalar;
     int _scalar_component = -1;
 
-    // Flat index buffers extracted from mesh topology.
     std::vector<uint32_t> _tri_indices;
     std::vector<uint32_t> _edge_indices;
-
-    // ── Private helpers ─────────────────────────────────────────────
-
-    // Enumerate all attributes from the source mesh into _discovered.
-    void discover_attributes();
-
-    // Extract triangle and edge index buffers from mesh topology.
-    void extract_topology_indices();
-
-    // Build a RoleBinding for a vector-valued attribute (positions/normals).
-    // Returns an unbound RoleBinding if the handle is invalid or incompatible.
-    static RoleBinding build_vector_binding(
-        quiver::attributes::ConstTypeErasedAttributeHandle handle);
-
-    // Build a RoleBinding for a scalar attribute (single float per vertex).
-    // Extracts a specific component from multi-component types, or magnitude.
-    static RoleBinding build_scalar_binding(
-        quiver::attributes::ConstTypeErasedAttributeHandle handle,
-        int component);
+    bool _explicit_edges = false;
 
     RenderState _render_state;
     uint64_t _version = 0;
 };
 
 } // namespace balsa::scene_graph
+
+#include "MeshData.hxx"
 
 #endif
