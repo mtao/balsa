@@ -56,8 +56,6 @@ class MeshScene : public SceneBase {
     // Initialize the pipeline manager and all VulkanMeshDrawables.
     void initialize(Film &film) override;
 
-    // Apply deferred BVH overlay updates before the render pass.
-    void begin_render_pass(Film &film) override;
 
     // Draw all visible drawables.
     void draw(Film &film) override;

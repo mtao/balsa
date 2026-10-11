@@ -3,7 +3,7 @@
 // Usage:  mesh_viewer_qt [--input path/to/model.{obj,msh}]
 //         mesh_viewer_qt path/to/model.{obj,msh}
 //
-// Loads an OBJ or MSH mesh via quiver I/O, renders it with Phong
+// Loads an OBJ mesh, renders it with Phong
 // shading, and provides Qt dock panels for scene graph navigation
 // and mesh property editing.
 //
@@ -33,7 +33,7 @@
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
-// that transitively include TBB (via quiver), then restore it.
+// that transitively include TBB (via zipper <execution>), then restore it.
 #undef emit
 
 #include <balsa/scene_graph/MeshData.hpp>
@@ -45,8 +45,7 @@
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <quiver/attributes/StoredAttribute.hpp>
-#include <quiver/io/mesh_io.hpp>
+#include <balsa/scene_graph/mesh_io.hpp>
 
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
 #define emit
@@ -218,25 +217,14 @@ class MeshViewerMainWindow : public QMainWindow {
     void load_mesh(const std::filesystem::path &path) {
         spdlog::info("Loading mesh: {}", path.string());
 
-        // Use quiver's format-dispatching reader (OBJ, MSH, ...).
-        auto result = quiver::io::read_mesh(path);
-        if (!result) {
-            spdlog::error("Failed to load mesh: {}", path.string());
-            return;
-        }
-        auto mesh = std::move(*result);
-
-        spdlog::info("  Mesh dimension: {}",
-                     static_cast<int>(mesh->dimension()));
-
-        // Add a mesh Object to the scene graph.
+        // Add a mesh Object to the scene graph and fill its MeshData.
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
         auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
-
-        // set_mesh() enumerates attributes, auto-assigns roles by
-        // convention name (vertex_positions -> position, vertex_normals
-        // -> normal), builds skeletons, and extracts topology indices.
-        mesh_data->set_mesh(mesh);
+        if (auto res = sg::load_mesh(*mesh_data, path); !res) {
+            spdlog::error("Failed to load mesh: {}", res.error());
+            _scene->remove_mesh(&mesh_obj);
+            return;
+        }
 
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.

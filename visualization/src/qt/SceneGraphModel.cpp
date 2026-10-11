@@ -2,7 +2,7 @@
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
-// that transitively include TBB (via quiver), then restore it.
+// that transitively include TBB (via zipper <execution>), then restore it.
 #undef emit
 
 #include "balsa/scene_graph/Object.hpp"

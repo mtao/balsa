@@ -1,5 +1,4 @@
 #include "balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp"
-#include "balsa/scene_graph/BVHData.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/MeshData.hpp"
@@ -99,7 +98,6 @@ static bool combo_cull_mode(const char *label, CullMode &value) {
 
 static const char *icon_for_object(const scene_graph::Object &obj) {
     if (obj.find_feature<scene_graph::Camera>()) return "[C]";
-    if (obj.find_feature<scene_graph::BVHData>()) return "[B]";
     if (obj.find_feature<scene_graph::MeshData>()) return "[M]";
     return "[O]"; // Empty / generic object
 }
@@ -492,25 +490,6 @@ static bool draw_object_node(scene_graph::Object &obj,
             return changed;
         }
 
-        // ── BVH Overlay ─────────────────────────────────────────────
-        auto *ctx_mesh = obj.find_feature<scene_graph::MeshData>();
-        if (ctx_mesh && ctx_mesh->has_triangle_indices()) {
-            ImGui::Separator();
-            auto *existing_bvh = obj.find_feature<scene_graph::BVHData>();
-            if (!existing_bvh) {
-                if (ImGui::MenuItem("Add BVH Overlay")) {
-                    auto &bvh = obj.emplace_feature<scene_graph::BVHData>();
-                    bvh.mark_dirty();
-                    changed = true;
-                }
-            } else {
-                if (ImGui::MenuItem("Remove BVH Overlay")) {
-                    existing_bvh->mark_for_removal();
-                    changed = true;
-                }
-            }
-        }
-
         ImGui::EndPopup();
     }
 
@@ -732,7 +711,7 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
             // Let the user select which mesh attribute is bound to each
             // visualization role (positions, normals, scalar field).
             if (ImGui::CollapsingHeader("Attribute Bindings")) {
-                const auto &discovered = mesh_data->discovered_attributes();
+                const auto &discovered = mesh_data->attributes();
 
                 // Helper lambda: draw a combo that lets the user pick an
                 // attribute for a role.  Returns true if the selection changed.
@@ -751,8 +730,7 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     for (int i = 0; i < static_cast<int>(discovered.size());
                          ++i) {
                         if (binding.is_bound()
-                            && &binding.source.attribute()
-                                   == &discovered[i].handle.attribute()) {
+                            && binding.source == discovered[i].name) {
                             current_label = discovered[i].name.c_str();
                             current_idx = i;
                             break;
@@ -776,12 +754,12 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                                 sizeof(item_label),
                                 "%s (dim%d, %u comp, %zu elts)",
                                 discovered[i].name.c_str(),
-                                static_cast<int>(discovered[i].dimension),
+                                static_cast<int>(discovered[i].domain),
                                 static_cast<unsigned>(
                                     discovered[i].component_count),
-                                discovered[i].count);
+                                discovered[i].count());
                             if (ImGui::Selectable(item_label, selected)) {
-                                assign_fn(discovered[i].handle);
+                                assign_fn(discovered[i].name);
                                 role_changed = true;
                             }
                             if (selected) ImGui::SetItemDefaultFocus();
@@ -798,8 +776,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     mesh_data->position_binding(),
                     [&](auto h) { mesh_data->assign_position(h); },
                     [&]() { mesh_data->clear_position(); },
-                    [](const scene_graph::DiscoveredAttribute &da) {
-                        return da.is_floating_point && da.component_count >= 1;
+                    [](const scene_graph::MeshAttribute &da) {
+                        return da.domain == scene_graph::AttributeDomain::Vertex
+                               && da.component_count >= 1;
                     });
 
                 // Normal role: any floating-point attribute with 2+ components.
@@ -808,11 +787,12 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                     mesh_data->normal_binding(),
                     [&](auto h) { mesh_data->assign_normal(h); },
                     [&]() { mesh_data->clear_normal(); },
-                    [](const scene_graph::DiscoveredAttribute &da) {
-                        return da.is_floating_point && da.component_count >= 2;
+                    [](const scene_graph::MeshAttribute &da) {
+                        return da.domain == scene_graph::AttributeDomain::Vertex
+                               && da.component_count >= 2;
                     });
 
-                // Scalar role: any attribute (will be converted to float).
+                // Scalar role: any vertex attribute.
                 changed |= draw_role_combo(
                     "Scalar##role",
                     mesh_data->scalar_binding(),
@@ -821,8 +801,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                                                  mesh_data->scalar_component());
                     },
                     [&]() { mesh_data->clear_scalar(); },
-                    [](const scene_graph::DiscoveredAttribute &da) {
-                        return da.component_count >= 1;
+                    [](const scene_graph::MeshAttribute &da) {
+                        return da.domain == scene_graph::AttributeDomain::Vertex
+                               && da.component_count >= 1;
                     });
 
                 // Scalar component selector (only if scalar is bound to a
@@ -830,15 +811,9 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                 if (mesh_data->has_scalar_field()) {
                     // Find the source attribute's component count.
                     const auto &scl_bind = mesh_data->scalar_binding();
-                    uint8_t src_components = 0;
-                    for (const auto &da : discovered) {
-                        if (scl_bind.is_bound()
-                            && &scl_bind.source.attribute()
-                                   == &da.handle.attribute()) {
-                            src_components = da.component_count;
-                            break;
-                        }
-                    }
+                    const auto *src = mesh_data->find_attribute(scl_bind.source);
+                    uint8_t src_components =
+                        src != nullptr ? src->component_count : 0;
                     if (src_components > 1) {
                         int comp = mesh_data->scalar_component();
                         const char *comp_labels[] = {
@@ -864,101 +839,17 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
                 if (!discovered.empty() && ImGui::TreeNode("All Attributes")) {
                     for (const auto &da : discovered) {
                         ImGui::BulletText(
-                            "%s: dim=%d, %u comp, %zu elts%s",
+                            "%s: dim=%d, %u comp, %zu elts",
                             da.name.c_str(),
-                            static_cast<int>(da.dimension),
+                            static_cast<int>(da.domain),
                             static_cast<unsigned>(da.component_count),
-                            da.count,
-                            da.is_floating_point ? " [float]" : "");
+                            da.count());
                     }
                     ImGui::TreePop();
                 }
             }
         }
 
-        // ── BVH Overlay ─────────────────────────────────────────────
-        auto *bvh_data = obj->find_feature<scene_graph::BVHData>();
-        if (bvh_data) {
-            if (ImGui::CollapsingHeader("BVH Overlay",
-                                        ImGuiTreeNodeFlags_DefaultOpen)) {
-                // Enabled toggle
-                if (ImGui::Checkbox("Show Overlay", &bvh_data->enabled)) {
-                    bvh_data->mark_overlay_dirty();
-                    changed = true;
-                }
-
-                if (bvh_data->enabled) {
-                    ImGui::Separator();
-
-                    // KDOP type selector
-                    ImGui::Text("Bounding Volume Type:");
-                    int prev_k = bvh_data->kdop_k;
-                    ImGui::RadioButton("AABB (K=3)", &bvh_data->kdop_k, 3);
-                    ImGui::SameLine();
-                    ImGui::RadioButton("9-DOP", &bvh_data->kdop_k, 9);
-                    ImGui::SameLine();
-                    ImGui::RadioButton("13-DOP", &bvh_data->kdop_k, 13);
-                    if (bvh_data->kdop_k != prev_k) {
-                        bvh_data->mark_dirty();
-                        changed = true;
-                    }
-
-                    ImGui::Separator();
-
-                    // Build strategy selector
-                    ImGui::Text("Build Strategy:");
-                    static constexpr const char *strategy_names[] = {
-                        "SAH (Best Quality)",
-                        "Object Median (Balanced)",
-                        "Spatial Median",
-                        "LBVH (Fastest)"};
-                    int strategy_idx = static_cast<int>(bvh_data->strategy);
-                    if (ImGui::Combo(
-                            "##strategy", &strategy_idx, strategy_names, 4)) {
-                        bvh_data->strategy =
-                            static_cast<quiver::spatial::BVHBuildStrategy>(
-                                strategy_idx);
-                        bvh_data->mark_dirty();
-                        changed = true;
-                    }
-
-                    // Max leaf size
-                    int leaf_size = static_cast<int>(bvh_data->max_leaf_size);
-                    if (ImGui::SliderInt("Max Leaf Size", &leaf_size, 1, 32)) {
-                        bvh_data->max_leaf_size =
-                            static_cast<uint16_t>(leaf_size);
-                        bvh_data->mark_dirty();
-                        changed = true;
-                    }
-
-                    ImGui::Separator();
-
-                    // Tree depth slider
-                    if (bvh_data->is_built()) {
-                        ImGui::Text("BVH height: %d", bvh_data->bvh_height());
-                        int prev_depth = bvh_data->display_depth;
-                        ImGui::SliderInt("Display Depth",
-                                         &bvh_data->display_depth,
-                                         0,
-                                         bvh_data->bvh_height());
-                        if (bvh_data->display_depth != prev_depth) {
-                            bvh_data->mark_overlay_dirty();
-                            changed = true;
-                        }
-                    } else {
-                        ImGui::TextDisabled("BVH not yet built");
-                    }
-
-                    ImGui::Separator();
-
-                    // Overlay color
-                    if (ImGui::ColorEdit4("BV Color", bvh_data->color)) {
-                        bvh_data->mark_overlay_dirty();
-                        changed = true;
-                    }
-                }
-            }
-        }
     }
     ImGui::End();
 
