@@ -8,7 +8,6 @@ class Object;
 namespace balsa::visualization::vulkan {
 
 class MeshScene;
-struct MeshRenderState;
 
 namespace imgui {
 
@@ -18,7 +17,6 @@ namespace imgui {
         scene_graph::Object *selected_object = nullptr;
         bool show_scene_panel = true;
         bool show_property_panel = true;
-        bool show_lighting_panel = true;
 
         // Drag-and-drop state (internal)
         scene_graph::Object *drag_source = nullptr;
@@ -44,23 +42,9 @@ namespace imgui {
     // inline rename (double-click or F2).
     bool draw_scene_tree(MeshScene &scene, MeshPanelState &state);
 
-    // Draw the property/controls panel for the currently-selected
-    // object.  Shows render state controls (shading, color, lighting,
-    // etc.) and per-object properties (name, visibility, transform).
-    // If nothing is selected, shows a placeholder message.
+    // Draw the registered control panels (see controls/Panel.hpp) for the
+    // selected object and scene.
     bool draw_property_panel(MeshScene &scene, MeshPanelState &state);
-
-    // Draw render state controls for a single MeshRenderState.
-    // has_normals indicates whether the mesh has per-vertex normals
-    // in its buffer — controls which shading/normal options are available.
-    // Returns true if any value changed.
-    bool draw_render_state_controls(MeshRenderState &state, bool has_normals);
-
-    // Draw the scene-level lighting panel.  Shows controls for the
-    // scene's headlight (direction and color) and an enabled toggle.
-    // Per-mesh material response (ambient, specular, shininess) is
-    // controlled per-mesh in the Render State > Material section.
-    bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state);
 
     // Convenience: draw both scene tree and property panel in one call.
     bool draw_mesh_controls(MeshScene &scene, MeshPanelState &state);

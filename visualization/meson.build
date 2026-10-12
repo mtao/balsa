@@ -155,6 +155,7 @@ if get_option('imgui')
   visualization_public_deps += imgui_dep
   visualization_sources += 'src/vulkan/imgui_integration.cpp'
   visualization_sources += 'src/vulkan/imgui/mesh_controls_panel.cpp'
+  visualization_sources += 'src/vulkan/imgui/controls.cpp'
   visualization_sources += 'src/vulkan/imgui/image_controls_panel.cpp'
   visualization_sources += imgui_backend_sources
 endif

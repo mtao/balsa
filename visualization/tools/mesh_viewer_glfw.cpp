@@ -87,6 +87,10 @@ class MeshViewerScene : public vk_viz::MeshScene {
 
   private:
     vk_viz::ImGuiIntegration _imgui;
+  public:
+    vk_viz::imgui::MeshPanelState &panel_state() { return _panel_state; }
+
+  private:
     vk_viz::imgui::MeshPanelState _panel_state;
     OpenFileCallback _open_file_cb;
 
@@ -111,9 +115,6 @@ class MeshViewerScene : public vk_viz::MeshScene {
                     "Scene Graph", nullptr, &_panel_state.show_scene_panel);
                 ImGui::MenuItem(
                     "Properties", nullptr, &_panel_state.show_property_panel);
-                ImGui::MenuItem("Scene Lighting",
-                                nullptr,
-                                &_panel_state.show_lighting_panel);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -223,6 +224,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         // stays pristine — normalization is applied via the Object's
         // local transform.
         viz::normalize_to_unit_box(mesh_obj, *mesh_data);
+        _scene->panel_state().selected_object = &mesh_obj;
 
         // If the mesh has edges but no triangles, default to wireframe.
         if (!mesh_data->has_triangle_indices()
