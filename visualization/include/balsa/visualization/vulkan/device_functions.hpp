@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_DEVICE_FUNCTIONS_HPP)
-#define BALSA_VISUALIZATION_VULKAN_DEVICE_FUNCTIONS_HPP
-
+#pragma once
 #include <vulkan/vulkan_raii.hpp>
 #include <set>
 #include "film.hpp"
@@ -35,5 +33,3 @@ struct DeviceFunctions {
       pfnVkGetPhysicalDeviceSurfaceSupportKHR = nullptr;
 };
 }// namespace balsa::visualization::vulkan
-
-#endif

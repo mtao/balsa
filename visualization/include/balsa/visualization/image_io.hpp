@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_IMAGE_IO_HPP)
-#define BALSA_VISUALIZATION_IMAGE_IO_HPP
-
+#pragma once
 #include <cstdint>
 #include <expected>
 #include <span>
@@ -45,5 +43,3 @@ auto save_ppm(const std::string &path,
     -> std::expected<void, ImageIOError>;
 
 } // namespace balsa::visualization
-
-#endif

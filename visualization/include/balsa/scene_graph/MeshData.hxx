@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_MESH_DATA_HXX)
-#define BALSA_SCENE_GRAPH_MESH_DATA_HXX
-
+#pragma once
 #include "MeshData.hpp"
 
 #include <concepts>
@@ -87,5 +85,3 @@ auto MeshData::set_edge_indices(
 }
 
 } // namespace balsa::scene_graph
-
-#endif

@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_IMAGE_DATA_HPP)
-#define BALSA_SCENE_GRAPH_IMAGE_DATA_HPP
-
+#pragma once
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
@@ -125,5 +123,3 @@ class ImageData : public AbstractFeature {
 };
 
 } // namespace balsa::scene_graph
-
-#endif

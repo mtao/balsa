@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_BUFFER_HPP)
-#define BALSA_VISUALIZATION_VULKAN_BUFFER_HPP
-
+#pragma once
 #include <vulkan/vulkan.hpp>
 #include <span>
 #include <cstring>
@@ -79,5 +77,3 @@ class VulkanBuffer {
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

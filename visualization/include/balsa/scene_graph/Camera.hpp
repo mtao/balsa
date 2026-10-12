@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_CAMERA_HPP_NEW)
-#define BALSA_SCENE_GRAPH_CAMERA_HPP_NEW
-
+#pragma once
 #include "AbstractFeature.hpp"
 #include "types.hpp"
 
@@ -69,5 +67,3 @@ class Camera : public AbstractFeature {
 };
 
 }// namespace balsa::scene_graph
-
-#endif

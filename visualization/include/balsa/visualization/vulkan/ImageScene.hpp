@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_IMAGE_SCENE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_IMAGE_SCENE_HPP
-
+#pragma once
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -146,5 +144,3 @@ class ImageScene : public SceneBase {
 };
 
 } // namespace balsa::visualization::vulkan
-
-#endif

@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_QT_MESH_CONTROLS_WIDGET_HPP)
-#define BALSA_VISUALIZATION_QT_MESH_CONTROLS_WIDGET_HPP
-
+#pragma once
 #include <QWidget>
 
 // Forward declarations — avoid including heavy Vulkan/Qt headers here.
@@ -249,5 +247,3 @@ class MeshControlsWidget : public QWidget {
 };
 
 } // namespace balsa::visualization::qt
-
-#endif

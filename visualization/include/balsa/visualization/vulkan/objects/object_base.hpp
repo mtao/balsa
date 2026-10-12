@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_OBJECTS_OBJECT_BASE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_OBJECTS_OBJECT_BASE_HPP
-
+#pragma once
 #include <vector>
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan.hpp>
@@ -19,5 +17,3 @@ class ObjectBase {
   private:
 };
 }// namespace balsa::visualization::vulkan::objects
-
-#endif

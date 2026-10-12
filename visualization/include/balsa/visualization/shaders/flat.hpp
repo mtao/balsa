@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_SHADERS_FLAT_HPP)
-#define BALSA_VISUALIZATION_SHADERS_FLAT_HPP
-
+#pragma once
 #include <memory>
 #include <limits>
 #include <vulkan/vulkan_core.h>
@@ -31,4 +29,3 @@ std::vector<uint32_t> FlatShader<ET>::frag_spirv() const {
       source ? std::string_view{*source} : std::string_view{}, AbstractShader::ShaderType::Fragment);
 }
 }// namespace balsa::visualization::shaders
-#endif

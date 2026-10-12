@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_DRAWABLE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_DRAWABLE_HPP
-
+#pragma once
 #include "balsa/scene_graph/Drawable.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 
@@ -22,5 +20,3 @@ class VulkanDrawable : public scene_graph::Drawable {
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

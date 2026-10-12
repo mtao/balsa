@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_ABSTRACT_FEATURE_HPP)
-#define BALSA_SCENE_GRAPH_ABSTRACT_FEATURE_HPP
-
+#pragma once
 namespace balsa::scene_graph {
 
 class Object;
@@ -35,5 +33,3 @@ class AbstractFeature {
 };
 
 }// namespace balsa::scene_graph
-
-#endif

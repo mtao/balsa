@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_WINDOW_HPP)
-#define BALSA_VISUALIZATION_VULKAN_WINDOW_HPP
-
+#pragma once
 #include <memory>
 #include <string_view>
 #include <array>
@@ -61,5 +59,3 @@ class Window {
     std::shared_ptr<InputHandler> _input_handler;
 };
 }// namespace balsa::visualization::vulkan
-
-#endif

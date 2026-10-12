@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_QT_SCENE_GRAPH_MODEL_HPP)
-#define BALSA_VISUALIZATION_QT_SCENE_GRAPH_MODEL_HPP
-
+#pragma once
 #include <QAbstractItemModel>
 #include <QIcon>
 #include <QMimeData>
@@ -126,5 +124,3 @@ class SceneGraphModel : public QAbstractItemModel {
 };
 
 }// namespace balsa::visualization::qt
-
-#endif

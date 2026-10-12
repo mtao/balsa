@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_MESH_DATA_HPP)
-#define BALSA_SCENE_GRAPH_MESH_DATA_HPP
-
+#pragma once
 #include <cstdint>
 #include <memory>
 #include <ranges>
@@ -261,5 +259,3 @@ class MeshData : public AbstractFeature {
 } // namespace balsa::scene_graph
 
 #include "MeshData.hxx"
-
-#endif

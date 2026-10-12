@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_INPUT_HANDLER_HPP)
-#define BALSA_VISUALIZATION_INPUT_HANDLER_HPP
-
+#pragma once
 namespace balsa::visualization {
 
 // Modifier key bitmask values (matches GLFW modifier bits)
@@ -55,5 +53,3 @@ class InputHandler {
 };
 
 }// namespace balsa::visualization
-
-#endif

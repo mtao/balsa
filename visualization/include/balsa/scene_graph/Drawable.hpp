@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_DRAWABLE_HPP)
-#define BALSA_SCENE_GRAPH_DRAWABLE_HPP
-
+#pragma once
 #include "AbstractFeature.hpp"
 #include "DrawableGroup.hpp"
 
@@ -39,5 +37,3 @@ class Drawable : public AbstractFeature {
 };
 
 }// namespace balsa::scene_graph
-
-#endif

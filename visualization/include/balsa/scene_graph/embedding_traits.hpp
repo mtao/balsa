@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_EMBEDDING_TRAITS_HPP)
-#define BALSA_SCENE_GRAPH_EMBEDDING_TRAITS_HPP
-
+#pragma once
 // #include "balsa/types/is_specialization_of.hpp"
 #include <balsa/zipper/types.hpp>
 
@@ -32,4 +30,3 @@ namespace concepts {
 }// namespace concepts
 
 }// namespace balsa::scene_graph
-#endif

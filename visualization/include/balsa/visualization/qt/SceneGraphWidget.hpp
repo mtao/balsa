@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_QT_SCENE_GRAPH_WIDGET_HPP)
-#define BALSA_VISUALIZATION_QT_SCENE_GRAPH_WIDGET_HPP
-
+#pragma once
 #include <QWidget>
 
 class QTreeView;
@@ -102,5 +100,3 @@ class SceneGraphWidget : public QWidget {
 };
 
 }// namespace balsa::visualization::qt
-
-#endif

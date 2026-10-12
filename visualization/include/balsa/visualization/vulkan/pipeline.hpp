@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_PIPELINE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_PIPELINE_HPP
-
+#pragma once
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
 
@@ -32,5 +30,3 @@ class Pipeline {
     vk::PipelineBindPoint _bind_point = vk::PipelineBindPoint::eGraphics;
 };
 }// namespace balsa::visualization::vulkan
-
-#endif

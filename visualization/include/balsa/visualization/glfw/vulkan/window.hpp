@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_GLFW_VULKAN_WINDOW_HPP)
-#define BALSA_VISUALIZATION_GLFW_VULKAN_WINDOW_HPP
-
+#pragma once
 #include <string>
 #include <string_view>
 #include <array>
@@ -65,5 +63,3 @@ class Window : public visualization::vulkan::Window {
 };
 
 }// namespace balsa::visualization::glfw::vulkan
-
-#endif

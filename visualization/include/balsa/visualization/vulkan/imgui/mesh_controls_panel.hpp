@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_IMGUI_MESH_CONTROLS_PANEL_HPP)
-#define BALSA_VISUALIZATION_VULKAN_IMGUI_MESH_CONTROLS_PANEL_HPP
-
+#pragma once
 #include <cstddef>
 
 namespace balsa::scene_graph {
@@ -69,5 +67,3 @@ namespace imgui {
 
 }// namespace imgui
 }// namespace balsa::visualization::vulkan
-
-#endif

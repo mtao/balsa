@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_NATIVE_FILM_HPP)
-#define BALSA_VISUALIZATION_VULKAN_NATIVE_FILM_HPP
-
+#pragma once
 #include <vulkan/vulkan_raii.hpp>
 #include <set>
 #include <optional>
@@ -229,4 +227,3 @@ class NativeFilm : public Film {
     const FrameResources &frame_resources(size_t index) const { return _frame_resources.at(index); }
 };
 }// namespace balsa::visualization::vulkan
-#endif

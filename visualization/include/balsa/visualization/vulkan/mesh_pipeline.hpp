@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_MESH_PIPELINE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_MESH_PIPELINE_HPP
-
+#pragma once
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -177,5 +175,3 @@ class MeshPipelineManager {
 };
 
 } // namespace balsa::visualization::vulkan
-
-#endif

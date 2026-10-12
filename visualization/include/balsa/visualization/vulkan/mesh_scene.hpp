@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_MESH_SCENE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_MESH_SCENE_HPP
-
+#pragma once
 #include <memory>
 #include <string>
 #include <vector>
@@ -175,5 +173,3 @@ class MeshScene : public SceneBase {
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

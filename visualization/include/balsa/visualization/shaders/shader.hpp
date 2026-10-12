@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_SHADERS_SHADER_HPP)
-#define BALSA_VISUALIZATION_SHADERS_SHADER_HPP
-
+#pragma once
 #include <memory>
 #include <limits>
 #include "balsa/scene_graph/embedding_traits.hpp"
@@ -25,4 +23,3 @@ void Shader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
     }
 }
 }// namespace balsa::visualization::shaders
-#endif
