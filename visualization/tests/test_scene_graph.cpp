@@ -1344,3 +1344,81 @@ TEST_CASE("normalize_to_unit_box_centers_mesh", "[scene_graph][normalize]") {
     CHECK(apply(14, 22, 31, 0) == Catch::Approx(0.5f));
     CHECK(apply(10, 20, 30, 0) == Catch::Approx(-0.5f));
 }
+
+#include <balsa/visualization/controls/Panel.hpp>
+
+TEST_CASE("controls_builtin_panels", "[controls]") {
+    namespace ctl = balsa::visualization::controls;
+    namespace sg = balsa::scene_graph;
+    using balsa::visualization::vulkan::NormalSource;
+    ctl::register_builtin_panels();
+    ctl::register_builtin_panels(); // idempotent
+    CHECK(ctl::registered_panels().size() == 8);
+    REQUIRE(ctl::tabs().size() == 4);
+    CHECK(ctl::tabs()[1]->id == "data");
+
+    ctl::Context empty;
+    CHECK(ctl::panels_for(empty, "object").empty());
+    CHECK(ctl::panels_for(empty, "data").empty());
+
+    sg::Object obj("m");
+    auto &md = obj.emplace_feature<sg::MeshData>();
+    const std::vector<float> xyz{0, 0, 0, 1, 0, 0, 0, 1, 0};
+    md.add_attribute("vertex_positions", sg::AttributeDomain::Vertex, 3,
+                     std::span<const float>(xyz));
+    ctl::Context ctx{nullptr, &obj};
+
+    auto object_panels = ctl::panels_for(ctx, "object");
+    REQUIRE(object_panels.size() == 2);
+    CHECK(object_panels[0]->id == "object.object");
+    CHECK(ctl::panels_for(ctx, "data").size() == 4);
+    CHECK(ctl::panels_for(ctx, "scene").empty()); // no scene
+
+    // get/set round-trip through the Transform panel.
+    ctl::Layout transform;
+    object_panels[1]->draw(ctx, transform);
+    int seen = 0;
+    transform.for_each_property([&](const ctl::Property &p) {
+        if (const auto *v = std::get_if<ctl::Vec3Value>(&p.value);
+            v && p.label == "Translation") {
+            v->set(sg::Vec3f{1.0f, 2.0f, 3.0f});
+            CHECK(obj.translation() == sg::Vec3f{1.0f, 2.0f, 3.0f});
+            CHECK(v->get() == sg::Vec3f{1.0f, 2.0f, 3.0f});
+            ++seen;
+        }
+    });
+    CHECK(seen == 1);
+
+    // Material tab follows the normal source (Blender-style poll).
+    CHECK(ctl::panels_for(ctx, "material").size() == 1);
+    md.render_state().normal_source = NormalSource::None;
+    CHECK(ctl::panels_for(ctx, "material").empty());
+
+    // Shading combo: "From Attribute" disabled without normals; setting a
+    // value runs constrain().
+    ctl::Layout shading;
+    ctl::panels_for(ctx, "data")[1]->draw(ctx, shading);
+    shading.for_each_property([&](const ctl::Property &p) {
+        const auto *e = std::get_if<ctl::EnumValue>(&p.value);
+        if (!e || p.label != "Normals") return;
+        CHECK_FALSE(e->item_enabled(0));
+        e->set(0); // FromAttribute without normals -> downgraded
+        CHECK(md.render_state().normal_source == NormalSource::ComputedInShader);
+        ++seen;
+    });
+    CHECK(seen == 2);
+
+    // Attribute binding enum lists attributes and reflects the binding.
+    ctl::Layout attrs;
+    ctl::panels_for(ctx, "data")[3]->draw(ctx, attrs);
+    attrs.for_each_property([&](const ctl::Property &p) {
+        const auto *e = std::get_if<ctl::EnumValue>(&p.value);
+        if (!e || p.label != "Position") return;
+        CHECK(e->items().size() == 2);
+        CHECK(e->get() == 1);
+        e->set(0);
+        CHECK_FALSE(md.has_positions());
+        ++seen;
+    });
+    CHECK(seen == 3);
+}
