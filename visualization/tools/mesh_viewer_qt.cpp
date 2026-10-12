@@ -9,10 +9,10 @@
 //
 // Camera: left-drag orbit, right-drag pan, scroll zoom.
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
-#include <numbers>
 #include <span>
 #include <string>
 #include <vector>
@@ -48,6 +48,8 @@
 
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/visualization/mesh_conversion.hpp>
+#include <balsa/visualization/normalize_mesh.hpp>
+#include <zipper/transform/common.hpp>
 
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
 #define emit
@@ -56,270 +58,232 @@ namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
 namespace sg = balsa::scene_graph;
 
-// ── MeshViewerMainWindow ────────────────────────────────────────────
-//
-// QMainWindow that embeds a Qt Vulkan window and a MeshControlsWidget
-// dock.  Holds the scene shared_ptr until it's transferred to the
-// Vulkan window.
+namespace balsa::visualization::tools {
 
-class MeshViewerMainWindow : public QMainWindow {
-  public:
-    MeshViewerMainWindow(QVulkanInstance *inst,
-                         const std::filesystem::path &initial_obj)
-      : QMainWindow(nullptr) {
-        setWindowTitle("Balsa Mesh Viewer (Qt)");
-        resize(1280, 800);
+namespace {
 
-        constexpr static int default_width = 900;
-        constexpr static int default_height = 800;
+    // ── MeshViewerMainWindow ────────────────────────────────────────────
+    //
+    // QMainWindow that embeds a Qt Vulkan window and a MeshControlsWidget
+    // dock.  Holds the scene shared_ptr until it's transferred to the
+    // Vulkan window.
 
-        // ── Create the Vulkan window ─────────────────────────────────
-        _vk_window = new viz::qt::vulkan::Window(
-            "Balsa Mesh Viewer (Qt)", default_width, default_height);
-        _vk_window->setVulkanInstance(inst);
+    class MeshViewerMainWindow : public QMainWindow {
+      public:
+        MeshViewerMainWindow(QVulkanInstance *inst,
+                             const std::filesystem::path &initial_obj)
+          : QMainWindow(nullptr) {
+            setWindowTitle("Balsa Mesh Viewer (Qt)");
+            resize(1280, 800);
 
-        // Wrap QVulkanWindow in a widget for embedding
-        QWidget *wrapper = QWidget::createWindowContainer(_vk_window, this);
-        setCentralWidget(wrapper);
+            constexpr static int default_width = 900;
+            constexpr static int default_height = 800;
 
-        // ── Create the scene ─────────────────────────────────────────
-        _scene = std::make_shared<vk_viz::MeshScene>();
+            // ── Create the Vulkan window ─────────────────────────────────
+            _vk_window = new viz::qt::vulkan::Window(
+                "Balsa Mesh Viewer (Qt)", default_width, default_height);
+            _vk_window->setVulkanInstance(inst);
 
-        // ── Set up orbit camera ──────────────────────────────────────
-        _camera = std::make_shared<vk_viz::OrbitCameraController>(_scene.get());
-        _camera->set_distance(2.5f);
-        _camera->set_angles(0.4f, 0.3f);
-        _vk_window->set_input_handler(_camera);
+            // Wrap QVulkanWindow in a widget for embedding
+            QWidget *wrapper = QWidget::createWindowContainer(_vk_window, this);
+            setCentralWidget(wrapper);
 
-        // Initial projection
-        constexpr float pi = std::numbers::pi_v<float>;
-        _scene->set_perspective(45.0f * pi / 180.0f,
-                                static_cast<float>(default_width)
-                                    / static_cast<float>(default_height),
-                                0.01f,
-                                100.0f);
+            // ── Create the scene ─────────────────────────────────────────
+            _scene = std::make_shared<vk_viz::MeshScene>();
 
-        // ── Create the scene graph outliner dock ─────────────────────
-        _outliner = new viz::qt::SceneGraphWidget();
-        _outliner->set_root(&_scene->root());
+            // ── Set up orbit camera ──────────────────────────────────────
+            _camera =
+                std::make_shared<vk_viz::OrbitCameraController>(_scene.get());
+            _camera->set_distance(2.5f);
+            _camera->set_angles(0.4f, 0.3f);
+            _vk_window->set_input_handler(_camera);
 
-        _outliner_dock = new QDockWidget("Scene Graph", this);
-        _outliner_dock->setWidget(_outliner);
-        _outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea
-                                        | Qt::RightDockWidgetArea);
-        addDockWidget(Qt::RightDockWidgetArea, _outliner_dock);
+            // Initial projection
+            _scene->set_perspective(::zipper::transform::radians(45.0f),
+                                    static_cast<float>(default_width)
+                                        / static_cast<float>(default_height),
+                                    0.01f,
+                                    100.0f);
 
-        // ── Create the mesh properties dock ──────────────────────────
-        _controls = new viz::qt::MeshControlsWidget();
-        _controls->set_scene(_scene.get());
+            // ── Create the scene graph outliner dock ─────────────────────
+            _outliner = new viz::qt::SceneGraphWidget();
+            _outliner->set_root(&_scene->root());
 
-        _controls_dock = new QDockWidget("Mesh Properties", this);
-        _controls_dock->setWidget(_controls);
-        _controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea
-                                        | Qt::RightDockWidgetArea);
-        addDockWidget(Qt::RightDockWidgetArea, _controls_dock);
+            _outliner_dock = new QDockWidget("Scene Graph", this);
+            _outliner_dock->setWidget(_outliner);
+            _outliner_dock->setAllowedAreas(Qt::LeftDockWidgetArea
+                                            | Qt::RightDockWidgetArea);
+            addDockWidget(Qt::RightDockWidgetArea, _outliner_dock);
 
-        // Stack docks vertically: outliner on top, properties below
-        // (Blender-style right sidebar with both panels visible)
-        splitDockWidget(_outliner_dock, _controls_dock, Qt::Vertical);
+            // ── Create the mesh properties dock ──────────────────────────
+            _controls = new viz::qt::MeshControlsWidget();
+            _controls->set_scene(_scene.get());
 
-        // ── Wire outliner selection → properties panel ───────────────
-        connect(_outliner,
-                &viz::qt::SceneGraphWidget::object_selected,
-                _controls,
-                &viz::qt::MeshControlsWidget::set_selected_object);
+            _controls_dock = new QDockWidget("Mesh Properties", this);
+            _controls_dock->setWidget(_controls);
+            _controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea
+                                            | Qt::RightDockWidgetArea);
+            addDockWidget(Qt::RightDockWidgetArea, _controls_dock);
 
-        // Re-render when controls or outliner change
-        connect(_controls,
-                &viz::qt::MeshControlsWidget::scene_changed,
-                _vk_window,
-                [this]() { _vk_window->requestUpdate(); });
-        connect(_outliner,
-                &viz::qt::SceneGraphWidget::scene_changed,
-                _vk_window,
-                [this]() { _vk_window->requestUpdate(); });
+            // Stack docks vertically: outliner on top, properties below
+            // (Blender-style right sidebar with both panels visible)
+            splitDockWidget(_outliner_dock, _controls_dock, Qt::Vertical);
 
-        // Camera activation from the outliner
-        connect(_outliner,
-                &viz::qt::SceneGraphWidget::camera_activated,
-                this,
-                [this](balsa::scene_graph::Object *cam_obj) {
-                    _scene->set_active_camera(cam_obj);
-                    _vk_window->requestUpdate();
+            // ── Wire outliner selection → properties panel ───────────────
+            connect(_outliner,
+                    &viz::qt::SceneGraphWidget::object_selected,
+                    _controls,
+                    &viz::qt::MeshControlsWidget::set_selected_object);
+
+            // Re-render when controls or outliner change
+            connect(_controls,
+                    &viz::qt::MeshControlsWidget::scene_changed,
+                    _vk_window,
+                    [this] -> void { _vk_window->requestUpdate(); });
+            connect(_outliner,
+                    &viz::qt::SceneGraphWidget::scene_changed,
+                    _vk_window,
+                    [this] -> void { _vk_window->requestUpdate(); });
+
+            // Camera activation from the outliner
+            connect(_outliner,
+                    &viz::qt::SceneGraphWidget::camera_activated,
+                    this,
+                    [this](balsa::scene_graph::Object *cam_obj) -> void {
+                        _scene->set_active_camera(cam_obj);
+                        _vk_window->requestUpdate();
+                    });
+
+            // ── Create menus ─────────────────────────────────────────────
+            create_menus();
+
+            // ── Set the scene on the window ──────────────────────────────
+            _vk_window->set_scene(_scene);
+
+            // ── Queue initial mesh load (must happen after Film init) ────
+            _initial_obj = initial_obj;
+        }
+
+        ~MeshViewerMainWindow() override = default;
+
+        // Called once the Vulkan film is ready (e.g., from a QTimer::singleShot
+        // or after the window is shown and rendered the first frame).
+        // For simplicity, we do a deferred load via showEvent.
+        void showEvent(QShowEvent *event) override {
+            QMainWindow::showEvent(event);
+
+            // Deferred load: by the time the window is shown, Qt's Vulkan
+            // infrastructure should be initializing.  We use a single-shot
+            // timer to give it one more event-loop pass.
+            if (!_initial_obj.empty() && !_loaded) {
+                QTimer::singleShot(100, this, [this] -> void {
+                    load_mesh(_initial_obj);
+                    _loaded = true;
                 });
+            }
+        }
 
-        // ── Create menus ─────────────────────────────────────────────
-        create_menus();
+      private:
+        viz::qt::vulkan::Window *_vk_window = nullptr;
+        std::shared_ptr<vk_viz::MeshScene> _scene;
+        std::shared_ptr<vk_viz::OrbitCameraController> _camera;
+        viz::qt::MeshControlsWidget *_controls = nullptr;
+        viz::qt::SceneGraphWidget *_outliner = nullptr;
+        QDockWidget *_outliner_dock = nullptr;
+        QDockWidget *_controls_dock = nullptr;
+        std::filesystem::path _initial_obj;
+        bool _loaded = false;
 
-        // ── Set the scene on the window ──────────────────────────────
-        _vk_window->set_scene(_scene);
+        void create_menus() {
+            QMenu *file_menu = menuBar()->addMenu(tr("&File"));
 
-        // ── Queue initial mesh load (must happen after Film init) ────
-        _initial_obj = initial_obj;
-    }
-
-    ~MeshViewerMainWindow() override = default;
-
-    // Called once the Vulkan film is ready (e.g., from a QTimer::singleShot
-    // or after the window is shown and rendered the first frame).
-    // For simplicity, we do a deferred load via showEvent.
-    void showEvent(QShowEvent *event) override {
-        QMainWindow::showEvent(event);
-
-        // Deferred load: by the time the window is shown, Qt's Vulkan
-        // infrastructure should be initializing.  We use a single-shot
-        // timer to give it one more event-loop pass.
-        if (!_initial_obj.empty() && !_loaded) {
-            QTimer::singleShot(100, this, [this]() {
-                load_mesh(_initial_obj);
-                _loaded = true;
+            QAction *open_action = file_menu->addAction(tr("&Open..."));
+            open_action->setShortcuts(QKeySequence::Open);
+            connect(open_action, &QAction::triggered, this, [this] -> void {
+                QString path = QFileDialog::getOpenFileName(
+                    this,
+                    tr("Open Mesh"),
+                    QString(),
+                    tr("Mesh Files (*.obj *.msh);;OBJ Files (*.obj);;MSH Files "
+                       "(*.msh);;All Files (*)"));
+                if (!path.isEmpty()) {
+                    load_mesh(std::filesystem::path(path.toStdString()));
+                }
             });
+
+            file_menu->addSeparator();
+
+            QAction *quit_action = file_menu->addAction(tr("&Quit"));
+            quit_action->setShortcuts(QKeySequence::Quit);
+            connect(
+                quit_action, &QAction::triggered, this, &QMainWindow::close);
+
+            // ── View menu ────────────────────────────────────────────────
+            QMenu *view_menu = menuBar()->addMenu(tr("&View"));
+            view_menu->addAction(_outliner_dock->toggleViewAction());
+            view_menu->addAction(_controls_dock->toggleViewAction());
+
+            // Scene Lighting is part of the Mesh Properties dock, so we
+            // just ensure the properties dock is visible when the user
+            // wants lighting controls.  (The Scene Lighting group is
+            // always present inside MeshControlsWidget.)
         }
-    }
 
-  private:
-    viz::qt::vulkan::Window *_vk_window = nullptr;
-    std::shared_ptr<vk_viz::MeshScene> _scene;
-    std::shared_ptr<vk_viz::OrbitCameraController> _camera;
-    viz::qt::MeshControlsWidget *_controls = nullptr;
-    viz::qt::SceneGraphWidget *_outliner = nullptr;
-    QDockWidget *_outliner_dock = nullptr;
-    QDockWidget *_controls_dock = nullptr;
-    std::filesystem::path _initial_obj;
-    bool _loaded = false;
+        void load_mesh(const std::filesystem::path &path) {
+            spdlog::info("Loading mesh: {}", path.string());
 
-    void create_menus() {
-        QMenu *file_menu = menuBar()->addMenu(tr("&File"));
-
-        QAction *open_action = file_menu->addAction(tr("&Open..."));
-        open_action->setShortcuts(QKeySequence::Open);
-        connect(open_action, &QAction::triggered, this, [this]() {
-            QString path = QFileDialog::getOpenFileName(
-                this,
-                tr("Open Mesh"),
-                QString(),
-                tr("Mesh Files (*.obj *.msh);;OBJ Files (*.obj);;MSH Files "
-                   "(*.msh);;All Files (*)"));
-            if (!path.isEmpty()) {
-                load_mesh(std::filesystem::path(path.toStdString()));
+            if (!std::filesystem::exists(path)) {
+                spdlog::error("Failed to load mesh: file not found: {}",
+                              path.string());
+                return;
             }
-        });
-
-        file_menu->addSeparator();
-
-        QAction *quit_action = file_menu->addAction(tr("&Quit"));
-        quit_action->setShortcuts(QKeySequence::Quit);
-        connect(quit_action, &QAction::triggered, this, &QMainWindow::close);
-
-        // ── View menu ────────────────────────────────────────────────
-        QMenu *view_menu = menuBar()->addMenu(tr("&View"));
-        view_menu->addAction(_outliner_dock->toggleViewAction());
-        view_menu->addAction(_controls_dock->toggleViewAction());
-
-        // Scene Lighting is part of the Mesh Properties dock, so we
-        // just ensure the properties dock is visible when the user
-        // wants lighting controls.  (The Scene Lighting group is
-        // always present inside MeshControlsWidget.)
-    }
-
-    void load_mesh(const std::filesystem::path &path) {
-        spdlog::info("Loading mesh: {}", path.string());
-
-        if (!std::filesystem::exists(path)) {
-            spdlog::error("Failed to load mesh: file not found: {}",
-                          path.string());
-            return;
-        }
-        auto obj = balsa::geometry::triangle_mesh::read_objF(path);
-        if (obj.position.vertices.cols() == 0) {
-            spdlog::error("Failed to load mesh: no vertices in {}",
-                          path.string());
-            return;
-        }
-
-        // Add a mesh Object to the scene graph and fill its MeshData.
-        auto &mesh_obj = _scene->add_mesh(path.filename().string());
-        auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
-        viz::to_mesh_data(obj, *mesh_data);
-
-        // Apply constraints: auto-selects shading/normal_source based
-        // on whether the mesh actually has normal data.
-        mesh_data->render_state().constrain(mesh_data->has_normals());
-
-        // Compute bounding box from the position binding and set Object
-        // transform to center and normalize the mesh.  The source data
-        // stays pristine -- normalization is applied via the Object's
-        // local transform.
-        if (mesh_data->has_positions()) {
-            const auto &pos_bind = mesh_data->position_binding();
-            const auto *fdata = static_cast<const float *>(pos_bind.raw_data());
-            std::size_t n = pos_bind.size();
-            uint8_t comp = pos_bind.component_count();
-
-            if (fdata && n > 0 && comp >= 1) {
-                // Compute AABB in up to 3 dimensions.
-                float bbmin[3] = {1e30f, 1e30f, 1e30f};
-                float bbmax[3] = {-1e30f, -1e30f, -1e30f};
-                for (std::size_t i = 0; i < n; ++i) {
-                    for (uint8_t c = 0; c < std::min(comp, uint8_t(3)); ++c) {
-                        float v = fdata[i * comp + c];
-                        bbmin[c] = std::min(bbmin[c], v);
-                        bbmax[c] = std::max(bbmax[c], v);
-                    }
-                }
-                // For missing dimensions, leave at 0.
-                for (uint8_t c = comp; c < 3; ++c) {
-                    bbmin[c] = 0.0f;
-                    bbmax[c] = 0.0f;
-                }
-
-                // Compute center and range.
-                sg::Vec3f center;
-                float range = 0.0f;
-                for (int c = 0; c < 3; ++c) {
-                    center(c) = (bbmin[c] + bbmax[c]) * 0.5f;
-                    range = std::max(range, bbmax[c] - bbmin[c]);
-                }
-                if (range < 1e-8f) range = 1.0f;
-
-                // Apply normalization via Object transform.
-                sg::Vec3f neg_center;
-                neg_center(0) = -center(0);
-                neg_center(1) = -center(1);
-                neg_center(2) = -center(2);
-                mesh_obj.set_translation(neg_center);
-                sg::Vec3f uniform_scale;
-                float inv_range = 1.0f / range;
-                uniform_scale(0) = inv_range;
-                uniform_scale(1) = inv_range;
-                uniform_scale(2) = inv_range;
-                mesh_obj.set_scale_factors(uniform_scale);
+            auto obj = balsa::geometry::triangle_mesh::read_objF(path);
+            if (obj.position.vertices.cols() == 0) {
+                spdlog::error("Failed to load mesh: no vertices in {}",
+                              path.string());
+                return;
             }
+
+            // Add a mesh Object to the scene graph and fill its MeshData.
+            auto &mesh_obj = _scene->add_mesh(path.filename().string());
+            auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
+            viz::to_mesh_data(obj, *mesh_data);
+
+            // Apply constraints: auto-selects shading/normal_source based
+            // on whether the mesh actually has normal data.
+            mesh_data->render_state().constrain(mesh_data->has_normals());
+
+            // Compute bounding box from the position binding and set Object
+            // transform to center and normalize the mesh.  The source data
+            // stays pristine -- normalization is applied via the Object's
+            // local transform.
+            viz::normalize_to_unit_box(mesh_obj, *mesh_data);
+
+            // If the mesh has edges but no triangles, default to wireframe
+            // so that edge-only meshes are visible immediately.
+            if (!mesh_data->has_triangle_indices()
+                && mesh_data->has_edge_indices()) {
+                mesh_data->render_state().layers.solid.enabled = false;
+                mesh_data->render_state().layers.wireframe.enabled = true;
+            }
+
+            spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
+                         mesh_obj.name,
+                         mesh_data->vertex_count(),
+                         mesh_data->triangle_count(),
+                         mesh_data->edge_count());
+
+            // Refresh the outliner and select the new mesh (this also
+            // updates the properties panel via the object_selected signal).
+            _outliner->refresh();
+            _outliner->select_object(&mesh_obj);
+
+            // Request a redraw
+            _vk_window->requestUpdate();
         }
-
-        // If the mesh has edges but no triangles, default to wireframe
-        // so that edge-only meshes are visible immediately.
-        if (!mesh_data->has_triangle_indices()
-            && mesh_data->has_edge_indices()) {
-            mesh_data->render_state().layers.solid.enabled = false;
-            mesh_data->render_state().layers.wireframe.enabled = true;
-        }
-
-        spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
-                     mesh_obj.name,
-                     mesh_data->vertex_count(),
-                     mesh_data->triangle_count(),
-                     mesh_data->edge_count());
-
-        // Refresh the outliner and select the new mesh (this also
-        // updates the properties panel via the object_selected signal).
-        _outliner->refresh();
-        _outliner->select_object(&mesh_obj);
-
-        // Request a redraw
-        _vk_window->requestUpdate();
-    }
-};
+    };
+} // namespace
+} // namespace balsa::visualization::tools
 
 // ── main ─────────────────────────────────────────────────────────────
 
@@ -355,7 +319,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    MeshViewerMainWindow main_window(&inst, obj_path);
+    viz::tools::MeshViewerMainWindow main_window(&inst, obj_path);
     main_window.show();
 
     return app.exec();

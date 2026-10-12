@@ -110,6 +110,7 @@ visualization_sources = [
   'src/vulkan/ImageScene.cpp',
   'src/image_io.cpp',
   'src/mesh_conversion.cpp',
+  'src/normalize_mesh.cpp',
 ]
 
 if get_option('qt')

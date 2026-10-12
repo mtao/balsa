@@ -37,6 +37,8 @@
 
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/visualization/mesh_conversion.hpp>
+#include <balsa/visualization/normalize_mesh.hpp>
+#include <zipper/transform/common.hpp>
 
 namespace viz = balsa::visualization;
 namespace vk_viz = viz::vulkan;
@@ -185,8 +187,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         float aspect =
             (fb[1] > 0) ? static_cast<float>(fb[0]) / static_cast<float>(fb[1])
                         : 1.0f;
-        constexpr float pi = 3.14159265358979323846f;
-        _scene->set_perspective(45.0f * pi / 180.0f, aspect, 0.01f, 100.0f);
+        _scene->set_perspective(::zipper::transform::radians(45.0f), aspect, 0.01f, 100.0f);
 
         set_scene(_scene);
     }
@@ -221,52 +222,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         // transform to center and normalize the mesh.  The source data
         // stays pristine — normalization is applied via the Object's
         // local transform.
-        if (mesh_data->has_positions()) {
-            const auto &pos_bind = mesh_data->position_binding();
-            const auto *fdata = static_cast<const float *>(pos_bind.raw_data());
-            std::size_t n = pos_bind.size();
-            uint8_t comp = pos_bind.component_count();
-
-            if (fdata && n > 0 && comp >= 1) {
-                // Compute AABB in up to 3 dimensions.
-                float bbmin[3] = {1e30f, 1e30f, 1e30f};
-                float bbmax[3] = {-1e30f, -1e30f, -1e30f};
-                for (std::size_t i = 0; i < n; ++i) {
-                    for (uint8_t c = 0; c < std::min(comp, uint8_t(3)); ++c) {
-                        float v = fdata[i * comp + c];
-                        bbmin[c] = std::min(bbmin[c], v);
-                        bbmax[c] = std::max(bbmax[c], v);
-                    }
-                }
-                // For missing dimensions, leave at 0.
-                for (uint8_t c = comp; c < 3; ++c) {
-                    bbmin[c] = 0.0f;
-                    bbmax[c] = 0.0f;
-                }
-
-                // Compute center and range.
-                sg::Vec3f center;
-                float range = 0.0f;
-                for (int c = 0; c < 3; ++c) {
-                    center(c) = (bbmin[c] + bbmax[c]) * 0.5f;
-                    range = std::max(range, bbmax[c] - bbmin[c]);
-                }
-                if (range < 1e-8f) range = 1.0f;
-
-                // Apply normalization via Object transform.
-                sg::Vec3f neg_center;
-                neg_center(0) = -center(0);
-                neg_center(1) = -center(1);
-                neg_center(2) = -center(2);
-                mesh_obj.set_translation(neg_center);
-                sg::Vec3f uniform_scale;
-                float inv_range = 1.0f / range;
-                uniform_scale(0) = inv_range;
-                uniform_scale(1) = inv_range;
-                uniform_scale(2) = inv_range;
-                mesh_obj.set_scale_factors(uniform_scale);
-            }
-        }
+        viz::normalize_to_unit_box(mesh_obj, *mesh_data);
 
         // If the mesh has edges but no triangles, default to wireframe.
         if (!mesh_data->has_triangle_indices()
