@@ -16,17 +16,11 @@
 #include <QVector3D>
 #include <QVector4D>
 
-// Qt defines `emit` as a macro; zipper's GEMM pulls in <execution>, whose
-// libstdc++ TBB backend has a member named emit().  Hide the macro while
-// zipper (and transitively TBB) is parsed.
-#pragma push_macro("emit")
-#undef emit
 #include <zipper/Matrix.hpp>
 #include <zipper/Vector.hpp>
 #include <zipper/concepts/Matrix.hpp>
 #include <zipper/concepts/Vector.hpp>
 #include <zipper/storage/layout_types.hpp>
-#pragma pop_macro("emit")
 
 namespace balsa::visualization::qt {
 
