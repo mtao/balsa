@@ -1,6 +1,9 @@
 #pragma once
 #include "MeshData.hpp"
 
+#include <spdlog/spdlog.h>
+
+#include <cassert>
 #include <concepts>
 #include <cstring>
 #include <type_traits>
@@ -64,6 +67,98 @@ namespace detail {
 
 } // namespace detail
 
+template <typename T, typename Extents, typename Layout, typename Accessor>
+    requires(Extents::rank() == 1 || Extents::rank() == 2)
+MeshAttribute::MeshAttribute(
+    std::string name,
+    AttributeDomain domain,
+    ::zipper::mdspan<T, Extents, Layout, Accessor> data)
+  : name(std::move(name)), domain(domain) {
+    using V = std::remove_cv_t<T>;
+    static_assert(std::is_arithmetic_v<V>,
+                  "attribute values must be arithmetic");
+    constexpr bool rank1 = Extents::rank() == 1;
+
+    if constexpr (rank1) {
+        m_component_count = 1;
+        m_count = data.extent(0);
+    } else {
+        assert(data.extent(0) <= max_components);
+        m_component_count = static_cast<uint8_t>(data.extent(0));
+        m_count = data.extent(1);
+    }
+    m_data.resize(std::size_t{m_component_count} * m_count);
+    if (m_data.empty()) return;
+
+    // Fast path: memory is already column-major (element-major) float.
+    constexpr bool element_major =
+        rank1 || std::is_same_v<Layout, ::zipper::storage::layout_left>;
+    if constexpr (std::is_same_v<V, float> && element_major
+                  && std::is_same_v<Accessor,
+                                    ::zipper::default_accessor_policy<T>>) {
+        if (data.is_exhaustive()) {
+            std::memcpy(
+                m_data.data(), data.data_handle(), m_data.size() * sizeof(float));
+            return;
+        }
+    }
+
+    auto dst = view();
+    for (std::size_t i = 0; i < m_count; ++i) {
+        if constexpr (rank1) {
+            dst[0, i] = static_cast<float>(data[i]);
+        } else {
+            for (std::size_t c = 0; c < m_component_count; ++c) {
+                dst[c, i] = static_cast<float>(data[c, i]);
+            }
+        }
+    }
+}
+
+template <typename T, typename Extents, typename Layout, typename Accessor>
+    requires(Extents::rank() == 1 || Extents::rank() == 2)
+auto MeshData::add_attribute(std::string name,
+                             AttributeDomain domain,
+                             ::zipper::mdspan<T, Extents, Layout, Accessor> data)
+    -> MeshAttributeHandle {
+    if constexpr (Extents::rank() == 2) {
+        if (data.extent(0) == 0
+            || data.extent(0) > MeshAttribute::max_components) {
+            spdlog::warn("MeshData: attribute '{}' has {} components, "
+                         "expected 1..{}",
+                         name,
+                         data.extent(0),
+                         MeshAttribute::max_components);
+            return {};
+        }
+    }
+    return insert_attribute(
+        MeshAttribute(std::move(name), domain, std::move(data)));
+}
+
+template <std::ranges::contiguous_range R>
+    requires std::ranges::sized_range<R>
+auto MeshData::add_attribute(std::string name,
+                             AttributeDomain domain,
+                             uint8_t component_count,
+                             const R &data) -> MeshAttributeHandle {
+    const std::span flat(data);
+    if (component_count == 0 || flat.size() % component_count != 0) {
+        spdlog::warn("MeshData: attribute '{}' has {} values, not a multiple "
+                     "of {} components",
+                     name,
+                     flat.size(),
+                     component_count);
+        return {};
+    }
+    using E = std::remove_reference_t<decltype(*flat.data())>;
+    return add_attribute(
+        std::move(name),
+        domain,
+        ::zipper::mdspan<E, ::zipper::dextents<2>, ::zipper::storage::col_major>(
+            flat.data(), std::size_t{component_count},
+            flat.size() / component_count));
+}
 template <typename T, typename Extents, typename Layout, typename Accessor>
     requires(Extents::rank() == 2)
 auto MeshData::set_triangle_indices(

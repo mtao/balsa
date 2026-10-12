@@ -299,7 +299,7 @@ auto draw_attributes(sg::MeshData &mesh, Layout &layout) -> void {
                 [md] {
                     std::vector<std::string> items{ "Magnitude" };
                     const auto &b = md->scalar_binding();
-                    const int n = b.is_bound() ? b.attribute()->component_count : 0;
+                    const int n = b.is_bound() ? b.attribute()->component_count() : 0;
                     constexpr std::string_view axes = "XYZW";
                     for (int c = 0; c < n; ++c) {
                         items.emplace_back(
@@ -313,7 +313,7 @@ auto draw_attributes(sg::MeshData &mesh, Layout &layout) -> void {
         });
     component.visible = [md] {
         const auto &b = md->scalar_binding();
-        return b.is_bound() && b.attribute()->component_count > 1;
+        return b.is_bound() && b.attribute()->component_count() > 1;
     };
     layout.prop(std::move(component));
 }

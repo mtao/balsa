@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <limits>
 #include <string>
 #include <variant>
 #include <vector>
@@ -29,14 +30,15 @@ struct FloatValue {
     float max = 1.0f;
     float step = 0.01f;
     int decimals = 3;
+    // TODO: do we only want these two options?
     bool slider = false; ///< slider instead of a spin/drag box
 };
 
 struct Vec3Value {
     Getter<scene_graph::Vec3f> get{};
     Setter<scene_graph::Vec3f> set{};
-    float min = -1e6f;
-    float max = 1e6f;
+    float min = std::numeric_limits<float>::lowest();
+    float max = std::numeric_limits<float>::max();
     float step = 0.1f;
     int decimals = 3;
 };
@@ -55,7 +57,7 @@ struct EnumValue {
     Getter<std::vector<std::string>> items{};
     Getter<int> get{};
     Setter<int> set{};
-    std::function<bool(int)> item_enabled = [](int) { return true; };
+    std::function<bool(int)> item_enabled = [](int) -> bool { return true; };
 };
 
 struct StringValue {

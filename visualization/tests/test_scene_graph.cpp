@@ -243,13 +243,13 @@ TEST_CASE("MeshData attributes", "[scene_graph]") {
         if (da->name == "vertex_positions") {
             found_pos = true;
             CHECK(da->domain == AttributeDomain::Vertex);
-            CHECK(da->component_count == 3);
+            CHECK(da->component_count() == 3);
             CHECK(da->count() == 4);
         }
         if (da->name == "vertex_normals") {
             found_nrm = true;
             CHECK(da->domain == AttributeDomain::Vertex);
-            CHECK(da->component_count == 3);
+            CHECK(da->component_count() == 3);
             CHECK(da->count() == 4);
         }
     }
@@ -315,7 +315,7 @@ TEST_CASE("MeshData rebinds when attributes change", "[scene_graph]") {
     auto pos = md.find_attribute("vertex_positions");
     REQUIRE(pos);
     CHECK(md.position_binding().attribute() == pos);
-    CHECK(md.position_binding().raw_data() == pos->data.data());
+    CHECK(md.position_binding().raw_data() == pos->data().data());
 
     // Replacing the bound attribute updates the binding.
     const std::array<float, 6> pos2 = {0, 0, 1, 1, 2, 2};
@@ -1323,6 +1323,68 @@ TEST_CASE("role_binding_view", "[scene_graph][mesh_data]") {
     auto d = b.view();
     CHECK(d.extent(0) == 3);
     CHECK(d[2, 1] == 5.0f);
+}
+
+TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
+    namespace sg = balsa::scene_graph;
+    using ::zipper::dextents;
+    sg::MeshData md;
+
+    // Row-major N x 3 memory viewed as 3 x N column-major: copied as-is.
+    const std::vector<float> xyz{0, 1, 2, 3, 4, 5};
+    auto p = md.add_attribute(
+        "vertex_positions", sg::AttributeDomain::Vertex,
+        ::zipper::mdspan<const float, dextents<2>, ::zipper::storage::col_major>(
+            xyz.data(), 3, 2));
+    REQUIRE(p);
+    CHECK(p->component_count() == 3);
+    CHECK(p->count() == 2);
+    CHECK(std::ranges::equal(p->data(), xyz));
+
+    // 3 x N row-major doubles: components on rows, converted to float
+    // and reordered into element-major storage.
+    const std::vector<double> rows{0, 3, 1, 4, 2, 5};
+    auto q = md.add_attribute(
+        "q", sg::AttributeDomain::Vertex,
+        ::zipper::mdspan<const double, dextents<2>, ::zipper::storage::row_major>(
+            rows.data(), 3, 2));
+    REQUIRE(q);
+    CHECK(std::ranges::equal(q->data(), xyz));
+    auto qv = q->view<3>();
+    REQUIRE(qv);
+    CHECK((*qv)[1, 1] == 4.0f);
+    CHECK_FALSE(q->view<2>());
+
+    // Rank-1 data is a single-component attribute.
+    const std::vector<int> s{7, 8, 9};
+    auto r = md.add_attribute(
+        "s", sg::AttributeDomain::Vertex,
+        ::zipper::mdspan<const int, dextents<1>>(s.data(), 3));
+    REQUIRE(r);
+    CHECK(r->component_count() == 1);
+    CHECK(r->count() == 3);
+    CHECK(r->data()[2] == 9.0f);
+
+    // Zero components is rejected.
+    CHECK_FALSE(md.add_attribute(
+        "bad", sg::AttributeDomain::Vertex,
+        ::zipper::mdspan<const float, dextents<2>>(xyz.data(), 0, 2)));
+    // Flat data that is not a multiple of the component count is rejected.
+    CHECK_FALSE(md.add_attribute("bad", sg::AttributeDomain::Vertex, 4, xyz));
+}
+
+TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh_data]") {
+    namespace sg = balsa::scene_graph;
+    sg::MeshData md;
+    const std::vector<float> v{3, 4, 0, 0, 2, 0};
+    md.add_attribute("v", sg::AttributeDomain::Vertex, 3, v);
+    REQUIRE(md.assign_scalar("v", -1));
+    auto m = md.scalar_binding().view<1>();
+    REQUIRE(m);
+    CHECK((*m)[0, 0] == Catch::Approx(5.0f));
+    CHECK((*m)[0, 1] == Catch::Approx(2.0f));
+    REQUIRE(md.set_scalar_component(1));
+    CHECK((*md.scalar_binding().view<1>())[0, 0] == 4.0f);
 }
 
 #include <balsa/visualization/normalize_mesh.hpp>
