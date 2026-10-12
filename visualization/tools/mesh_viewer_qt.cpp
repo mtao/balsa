@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <numbers>
 #include <span>
 #include <string>
 #include <vector>
@@ -69,9 +70,12 @@ class MeshViewerMainWindow : public QMainWindow {
         setWindowTitle("Balsa Mesh Viewer (Qt)");
         resize(1280, 800);
 
+        constexpr static int default_width = 900;
+        constexpr static int default_height = 800;
+
         // ── Create the Vulkan window ─────────────────────────────────
-        _vk_window =
-            new viz::qt::vulkan::Window("Balsa Mesh Viewer (Qt)", 900, 800);
+        _vk_window = new viz::qt::vulkan::Window(
+            "Balsa Mesh Viewer (Qt)", default_width, default_height);
         _vk_window->setVulkanInstance(inst);
 
         // Wrap QVulkanWindow in a widget for embedding
@@ -88,9 +92,12 @@ class MeshViewerMainWindow : public QMainWindow {
         _vk_window->set_input_handler(_camera);
 
         // Initial projection
-        constexpr float pi = 3.14159265358979323846f;
-        _scene->set_perspective(
-            45.0f * pi / 180.0f, 900.0f / 800.0f, 0.01f, 100.0f);
+        constexpr float pi = std::numbers::pi_v<float>;
+        _scene->set_perspective(45.0f * pi / 180.0f,
+                                static_cast<float>(default_width)
+                                    / static_cast<float>(default_height),
+                                0.01f,
+                                100.0f);
 
         // ── Create the scene graph outliner dock ─────────────────────
         _outliner = new viz::qt::SceneGraphWidget();
