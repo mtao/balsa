@@ -1,5 +1,6 @@
 #include "balsa/visualization/qt/mesh_controls_widget.hpp"
 #include "balsa/visualization/qt/vertical_tab_widget.hpp"
+#include "balsa/visualization/qt/zipper_compat.hpp"
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
@@ -60,30 +61,6 @@ static void
     btn->setStyleSheet(
         QStringLiteral("background-color: %1; border: 1px solid gray;")
             .arg(c.name(QColor::HexArgb)));
-}
-
-// ── Helpers: zipper vector <-> Qt conversions ───────────────────────
-
-static auto to_vec4(const QColor &c) -> sg::Vec4f {
-    return sg::Vec4f{ static_cast<float>(c.redF()),
-                      static_cast<float>(c.greenF()),
-                      static_cast<float>(c.blueF()),
-                      static_cast<float>(c.alphaF()) };
-}
-
-static auto to_qcolor(const sg::Vec4f &c) -> QColor {
-    return QColor::fromRgbF(c(0), c(1), c(2), c(3));
-}
-
-static auto to_qcolor(const sg::Vec3f &c) -> QColor {
-    return QColor::fromRgbF(c(0), c(1), c(2));
-}
-
-static auto read_vec3(QDoubleSpinBox *x, QDoubleSpinBox *y, QDoubleSpinBox *z)
-    -> sg::Vec3f {
-    return sg::Vec3f{ static_cast<float>(x->value()),
-                      static_cast<float>(y->value()),
-                      static_cast<float>(z->value()) };
 }
 
 static void set_button_color(QPushButton *btn, const sg::Vec4f &c) {
@@ -1225,7 +1202,7 @@ void MeshControlsWidget::on_uniform_color_clicked() {
     QColor chosen = QColorDialog::getColor(
         initial, this, "Uniform Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        uc = to_vec4(chosen);
+        uc = as_zipper(chosen);
         set_button_color(_uniform_color_button, uc);
         emit scene_changed();
     }
@@ -1384,7 +1361,7 @@ void MeshControlsWidget::on_solid_color_clicked() {
     QColor chosen = QColorDialog::getColor(
         initial, this, "Solid Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        c = to_vec4(chosen);
+        c = as_zipper(chosen);
         set_button_color(_solid_color_button, c);
         emit scene_changed();
     }
@@ -1407,7 +1384,7 @@ void MeshControlsWidget::on_wireframe_color_clicked() {
     QColor chosen = QColorDialog::getColor(
         initial, this, "Wireframe Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        c = to_vec4(chosen);
+        c = as_zipper(chosen);
         set_button_color(_wireframe_color_button, c);
         emit scene_changed();
     }
@@ -1440,7 +1417,7 @@ void MeshControlsWidget::on_point_color_clicked() {
     QColor chosen = QColorDialog::getColor(
         initial, this, "Point Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        c = to_vec4(chosen);
+        c = as_zipper(chosen);
         set_button_color(_point_color_button, c);
         emit scene_changed();
     }
@@ -1523,7 +1500,7 @@ void MeshControlsWidget::on_scene_light_color_clicked() {
         QColorDialog::getColor(to_qcolor(light.color), this, "Light Color");
     if (chosen.isValid()) {
         chosen.setAlphaF(1.0);
-        sg::Vec4f c = to_vec4(chosen);
+        sg::Vec4f c = as_zipper(chosen);
         light.color = c.head<3>();
         set_button_color(_scene_light_color_button, c);
         emit scene_changed();

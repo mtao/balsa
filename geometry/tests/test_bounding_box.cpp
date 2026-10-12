@@ -68,3 +68,23 @@ TEST_CASE("bounding_box_center", "[bounding_box][geometry]") {
     balsa::geometry::BoundingBox<double, 3> pt(zipper::Vector<double, 3>({ 1.0, 2.0, 3.0 }));
     CHECK(pt.center() == zipper::Vector<double, 3>({ 1.0, 2.0, 3.0 }));
 }
+
+TEST_CASE("bounding_box_local_world", "[bounding_box][geometry]") {
+    using V3 = zipper::Vector<double, 3>;
+    balsa::geometry::BoundingBox<double, 3> bb(V3({ -2.0, -5.0, 1.0 }),
+                                               V3({ 2.0, 3.0, 1.0 }));
+    // half range: (2, 4, 0 -> 1)
+    CHECK(bb.half_range() == V3({ 2.0, 4.0, 1.0 }));
+    CHECK(bb.to_local(bb.center()) == V3({ 0.0, 0.0, 0.0 }));
+    CHECK(bb.to_local(bb.max()) == V3({ 1.0, 1.0, 0.0 }));
+    CHECK(bb.to_local(bb.min()) == V3({ -1.0, -1.0, 0.0 }));
+    const V3 p({ 0.5, -2.0, 3.0 });
+    CHECK(bb.to_world(bb.to_local(p)) == p);
+
+    auto L = bb.to_local_transform();
+    auto W = bb.to_world_transform();
+    V3 lp = L * p;
+    V3 wp = W * lp;
+    CHECK(lp == bb.to_local(p));
+    for (zipper::index_type i = 0; i < 3; ++i) CHECK(wp(i) == Approx(p(i)));
+}
