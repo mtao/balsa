@@ -19,21 +19,21 @@ class Layout {
     Layout(Layout &&) = default;
     auto operator=(Layout &&) -> Layout & = default;
 
-    auto prop(Property p) -> Layout & {
+    auto add_property(Property p) -> Layout & {
         m_items.emplace_back(std::move(p));
         return *this;
     }
 
     /// Nested horizontal / vertical group.  The returned reference stays
     /// valid until the parent Layout is destroyed.
-    auto row(std::string heading = {}) -> Layout & {
+    auto add_row(std::string heading = {}) -> Layout & {
         return child(Direction::Row, std::move(heading));
     }
-    auto column(std::string heading = {}) -> Layout & {
+    auto add_column(std::string heading = {}) -> Layout & {
         return child(Direction::Column, std::move(heading));
     }
 
-    auto set_visible(Predicate p) -> Layout & {
+    auto set_visible_when(Predicate p) -> Layout & {
         m_visible = std::move(p);
         return *this;
     }
@@ -42,7 +42,7 @@ class Layout {
 
     auto direction() const -> Direction { return m_direction; }
     auto heading() const -> const std::string & { return m_heading; }
-    auto visible() const -> const Predicate & { return m_visible; }
+    auto visible_when() const -> const Predicate & { return m_visible; }
     auto items() const -> const std::vector<Item> & { return m_items; }
 
     template <typename F>
@@ -65,7 +65,7 @@ class Layout {
 
     Direction m_direction;
     std::string m_heading;
-    Predicate m_visible = always;
+    Predicate m_visible = always_true;
     std::vector<Item> m_items;
 };
 

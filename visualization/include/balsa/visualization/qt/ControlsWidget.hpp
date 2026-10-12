@@ -49,7 +49,7 @@ class ControlsWidget : public QWidget {
     auto build_property(const controls::Property &prop, QWidget *parent)
         -> QWidget *;
 
-    controls::Context m_context;
+    controls::PanelContext m_context;
     VerticalTabWidget *m_tabs = nullptr;
     QBoxLayout *m_root = nullptr;
     std::string m_current_tab;

@@ -21,24 +21,26 @@ using vulkan::ShadingModel;
 
 namespace {
 
-auto has_mesh(const Context &ctx) -> bool { return ctx.mesh_data() != nullptr; }
+auto has_active_mesh(const PanelContext &ctx) -> bool {
+    return ctx.active_mesh_data() != nullptr;
+}
 
 auto is_lit(const sg::MeshData &md) -> bool {
     return md.render_state().normal_source != NormalSource::None;
 }
 
-auto prop(std::string label, auto value) -> Property {
-    return Property{ .label = std::move(label), .value = std::move(value) };
+auto make_property(std::string label, auto widget) -> Property {
+    return Property{ .label = std::move(label), .widget = std::move(widget) };
 }
 
 template <typename E>
-auto enum_value(std::vector<std::string> items,
+auto choice_input(std::vector<std::string> options,
                 E &field,
-                std::function<void()> after = {}) -> EnumValue {
+                std::function<void()> after = {}) -> ChoiceInput {
     return {
-        .items = [items = std::move(items)] { return items; },
-        .get = [&field] { return static_cast<int>(field); },
-        .set =
+        .options = [options = std::move(options)] { return options; },
+        .get_index = [&field] { return static_cast<int>(field); },
+        .set_index =
             [&field, after = std::move(after)](const int &i) {
                 field = static_cast<E>(i);
                 if (after) after();
@@ -46,40 +48,40 @@ auto enum_value(std::vector<std::string> items,
     };
 }
 
-auto float_value(float &field, float min, float max, float step,
-                 bool slider = false) -> FloatValue {
+auto float_input(float &field, float min, float max, float step,
+                 bool use_slider = false) -> FloatInput {
     return { .get = [&field] { return field; },
              .set = [&field](const float &v) { field = v; },
              .min = min,
              .max = max,
              .step = step,
-             .slider = slider };
+             .use_slider = use_slider };
 }
 
-auto bool_prop(std::string label, bool &field) -> Property {
-    return prop(std::move(label),
-                BoolValue{ .get = [&field] { return field; },
+auto bool_property(std::string label, bool &field) -> Property {
+    return make_property(std::move(label),
+                BoolInput{ .get = [&field] { return field; },
                            .set = [&field](const bool &v) { field = v; } });
 }
 
-auto color_prop(std::string label, sg::Vec4f &field) -> Property {
-    return prop(std::move(label),
-                ColorValue{ .get = [&field] { return field; },
+auto color_property(std::string label, sg::Vec4f &field) -> Property {
+    return make_property(std::move(label),
+                ColorInput{ .get = [&field] { return field; },
                             .set = [&field](const sg::Vec4f &v) { field = v; } });
 }
 
-auto vec3_prop(std::string label, Getter<sg::Vec3f> get, Setter<sg::Vec3f> set,
+auto vec3_property(std::string label, Getter<sg::Vec3f> get, Setter<sg::Vec3f> set,
                float min = -1e6f, float max = 1e6f, float step = 0.1f)
     -> Property {
-    return prop(std::move(label), Vec3Value{ .get = std::move(get),
+    return make_property(std::move(label), Vec3Input{ .get = std::move(get),
                                               .set = std::move(set),
                                               .min = min,
                                               .max = max,
                                               .step = step });
 }
 
-auto action_prop(std::string label, std::function<void()> run) -> Property {
-    return prop(std::move(label), ActionValue{ .run = std::move(run) });
+auto button_property(std::string label, std::function<void()> run) -> Property {
+    return make_property(std::move(label), Button{ .on_click = std::move(run) });
 }
 
 // Role enums: item 0 is "(none)", item k is attributes()[k - 1].
@@ -101,15 +103,15 @@ auto bound_index(const sg::MeshData &md, const sg::RoleBinding &b) -> int {
 }
 
 template <typename Assign, typename Clear>
-auto role_prop(std::string label, sg::MeshData &md,
+auto role_property(std::string label, sg::MeshData &md,
                const sg::RoleBinding &(sg::MeshData::*binding)() const,
                Assign assign, Clear clear) -> Property {
-    return prop(
+    return make_property(
         std::move(label),
-        EnumValue{
-            .items = [&md] { return attribute_names(md); },
-            .get = [&md, binding] { return bound_index(md, (md.*binding)()); },
-            .set =
+        ChoiceInput{
+            .options = [&md] { return attribute_names(md); },
+            .get_index = [&md, binding] { return bound_index(md, (md.*binding)()); },
+            .set_index =
                 [&md, assign, clear](const int &i) {
                     if (i <= 0) {
                         clear(md);
@@ -125,133 +127,133 @@ auto role_prop(std::string label, sg::MeshData &md,
 
 // ── Object tab ──────────────────────────────────────────────────────
 
-auto draw_object(sg::Object &object, Layout &layout) -> void {
+auto fill_object(sg::Object &object, Layout &layout) -> void {
     auto *obj = &object;
-    layout.prop(prop("Name",
-                     StringValue{ .get = [obj] { return obj->name; },
+    layout.add_property(make_property("Name",
+                     TextInput{ .get = [obj] { return obj->name; },
                                   .set = [obj](const std::string &s) {
                                       obj->name = s;
                                   } }));
-    layout.prop(bool_prop("Visible", obj->visible));
+    layout.add_property(bool_property("Visible", obj->visible));
 
-    auto &info = layout.column("Mesh");
-    info.set_visible([obj] { return obj->find_feature<sg::MeshData>() != nullptr; });
+    auto &info = layout.add_column("Mesh");
+    info.set_visible_when([obj] { return obj->find_feature<sg::MeshData>() != nullptr; });
     auto count = [obj](std::string what, auto fn) {
-        return prop(std::move(what), LabelValue{ .get = [obj, fn] {
+        return make_property(std::move(what), ReadOnlyText{ .get = [obj, fn] {
                         auto *md = obj->find_feature<sg::MeshData>();
                         return md ? std::to_string(fn(*md)) : std::string{};
                     } });
     };
-    info.prop(count("Vertices", [](const sg::MeshData &m) { return m.vertex_count(); }));
-    info.prop(count("Triangles", [](const sg::MeshData &m) { return m.triangle_count(); }));
-    info.prop(count("Edges", [](const sg::MeshData &m) { return m.edge_count(); }));
+    info.add_property(count("Vertices", [](const sg::MeshData &m) { return m.vertex_count(); }));
+    info.add_property(count("Triangles", [](const sg::MeshData &m) { return m.triangle_count(); }));
+    info.add_property(count("Edges", [](const sg::MeshData &m) { return m.edge_count(); }));
 }
 
-auto draw_transform(sg::Object &object, Layout &layout) -> void {
+auto fill_transform(sg::Object &object, Layout &layout) -> void {
     auto *obj = &object;
-    layout.prop(vec3_prop(
+    layout.add_property(vec3_property(
         "Translation", [obj] { return obj->translation(); },
         [obj](const sg::Vec3f &v) { obj->set_translation(v); }));
-    auto rotation = vec3_prop(
+    auto rotation = vec3_property(
         "Rotation", [obj] { return obj->rotation_euler(); },
         [obj](const sg::Vec3f &v) { obj->set_rotation_euler(v); }, -360.0f,
         360.0f, 1.0f);
     rotation.tooltip = "Euler XYZ, degrees";
-    layout.prop(std::move(rotation));
-    layout.prop(vec3_prop(
+    layout.add_property(std::move(rotation));
+    layout.add_property(vec3_property(
         "Scale", [obj] { return obj->scale_factors(); },
         [obj](const sg::Vec3f &v) { obj->set_scale_factors(v); }));
-    layout.prop(action_prop("Reset Transform", [obj] { obj->reset_transform(); }));
+    layout.add_property(button_property("Reset Transform", [obj] { obj->reset_transform(); }));
 }
 
 // ── Data tab ────────────────────────────────────────────────────────
 
-auto draw_render_layers(sg::MeshData &mesh, Layout &layout) -> void {
+auto fill_render_layers(sg::MeshData &mesh, Layout &layout) -> void {
     auto &layers = mesh.render_state().layers;
 
-    auto &solid = layout.row("Solid");
-    solid.prop(bool_prop("Enabled", layers.solid.enabled));
-    solid.prop(color_prop("Color", layers.solid.color));
+    auto &solid = layout.add_row("Solid");
+    solid.add_property(bool_property("Enabled", layers.solid.enabled));
+    solid.add_property(color_property("Color", layers.solid.color));
 
-    auto &wire = layout.row("Wireframe");
-    wire.prop(bool_prop("Enabled", layers.wireframe.enabled));
-    wire.prop(color_prop("Color", layers.wireframe.color));
-    auto width = prop("Width", float_value(layers.wireframe.width, 0.5f, 5.0f, 0.1f, true));
-    width.enabled = [&layers] { return layers.wireframe.enabled; };
-    wire.prop(std::move(width));
+    auto &wire = layout.add_row("Wireframe");
+    wire.add_property(bool_property("Enabled", layers.wireframe.enabled));
+    wire.add_property(color_property("Color", layers.wireframe.color));
+    auto width = make_property("Width", float_input(layers.wireframe.width, 0.5f, 5.0f, 0.1f, true));
+    width.enabled_when = [&layers] { return layers.wireframe.enabled; };
+    wire.add_property(std::move(width));
 
-    auto &pts = layout.row("Points");
-    pts.prop(bool_prop("Enabled", layers.points.enabled));
-    pts.prop(color_prop("Color", layers.points.color));
-    auto size = prop("Size", float_value(layers.points.size, 0.1f, 20.0f, 0.1f, true));
-    size.enabled = [&layers] { return layers.points.enabled; };
-    pts.prop(std::move(size));
+    auto &pts = layout.add_row("Points");
+    pts.add_property(bool_property("Enabled", layers.points.enabled));
+    pts.add_property(color_property("Color", layers.points.color));
+    auto size = make_property("Size", float_input(layers.points.size, 0.1f, 20.0f, 0.1f, true));
+    size.enabled_when = [&layers] { return layers.points.enabled; };
+    pts.add_property(std::move(size));
 }
 
-auto draw_shading(sg::MeshData &mesh, Layout &layout) -> void {
+auto fill_shading(sg::MeshData &mesh, Layout &layout) -> void {
     auto *md = &mesh;
     auto &rs = md->render_state();
     auto constrain = [md] { md->render_state().constrain(md->has_normals()); };
     constrain(); // state may have been set before normals were known
 
-    auto normals = enum_value<NormalSource>(
+    auto normals = choice_input<NormalSource>(
         { "From Attribute", "Computed (flat)", "None (unlit)" },
         rs.normal_source, constrain);
-    normals.item_enabled = [md](int i) {
+    normals.option_enabled = [md](int i) {
         return i != static_cast<int>(NormalSource::FromAttribute)
                || md->has_normals();
     };
-    layout.prop(prop("Normals", std::move(normals)));
+    layout.add_property(make_property("Normals", std::move(normals)));
 
-    auto shading = enum_value<ShadingModel>({ "Flat", "Gouraud", "Phong" },
+    auto shading = choice_input<ShadingModel>({ "Flat", "Gouraud", "Phong" },
                                             rs.shading, constrain);
-    shading.item_enabled = [md](int i) {
+    shading.option_enabled = [md](int i) {
         return i == static_cast<int>(ShadingModel::Flat)
                || md->render_state().normal_source
                       == NormalSource::FromAttribute;
     };
-    auto shading_prop = prop("Shading", std::move(shading));
-    shading_prop.visible = [md] { return is_lit(*md); };
-    layout.prop(std::move(shading_prop));
+    auto shading_property = make_property("Shading", std::move(shading));
+    shading_property.visible_when = [md] { return is_lit(*md); };
+    layout.add_property(std::move(shading_property));
 
-    auto two_sided = bool_prop("Two-sided Lighting", rs.two_sided);
-    two_sided.visible = [md] { return is_lit(*md); };
-    layout.prop(std::move(two_sided));
+    auto two_sided = bool_property("Two-sided Lighting", rs.two_sided);
+    two_sided.visible_when = [md] { return is_lit(*md); };
+    layout.add_property(std::move(two_sided));
 
-    layout.prop(prop("Face Culling",
-                     enum_value<CullMode>({ "None", "Back", "Front" }, rs.cull_mode)));
+    layout.add_property(make_property("Face Culling",
+                     choice_input<CullMode>({ "None", "Back", "Front" }, rs.cull_mode)));
 }
 
-auto draw_color(sg::MeshData &mesh, Layout &layout) -> void {
+auto fill_color(sg::MeshData &mesh, Layout &layout) -> void {
     auto *md = &mesh;
     auto &rs = md->render_state();
 
-    auto source = enum_value<ColorSource>(
+    auto source = choice_input<ColorSource>(
         { "Uniform", "Per-Vertex", "Scalar Field" }, rs.color_source);
-    source.item_enabled = [md](int i) {
+    source.option_enabled = [md](int i) {
         return i != static_cast<int>(ColorSource::ScalarField)
                || md->has_scalar_field();
     };
-    layout.prop(prop("Source", std::move(source)));
+    layout.add_property(make_property("Source", std::move(source)));
 
-    auto uniform = color_prop("Color", rs.uniform_color);
-    uniform.visible = [&rs] { return rs.color_source == ColorSource::Uniform; };
-    layout.prop(std::move(uniform));
+    auto uniform = color_property("Color", rs.uniform_color);
+    uniform.visible_when = [&rs] { return rs.color_source == ColorSource::Uniform; };
+    layout.add_property(std::move(uniform));
 
-    auto &scalar = layout.column("Scalar Field");
-    scalar.set_visible(
+    auto &scalar = layout.add_column("Scalar Field");
+    scalar.set_visible_when(
         [&rs] { return rs.color_source == ColorSource::ScalarField; });
 
-    scalar.prop(prop(
+    scalar.add_property(make_property(
         "Colormap",
-        EnumValue{
-            .items =
+        ChoiceInput{
+            .options =
                 [] {
                     const auto names = shaders::colormap_names();
                     return std::vector<std::string>(names.begin(), names.end());
                 },
-            .get = [&rs] { return find_colormap_index(rs.colormap_name); },
-            .set =
+            .get_index = [&rs] { return find_colormap_index(rs.colormap_name); },
+            .set_index =
                 [&rs](const int &i) {
                     const auto names = shaders::colormap_names();
                     if (i >= 0 && static_cast<std::size_t>(i) < names.size()) {
@@ -260,42 +262,42 @@ auto draw_color(sg::MeshData &mesh, Layout &layout) -> void {
                     }
                 },
         }));
-    scalar.prop(prop("Colormap Name",
-                     StringValue{ .get = [&rs] { return rs.colormap_name; },
+    scalar.add_property(make_property("Colormap Name",
+                     TextInput{ .get = [&rs] { return rs.colormap_name; },
                                   .set = [&rs](const std::string &s) {
                                       rs.colormap_name = s;
                                   } }));
 
-    auto &range = scalar.row("Range");
-    range.prop(prop("Min", float_value(rs.scalar_min, -1e6f, 1e6f, 0.1f)));
-    range.prop(prop("Max", float_value(rs.scalar_max, -1e6f, 1e6f, 0.1f)));
-    range.prop(action_prop("Reset", [&rs] {
+    auto &range = scalar.add_row("Range");
+    range.add_property(make_property("Min", float_input(rs.scalar_min, -1e6f, 1e6f, 0.1f)));
+    range.add_property(make_property("Max", float_input(rs.scalar_max, -1e6f, 1e6f, 0.1f)));
+    range.add_property(button_property("Reset", [&rs] {
         rs.scalar_min = 0.0f;
         rs.scalar_max = 1.0f;
     }));
 }
 
-auto draw_attributes(sg::MeshData &mesh, Layout &layout) -> void {
+auto fill_attributes(sg::MeshData &mesh, Layout &layout) -> void {
     auto *md = &mesh;
-    layout.prop(role_prop(
+    layout.add_property(role_property(
         "Position", *md, &sg::MeshData::position_binding,
         [](sg::MeshData &m, const sg::MeshAttributeHandle &a) { m.assign_position(a); },
         [](sg::MeshData &m) { m.clear_position(); }));
-    layout.prop(role_prop(
+    layout.add_property(role_property(
         "Normal", *md, &sg::MeshData::normal_binding,
         [](sg::MeshData &m, const sg::MeshAttributeHandle &a) { m.assign_normal(a); },
         [](sg::MeshData &m) { m.clear_normal(); }));
-    layout.prop(role_prop(
+    layout.add_property(role_property(
         "Scalar", *md, &sg::MeshData::scalar_binding,
         [](sg::MeshData &m, const sg::MeshAttributeHandle &a) {
             m.assign_scalar(a, m.scalar_component());
         },
         [](sg::MeshData &m) { m.clear_scalar(); }));
 
-    auto component = prop(
+    auto component = make_property(
         "Component",
-        EnumValue{
-            .items =
+        ChoiceInput{
+            .options =
                 [md] {
                     std::vector<std::string> items{ "Magnitude" };
                     const auto &b = md->scalar_binding();
@@ -308,42 +310,42 @@ auto draw_attributes(sg::MeshData &mesh, Layout &layout) -> void {
                     }
                     return items;
                 },
-            .get = [md] { return md->scalar_component() + 1; },
-            .set = [md](const int &i) { md->set_scalar_component(i - 1); },
+            .get_index = [md] { return md->scalar_component() + 1; },
+            .set_index = [md](const int &i) { md->set_scalar_component(i - 1); },
         });
-    component.visible = [md] {
+    component.visible_when = [md] {
         const auto &b = md->scalar_binding();
         return b.is_bound() && b.attribute()->component_count() > 1;
     };
-    layout.prop(std::move(component));
+    layout.add_property(std::move(component));
 }
 
 // ── Material tab ────────────────────────────────────────────────────
 
-auto draw_material(sg::MeshData &mesh, Layout &layout) -> void {
+auto fill_material(sg::MeshData &mesh, Layout &layout) -> void {
     auto &m = mesh.render_state().material;
-    layout.prop(prop("Ambient", float_value(m.ambient_strength, 0.0f, 1.0f, 0.01f, true)));
-    layout.prop(prop("Diffuse", float_value(m.diffuse_strength, 0.0f, 2.0f, 0.01f, true)));
-    layout.prop(prop("Specular", float_value(m.specular_strength, 0.0f, 2.0f, 0.01f, true)));
-    layout.prop(prop("Shininess", float_value(m.shininess, 1.0f, 256.0f, 1.0f, true)));
+    layout.add_property(make_property("Ambient", float_input(m.ambient_strength, 0.0f, 1.0f, 0.01f, true)));
+    layout.add_property(make_property("Diffuse", float_input(m.diffuse_strength, 0.0f, 2.0f, 0.01f, true)));
+    layout.add_property(make_property("Specular", float_input(m.specular_strength, 0.0f, 2.0f, 0.01f, true)));
+    layout.add_property(make_property("Shininess", float_input(m.shininess, 1.0f, 256.0f, 1.0f, true)));
 }
 
 // ── Scene tab ───────────────────────────────────────────────────────
 
-auto draw_lighting(sg::Light &headlight, Layout &layout) -> void {
+auto fill_lighting(sg::Light &headlight, Layout &layout) -> void {
     auto *light = &headlight;
-    layout.prop(bool_prop("Enabled", light->enabled));
+    layout.add_property(bool_property("Enabled", light->enabled));
 
-    auto dir = vec3_prop(
+    auto dir = vec3_property(
         "Direction", [light] { return light->direction; },
         [light](const sg::Vec3f &v) { light->direction = v; }, -1.0f, 1.0f,
         0.05f);
     dir.tooltip = "Camera space";
-    layout.prop(std::move(dir));
+    layout.add_property(std::move(dir));
 
-    layout.prop(prop(
+    layout.add_property(make_property(
         "Color",
-        ColorValue{ .get =
+        ColorInput{ .get =
                         [light] {
                             const auto &c = light->color;
                             return sg::Vec4f{ c(0), c(1), c(2), 1.0f };
@@ -352,44 +354,90 @@ auto draw_lighting(sg::Light &headlight, Layout &layout) -> void {
                         [light](const sg::Vec4f &c) {
                             light->color = sg::Vec3f(c.head<3>());
                         },
-                    .alpha = false }));
+                    .show_alpha = false }));
 }
 
-// Adapt a draw function taking the required state by reference; poll()
-// guarantees it exists.
-auto on_object(void (*draw)(sg::Object &, Layout &)) {
-    return [draw](const Context &c, Layout &l) { draw(*c.object, l); };
+// Adapt a fill function taking the required state by reference; the
+// panel's is_available() guarantees that state exists.
+auto for_active_object(void (*fill)(sg::Object &, Layout &)) {
+    return [fill](const PanelContext &c, Layout &l) { fill(*c.active_object, l); };
 }
-auto on_mesh(void (*draw)(sg::MeshData &, Layout &)) {
-    return [draw](const Context &c, Layout &l) { draw(*c.mesh_data(), l); };
+auto for_active_mesh(void (*fill)(sg::MeshData &, Layout &)) {
+    return [fill](const PanelContext &c, Layout &l) { fill(*c.active_mesh_data(), l); };
 }
-auto on_headlight(void (*draw)(sg::Light &, Layout &)) {
-    return [draw](const Context &c, Layout &l) { draw(*c.headlight(), l); };
+auto for_headlight(void (*fill)(sg::Light &, Layout &)) {
+    return [fill](const PanelContext &c, Layout &l) { fill(*c.headlight(), l); };
+}
+
+auto has_active_object(const PanelContext &c) -> bool {
+    return c.active_object != nullptr;
+}
+auto has_lit_mesh(const PanelContext &c) -> bool {
+    auto *md = c.active_mesh_data();
+    return md && is_lit(*md);
+}
+auto has_headlight(const PanelContext &c) -> bool {
+    return c.headlight() != nullptr;
 }
 
 } // namespace
 
 auto register_builtin_panels() -> void {
     static const bool once = [] {
-        register_tab({ "object", "Object", "\u25A2", 0 });   // ▢
-        register_tab({ "data", "Data", "\u25B3", 10 });      // △
-        register_tab({ "material", "Material", "\u25CF", 20 }); // ●
-        register_tab({ "scene", "Scene", "\u2600", 30 });    // ☀
-        auto object = [](const Context &c) { return c.object != nullptr; };
-        auto lit = [](const Context &c) {
-            auto *md = c.mesh_data();
-            return md && is_lit(*md);
-        };
-        register_panel({ "object.object", "object", 0, "Object", true, object, on_object(draw_object) });
-        register_panel({ "object.transform", "object", 10, "Transform", true, object, on_object(draw_transform) });
-        register_panel({ "data.render_layers", "data", 0, "Render Layers", true, has_mesh, on_mesh(draw_render_layers) });
-        register_panel({ "data.shading", "data", 10, "Shading & Rendering", true, has_mesh, on_mesh(draw_shading) });
-        register_panel({ "data.color", "data", 20, "Color", true, has_mesh, on_mesh(draw_color) });
-        register_panel({ "data.attributes", "data", 30, "Attribute Bindings", false, has_mesh, on_mesh(draw_attributes) });
-        register_panel({ "material.response", "material", 0, "Material Response", true, lit, on_mesh(draw_material) });
-        register_panel({ "scene.lighting", "scene", 0, "Lighting", true,
-                         [](const Context &c) { return c.headlight() != nullptr; },
-                         on_headlight(draw_lighting) });
+        register_tab({ .id = "object", .label = "Object", .icon_glyph = "\u25A2", .sort_order = 0 });     // ▢
+        register_tab({ .id = "data", .label = "Data", .icon_glyph = "\u25B3", .sort_order = 10 });        // △
+        register_tab({ .id = "material", .label = "Material", .icon_glyph = "\u25CF", .sort_order = 20 }); // ●
+        register_tab({ .id = "scene", .label = "Scene", .icon_glyph = "\u2600", .sort_order = 30 });      // ☀
+
+        register_panel({ .id = "object.object",
+                         .tab_id = "object",
+                         .sort_order = 0,
+                         .label = "Object",
+                         .is_available = has_active_object,
+                         .fill_layout = for_active_object(fill_object) });
+        register_panel({ .id = "object.transform",
+                         .tab_id = "object",
+                         .sort_order = 10,
+                         .label = "Transform",
+                         .is_available = has_active_object,
+                         .fill_layout = for_active_object(fill_transform) });
+        register_panel({ .id = "data.render_layers",
+                         .tab_id = "data",
+                         .sort_order = 0,
+                         .label = "Render Layers",
+                         .is_available = has_active_mesh,
+                         .fill_layout = for_active_mesh(fill_render_layers) });
+        register_panel({ .id = "data.shading",
+                         .tab_id = "data",
+                         .sort_order = 10,
+                         .label = "Shading & Rendering",
+                         .is_available = has_active_mesh,
+                         .fill_layout = for_active_mesh(fill_shading) });
+        register_panel({ .id = "data.color",
+                         .tab_id = "data",
+                         .sort_order = 20,
+                         .label = "Color",
+                         .is_available = has_active_mesh,
+                         .fill_layout = for_active_mesh(fill_color) });
+        register_panel({ .id = "data.attributes",
+                         .tab_id = "data",
+                         .sort_order = 30,
+                         .label = "Attribute Bindings",
+                         .expanded_by_default = false,
+                         .is_available = has_active_mesh,
+                         .fill_layout = for_active_mesh(fill_attributes) });
+        register_panel({ .id = "material.response",
+                         .tab_id = "material",
+                         .sort_order = 0,
+                         .label = "Material Response",
+                         .is_available = has_lit_mesh,
+                         .fill_layout = for_active_mesh(fill_material) });
+        register_panel({ .id = "scene.lighting",
+                         .tab_id = "scene",
+                         .sort_order = 0,
+                         .label = "Lighting",
+                         .is_available = has_headlight,
+                         .fill_layout = for_headlight(fill_lighting) });
         return true;
     }();
     (void)once;

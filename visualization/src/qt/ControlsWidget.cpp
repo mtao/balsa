@@ -50,22 +50,22 @@ auto make_spin(QWidget *parent, double min, double max, double step,
 // Sliders are integer; map [min, max] onto this many steps.
 constexpr int k_slider_steps = 1000;
 
-void fill_combo(QComboBox *combo, const ctl::EnumValue &e) {
-    const auto items = e.items();
-    bool same = combo->count() == static_cast<int>(items.size());
+void fill_combo(QComboBox *combo, const ctl::ChoiceInput &choice) {
+    const auto options = choice.options();
+    bool same = combo->count() == static_cast<int>(options.size());
     for (int i = 0; same && i < combo->count(); ++i) {
-        same = combo->itemText(i) == qstr(items[static_cast<std::size_t>(i)]);
+        same = combo->itemText(i) == qstr(options[static_cast<std::size_t>(i)]);
     }
     if (!same) {
         combo->clear();
-        for (const auto &s : items) combo->addItem(qstr(s));
+        for (const auto &s : options) combo->addItem(qstr(s));
     }
     if (auto *model = qobject_cast<QStandardItemModel *>(combo->model())) {
         for (int i = 0; i < model->rowCount(); ++i) {
-            model->item(i)->setEnabled(e.item_enabled(i));
+            model->item(i)->setEnabled(choice.option_enabled(i));
         }
     }
-    combo->setCurrentIndex(e.get());
+    combo->setCurrentIndex(choice.get_index());
 }
 
 } // namespace
@@ -85,14 +85,14 @@ void ControlsWidget::set_scene(vulkan::MeshScene *scene) {
 }
 
 void ControlsWidget::set_selected_object(sg::Object *obj) {
-    m_context.object = obj;
+    m_context.active_object = obj;
     rebuild();
 }
 
 auto ControlsWidget::applicable_panels() const -> std::vector<std::string> {
     std::vector<std::string> ids;
-    for (const auto *tab : ctl::tabs()) {
-        for (const auto *p : ctl::panels_for(m_context, tab->id)) {
+    for (const auto *tab : ctl::registered_tabs()) {
+        for (const auto *p : ctl::available_panels(m_context, tab->id)) {
             ids.push_back(p->id);
         }
     }
@@ -132,8 +132,8 @@ void ControlsWidget::rebuild() {
 
     std::vector<std::string> tab_ids;
     int current = -1;
-    for (const auto *tab : ctl::tabs()) {
-        const auto panels = ctl::panels_for(m_context, tab->id);
+    for (const auto *tab : ctl::registered_tabs()) {
+        const auto panels = ctl::available_panels(m_context, tab->id);
         if (panels.empty()) continue;
 
         auto *page = new QWidget;
@@ -144,7 +144,7 @@ void ControlsWidget::rebuild() {
 
         if (tab->id == m_current_tab) current = static_cast<int>(tab_ids.size());
         tab_ids.push_back(tab->id);
-        m_tabs->addTab(page, qstr(tab->icon), qstr(tab->label));
+        m_tabs->addTab(page, qstr(tab->icon_glyph), qstr(tab->label));
     }
     if (current >= 0) m_tabs->setCurrentIndex(current);
     connect(m_tabs, &VerticalTabWidget::currentChanged, this,
@@ -158,7 +158,7 @@ void ControlsWidget::rebuild() {
 
 auto ControlsWidget::build_panel(const ctl::Panel &panel) -> QWidget * {
     auto &layout = *m_layouts.emplace_back(std::make_unique<ctl::Layout>());
-    panel.draw(m_context, layout);
+    panel.fill_layout(m_context, layout);
 
     auto *box = new QFrame;
     box->setFrameShape(QFrame::StyledPanel);
@@ -179,7 +179,7 @@ auto ControlsWidget::build_panel(const ctl::Panel &panel) -> QWidget * {
     build_layout(layout, content, cl);
     v->addWidget(content);
 
-    auto [it, inserted] = m_panel_open.try_emplace(panel.id, panel.default_open);
+    auto [it, inserted] = m_panel_open.try_emplace(panel.id, panel.expanded_by_default);
     auto apply = [header, content](bool open) {
         header->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
         content->setVisible(open);
@@ -228,7 +228,7 @@ void ControlsWidget::build_layout(const ctl::Layout &layout, QWidget *parent,
         into->addLayout(form);
     }
     m_refreshers.push_back([group, &layout, parent] {
-        if (group != parent) group->setVisible(layout.visible()());
+        if (group != parent) group->setVisible(layout.visible_when()());
     });
 
     for (const auto &item : layout.items()) {
@@ -250,8 +250,8 @@ void ControlsWidget::build_layout(const ctl::Layout &layout, QWidget *parent,
 
         // Bools and actions carry their own text.
         const bool self_labelled =
-            std::holds_alternative<ctl::BoolValue>(prop.value)
-            || std::holds_alternative<ctl::ActionValue>(prop.value);
+            std::holds_alternative<ctl::BoolInput>(prop.widget)
+            || std::holds_alternative<ctl::Button>(prop.widget);
         QLabel *label = nullptr;
         if (form) {
             if (self_labelled) {
@@ -266,17 +266,17 @@ void ControlsWidget::build_layout(const ctl::Layout &layout, QWidget *parent,
                 hbox->addWidget(label);
             }
             const bool stretch =
-                std::holds_alternative<ctl::FloatValue>(prop.value)
-                || std::holds_alternative<ctl::Vec3Value>(prop.value)
-                || std::holds_alternative<ctl::EnumValue>(prop.value)
-                || std::holds_alternative<ctl::StringValue>(prop.value);
+                std::holds_alternative<ctl::FloatInput>(prop.widget)
+                || std::holds_alternative<ctl::Vec3Input>(prop.widget)
+                || std::holds_alternative<ctl::ChoiceInput>(prop.widget)
+                || std::holds_alternative<ctl::TextInput>(prop.widget);
             hbox->addWidget(w, stretch ? 1 : 0);
         }
         m_refreshers.push_back([w, label, &prop] {
-            const bool visible = prop.visible();
+            const bool visible = prop.visible_when();
             w->setVisible(visible);
             if (label) label->setVisible(visible);
-            w->setEnabled(prop.enabled());
+            w->setEnabled(prop.enabled_when());
         });
     }
     if (hbox) hbox->addStretch(0);
@@ -288,7 +288,7 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
         [&](const auto &v) -> QWidget * {
             using V = std::decay_t<decltype(v)>;
 
-            if constexpr (std::is_same_v<V, ctl::BoolValue>) {
+            if constexpr (std::is_same_v<V, ctl::BoolInput>) {
                 auto *c = new QCheckBox(qstr(prop.label), parent);
                 connect(c, &QCheckBox::toggled, this, [this, &v](bool b) {
                     v.set(b);
@@ -300,9 +300,9 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 });
                 return c;
 
-            } else if constexpr (std::is_same_v<V, ctl::FloatValue>) {
-                if (!v.slider) {
-                    auto *s = make_spin(parent, v.min, v.max, v.step, v.decimals);
+            } else if constexpr (std::is_same_v<V, ctl::FloatInput>) {
+                if (!v.use_slider) {
+                    auto *s = make_spin(parent, v.min, v.max, v.step, v.display_decimals);
                     connect(s, &QDoubleSpinBox::valueChanged, this,
                             [this, &v](double x) {
                                 v.set(static_cast<float>(x));
@@ -341,13 +341,13 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 });
                 return w;
 
-            } else if constexpr (std::is_same_v<V, ctl::Vec3Value>) {
+            } else if constexpr (std::is_same_v<V, ctl::Vec3Input>) {
                 auto *w = new QWidget(parent);
                 auto *h = new QHBoxLayout(w);
                 h->setContentsMargins(0, 0, 0, 0);
                 std::array<QDoubleSpinBox *, 3> spins{};
                 for (auto &s : spins) {
-                    s = make_spin(w, v.min, v.max, v.step, v.decimals);
+                    s = make_spin(w, v.min, v.max, v.step, v.display_decimals);
                     h->addWidget(s, 1);
                 }
                 for (auto *s : spins) {
@@ -366,11 +366,11 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 });
                 return w;
 
-            } else if constexpr (std::is_same_v<V, ctl::ColorValue>) {
+            } else if constexpr (std::is_same_v<V, ctl::ColorInput>) {
                 auto *b = new QPushButton(parent);
                 b->setFixedWidth(48);
                 connect(b, &QPushButton::clicked, this, [this, b, &v, &prop] {
-                    auto opts = v.alpha ? QColorDialog::ShowAlphaChannel
+                    auto opts = v.show_alpha ? QColorDialog::ShowAlphaChannel
                                         : QColorDialog::ColorDialogOptions{};
                     QColor c = QColorDialog::getColor(to_qcolor(v.get()), this,
                                                       qstr(prop.label), opts);
@@ -382,12 +382,12 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 m_refreshers.push_back([b, &v] { set_button_color(b, v.get()); });
                 return b;
 
-            } else if constexpr (std::is_same_v<V, ctl::EnumValue>) {
+            } else if constexpr (std::is_same_v<V, ctl::ChoiceInput>) {
                 auto *c = new QComboBox(parent);
                 connect(c, &QComboBox::currentIndexChanged, this,
                         [this, &v](int i) {
                             if (i < 0) return;
-                            v.set(i);
+                            v.set_index(i);
                             after_edit();
                         });
                 m_refreshers.push_back([c, &v] {
@@ -396,7 +396,7 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 });
                 return c;
 
-            } else if constexpr (std::is_same_v<V, ctl::StringValue>) {
+            } else if constexpr (std::is_same_v<V, ctl::TextInput>) {
                 auto *e = new QLineEdit(parent);
                 connect(e, &QLineEdit::editingFinished, this, [this, e, &v] {
                     v.set(e->text().toStdString());
@@ -409,22 +409,22 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 });
                 return e;
 
-            } else if constexpr (std::is_same_v<V, ctl::LabelValue>) {
+            } else if constexpr (std::is_same_v<V, ctl::ReadOnlyText>) {
                 auto *l = new QLabel(parent);
                 m_refreshers.push_back([l, &v] { l->setText(qstr(v.get())); });
                 return l;
 
             } else {
-                static_assert(std::is_same_v<V, ctl::ActionValue>);
+                static_assert(std::is_same_v<V, ctl::Button>);
                 auto *b = new QPushButton(qstr(prop.label), parent);
                 connect(b, &QPushButton::clicked, this, [this, &v] {
-                    v.run();
+                    v.on_click();
                     after_edit();
                 });
                 return b;
             }
         },
-        prop.value);
+        prop.widget);
 }
 
 } // namespace balsa::visualization::qt

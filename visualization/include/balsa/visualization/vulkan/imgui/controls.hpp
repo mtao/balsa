@@ -6,6 +6,6 @@ namespace balsa::visualization::vulkan::imgui {
 
 // Draw every applicable registered panel, grouped into a tab bar, into the
 // current ImGui window.  Returns true if any value was modified.
-auto draw_controls(const controls::Context &ctx) -> bool;
+auto draw_controls(const controls::PanelContext &ctx) -> bool;
 
 } // namespace balsa::visualization::vulkan::imgui
