@@ -22,9 +22,12 @@ auto normalize_to_unit_box(scene_graph::Object &object,
     float range = ::zipper::utils::maxCoeff(bbox.range());
     if (range < 1e-8f) { range = 1.0f; }
 
-    object.set_translation(scene_graph::Vec3f(-bbox.center()));
+    // Object composes T * R * S, so scale is applied before translation:
+    // world = s * x + t.  For world = s * (x - center), t = -s * center.
+    const float s = 1.0f / range;
+    object.set_translation(scene_graph::Vec3f(-s * bbox.center()));
     object.set_scale_factors(scene_graph::Vec3f(
-      ::zipper::expression::nullary::Constant<float, 3>(1.0f / range)));
+      ::zipper::expression::nullary::Constant<float, 3>(s)));
     return true;
 }
 
