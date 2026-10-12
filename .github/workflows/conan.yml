@@ -17,6 +17,7 @@ jobs:
     env:
       CC: gcc-15
       CXX: g++-15
+      CONAN_HOME: ${{ github.workspace }}/.conan2
 
     steps:
       - uses: actions/checkout@v6
@@ -45,9 +46,27 @@ jobs:
           profile=$(conan profile path default)
           echo "compiler.cppstd=26" >> "$profile"
           echo "build_type=Debug" >> "$profile"
+          # Pin catch2 to settings that have prebuilt ConanCenter binaries
+          # (Release only; gcc 11 / C++17). libstdc++ is ABI-stable across
+          # these versions, so linking it into a GCC 15 Debug build is fine.
+          echo "catch2/*:compiler.version=11" >> "$profile"
+          echo "catch2/*:compiler.cppstd=17" >> "$profile"
+          echo "catch2/*:build_type=Release" >> "$profile"
+          conan profile show
+
+      - name: Cache conan packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.CONAN_HOME }}/p
+          key: conan-ubuntu-24.04-Debug-${{ hashFiles('conanfile.py', '.github/workflows/conan.yml') }}
+          restore-keys: |
+            conan-ubuntu-24.04-Debug-
 
       - name: Install Conan dependencies
         run: conan install . --output-folder=build/conan --build=missing
+
+      - name: Trim conan cache
+        run: conan cache clean "*" --source --build --temp
 
       - name: Select GCC 15 for Meson
         run: |
