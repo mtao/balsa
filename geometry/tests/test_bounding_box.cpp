@@ -58,3 +58,13 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         CHECK(bb3.range() == zipper::Vector<double, 2>({ 4, 3 }));
     }
 }
+
+TEST_CASE("bounding_box_center", "[bounding_box][geometry]") {
+    balsa::geometry::BoundingBox<double, 3> bb(
+        zipper::Vector<double, 3>({ -2, -5, 0 }),
+        zipper::Vector<double, 3>({ 1, 3, 20 }));
+    CHECK(bb.center() == zipper::Vector<double, 3>({ -0.5, -1.0, 10.0 }));
+
+    balsa::geometry::BoundingBox<double, 3> pt(zipper::Vector<double, 3>({ 1.0, 2.0, 3.0 }));
+    CHECK(pt.center() == zipper::Vector<double, 3>({ 1.0, 2.0, 3.0 }));
+}

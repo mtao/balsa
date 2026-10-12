@@ -124,6 +124,14 @@ class BoundingBox {
         return v;
     }
 
+    // ── center ──────────────────────────────────────────────────────
+
+    /// Midpoint of the box: (min + max) / 2.  For integral T this rounds
+    /// toward zero.
+    auto center() const -> ::zipper::Vector<T, Dim> {
+        return ((min() + max()) / T(2)).eval();
+    }
+
     // ── Convenience dimension names ─────────────────────────────────
 
     auto width() const -> T { return range(0); }
