@@ -1335,6 +1335,17 @@ static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
 }
 
 TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
+    namespace sgd = balsa::scene_graph::detail;
+    using balsa::scene_graph::AttributeValue;
+    STATIC_CHECK(std::is_same_v<sgd::attribute_storage_t<float>, float>);
+    STATIC_CHECK(std::is_same_v<sgd::attribute_storage_t<double>, double>);
+    STATIC_CHECK(std::is_same_v<sgd::attribute_storage_t<int16_t>, int32_t>);
+    STATIC_CHECK(std::is_same_v<sgd::attribute_storage_t<uint8_t>, uint32_t>);
+    STATIC_CHECK(AttributeValue<const float>);
+    STATIC_CHECK_FALSE(AttributeValue<bool>);
+    STATIC_CHECK_FALSE(AttributeValue<int64_t>);
+    STATIC_CHECK_FALSE(AttributeValue<long double>);
+
     namespace sg = balsa::scene_graph;
     using ::zipper::dextents;
     sg::MeshData md;

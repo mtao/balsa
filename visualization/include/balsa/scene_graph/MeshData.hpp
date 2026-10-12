@@ -1,4 +1,5 @@
 #pragma once
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -54,17 +55,38 @@ enum class AttributeType : uint8_t {
 };
 
 namespace detail {
-    /// Stored type for input values of type T; void if unsupported.
+    /// Stored type for attribute values given as T; no `type` member when T
+    /// is unsupported.
     template <typename T>
-    using attribute_storage_t = std::conditional_t<
-        std::is_same_v<T, float> || std::is_same_v<T, double>,
-        T,
-        std::conditional_t<
-            std::is_integral_v<T> && !std::is_same_v<T, bool>
-                && sizeof(T) <= sizeof(int32_t),
-            std::conditional_t<std::is_signed_v<T>, int32_t, uint32_t>,
-            void>>;
+    struct attribute_storage {};
+    template <>
+    struct attribute_storage<float> {
+        using type = float;
+    };
+    template <>
+    struct attribute_storage<double> {
+        using type = double;
+    };
+    template <std::signed_integral T>
+        requires(sizeof(T) <= sizeof(int32_t))
+    struct attribute_storage<T> {
+        using type = int32_t;
+    };
+    template <std::unsigned_integral T>
+        requires(sizeof(T) <= sizeof(uint32_t) && !std::same_as<T, bool>)
+    struct attribute_storage<T> {
+        using type = uint32_t;
+    };
+
+    template <typename T>
+    using attribute_storage_t = typename attribute_storage<T>::type;
 } // namespace detail
+
+/// Value types MeshAttribute accepts: float, double, or an integer of at
+/// most 32 bits (stored as float, double, int32 or uint32).
+template <typename T>
+concept AttributeValue =
+    requires { typename detail::attribute_storage<std::remove_cv_t<T>>::type; };
 
 class MeshAttribute {
   public:
@@ -88,7 +110,10 @@ class MeshAttribute {
 
     MeshAttribute() = default;
     /// Precondition: data.extent(0) <= max_components for rank-2 data.
-    template <typename T, typename Extents, typename Layout, typename Accessor>
+    template <AttributeValue T,
+              typename Extents,
+              typename Layout,
+              typename Accessor>
         requires(Extents::rank() == 1 || Extents::rank() == 2)
     MeshAttribute(std::string name,
                   AttributeDomain domain,
@@ -255,7 +280,10 @@ class MeshData : public AbstractFeature {
     // extents (components, elements) in any layout; e.g. N x 3
     // row-major positions are a 3 x N layout_left mdspan over the same
     // memory.  Returns an invalid handle if the shape is unusable.
-    template <typename T, typename Extents, typename Layout, typename Accessor>
+    template <AttributeValue T,
+              typename Extents,
+              typename Layout,
+              typename Accessor>
         requires(Extents::rank() == 1 || Extents::rank() == 2)
     auto add_attribute(std::string name,
                        AttributeDomain domain,

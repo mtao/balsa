@@ -71,7 +71,10 @@ namespace detail {
 
 } // namespace detail
 
-template <typename T, typename Extents, typename Layout, typename Accessor>
+template <AttributeValue T,
+          typename Extents,
+          typename Layout,
+          typename Accessor>
     requires(Extents::rank() == 1 || Extents::rank() == 2)
 MeshAttribute::MeshAttribute(
     std::string name,
@@ -79,9 +82,6 @@ MeshAttribute::MeshAttribute(
     ::zipper::mdspan<T, Extents, Layout, Accessor> data)
   : name(std::move(name)), domain(domain) {
     using S = detail::attribute_storage_t<std::remove_cv_t<T>>;
-    static_assert(!std::is_void_v<S>,
-                  "attribute values must be float, double, or an integer "
-                  "of at most 32 bits");
     using source_t =
         ::zipper::expression::nullary::MDSpan<T, Extents, Layout, Accessor>;
 
@@ -100,7 +100,10 @@ MeshAttribute::MeshAttribute(
     }
 }
 
-template <typename T, typename Extents, typename Layout, typename Accessor>
+template <AttributeValue T,
+          typename Extents,
+          typename Layout,
+          typename Accessor>
     requires(Extents::rank() == 1 || Extents::rank() == 2)
 auto MeshData::add_attribute(std::string name,
                              AttributeDomain domain,
