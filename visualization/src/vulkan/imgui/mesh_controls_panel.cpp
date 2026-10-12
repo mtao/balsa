@@ -11,12 +11,22 @@
 #include <array>
 #include <cstring>
 #include <imgui.h>
+#include <zipper/expression/nullary/Constant.hpp>
 #include <string>
 
 namespace balsa::visualization::vulkan::imgui {
 
 using visualization::find_colormap_index;
 using visualization::shaders::colormap_names;
+
+namespace {
+// Raw float pointer into a static zipper vector's contiguous storage,
+// for ImGui widgets (ColorEdit/DragFloat) that require float*.
+template<typename VectorType>
+auto data_ptr(VectorType &v) -> float * {
+    return v.expression().as_std_span().data();
+}
+}// namespace
 
 // ── Enum combo helpers ───────────────────────────────────────────────
 
@@ -182,7 +192,7 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         if (layers.solid.enabled) {
             ImGui::SameLine();
             changed |= ImGui::ColorEdit4("##solid_color",
-                                         layers.solid.color,
+                                         data_ptr(layers.solid.color),
                                          ImGuiColorEditFlags_NoInputs
                                              | ImGuiColorEditFlags_NoLabel);
         }
@@ -194,7 +204,7 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         if (layers.wireframe.enabled) {
             ImGui::SameLine();
             changed |= ImGui::ColorEdit4("##wire_color",
-                                         layers.wireframe.color,
+                                         data_ptr(layers.wireframe.color),
                                          ImGuiColorEditFlags_NoInputs
                                              | ImGuiColorEditFlags_NoLabel);
             changed |= ImGui::SliderFloat(
@@ -208,7 +218,7 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         if (layers.points.enabled) {
             ImGui::SameLine();
             changed |= ImGui::ColorEdit4("##point_color",
-                                         layers.points.color,
+                                         data_ptr(layers.points.color),
                                          ImGuiColorEditFlags_NoInputs
                                              | ImGuiColorEditFlags_NoLabel);
             changed |= ImGui::SliderFloat(
@@ -222,7 +232,8 @@ bool draw_render_state_controls(MeshRenderState &state, bool has_normals) {
         changed |= combo_color_source("Color Source", state.color_source);
 
         if (state.color_source == ColorSource::Uniform) {
-            changed |= ImGui::ColorEdit4("Uniform Color", state.uniform_color);
+            changed |= ImGui::ColorEdit4("Uniform Color",
+                                         data_ptr(state.uniform_color));
         }
 
         if (state.color_source == ColorSource::ScalarField) {
@@ -653,41 +664,21 @@ bool draw_property_panel(MeshScene & /*scene*/, MeshPanelState &state) {
             auto euler = obj->rotation_euler();
             auto s = obj->scale_factors();
 
-            // We need contiguous float[3] for DragFloat3, so copy into
-            // local arrays, edit, then set back.
-            float tv[3] = {static_cast<float>(t(0)),
-                           static_cast<float>(t(1)),
-                           static_cast<float>(t(2))};
-            float rv[3] = {static_cast<float>(euler(0)),
-                           static_cast<float>(euler(1)),
-                           static_cast<float>(euler(2))};
-            float sv[3] = {static_cast<float>(s(0)),
-                           static_cast<float>(s(1)),
-                           static_cast<float>(s(2))};
+            // DragFloat3 needs contiguous float[3]; edit local copies,
+            // then set back.
+            scene_graph::Vec3f tv = t;
+            scene_graph::Vec3f rv = euler;
+            scene_graph::Vec3f sv = s;
 
             bool t_changed = false;
-            t_changed |= ImGui::DragFloat3("Translation", tv, 0.01f);
-            t_changed |= ImGui::DragFloat3("Rotation", rv, 0.5f);
-            t_changed |= ImGui::DragFloat3("Scale", sv, 0.01f);
+            t_changed |= ImGui::DragFloat3("Translation", data_ptr(tv), 0.01f);
+            t_changed |= ImGui::DragFloat3("Rotation", data_ptr(rv), 0.5f);
+            t_changed |= ImGui::DragFloat3("Scale", data_ptr(sv), 0.01f);
 
             if (t_changed) {
-                scene_graph::Vec3f new_t;
-                new_t(0) = tv[0];
-                new_t(1) = tv[1];
-                new_t(2) = tv[2];
-                obj->set_translation(new_t);
-
-                scene_graph::Vec3f new_r;
-                new_r(0) = rv[0];
-                new_r(1) = rv[1];
-                new_r(2) = rv[2];
-                obj->set_rotation_euler(new_r);
-
-                scene_graph::Vec3f new_s;
-                new_s(0) = sv[0];
-                new_s(1) = sv[1];
-                new_s(2) = sv[2];
-                obj->set_scale_factors(new_s);
+                obj->set_translation(tv);
+                obj->set_rotation_euler(rv);
+                obj->set_scale_factors(sv);
 
                 changed = true;
             }
@@ -871,36 +862,21 @@ bool draw_scene_lighting_panel(MeshScene &scene, MeshPanelState &state) {
 
         if (light.enabled) {
             // Direction in local space (camera space for headlight).
-            float dir[3] = {static_cast<float>(light.direction(0)),
-                            static_cast<float>(light.direction(1)),
-                            static_cast<float>(light.direction(2))};
-            if (ImGui::DragFloat3("Direction", dir, 0.01f, -1.0f, 1.0f)) {
-                light.direction(0) = dir[0];
-                light.direction(1) = dir[1];
-                light.direction(2) = dir[2];
+            if (ImGui::DragFloat3(
+                    "Direction", data_ptr(light.direction), 0.01f, -1.0f, 1.0f)) {
                 changed = true;
             }
             ImGui::SameLine();
             ImGui::TextDisabled("(camera-local)");
 
             // Light color
-            float col[3] = {static_cast<float>(light.color(0)),
-                            static_cast<float>(light.color(1)),
-                            static_cast<float>(light.color(2))};
-            if (ImGui::ColorEdit3("Light Color", col)) {
-                light.color(0) = col[0];
-                light.color(1) = col[1];
-                light.color(2) = col[2];
+            if (ImGui::ColorEdit3("Light Color", data_ptr(light.color))) {
                 changed = true;
             }
 
             if (ImGui::Button("Reset to Default")) {
-                light.direction(0) = 0.0f;
-                light.direction(1) = 0.0f;
-                light.direction(2) = 1.0f;
-                light.color(0) = 1.0f;
-                light.color(1) = 1.0f;
-                light.color(2) = 1.0f;
+                light.direction = scene_graph::Vec3f{ 0.0f, 0.0f, 1.0f };
+                light.color = ::zipper::expression::nullary::Constant<float, 3>(1.0f);
                 changed = true;
             }
         }

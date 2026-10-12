@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_VULKAN_MESH_DRAWABLE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_VULKAN_MESH_DRAWABLE_HPP
-
+#pragma once
 #include <cstdint>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -96,10 +94,10 @@ class VulkanMeshDrawable : public VulkanDrawable {
     // Uses film.current_frame() to select the correct per-frame UBO.
     void upload_material_ubo_for_layer(Film &film,
                                        uint32_t layer_slot,
-                                       const float layer_color[4],
+                                       const scene_graph::Vec4f &layer_color,
                                        float point_size,
                                        const MeshRenderState &rs,
-                                       const float *wireframe_color_override = nullptr);
+                                       const scene_graph::Vec4f *wireframe_color_override = nullptr);
 
     // Bind the descriptor set with dynamic offset for the given layer.
     // Uses film.current_frame() to select the correct per-frame set.
@@ -131,5 +129,3 @@ class VulkanMeshDrawable : public VulkanDrawable {
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

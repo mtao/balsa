@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_MESH_RENDER_STATE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_MESH_RENDER_STATE_HPP
-
+#pragma once
 #include <cstdint>
 #include <string>
 
@@ -62,7 +60,7 @@ struct MeshRenderState {
     scene_graph::MaterialProperties material;
 
     // Uniform color (when color_source == Uniform).  RGBA.
-    float uniform_color[4] = { 0.8f, 0.8f, 0.8f, 1.0f };
+    scene_graph::Vec4f uniform_color{ 0.8f, 0.8f, 0.8f, 1.0f };
 
     // Colormap name for scalar field (matches Qt resource alias, e.g. "MATLAB_jet").
     std::string colormap_name = "MATLAB_jet";
@@ -119,11 +117,9 @@ struct MeshRenderState {
 
 struct ResolvedLightState {
     // World-space light direction (normalised).
-    float light_dir[3] = { 0.577f, 0.577f, 0.577f };
+    scene_graph::Vec3f light_dir{ 0.577f, 0.577f, 0.577f };
     // Light color (multiplied with diffuse/specular).
-    float light_color[3] = { 1.0f, 1.0f, 1.0f };
+    scene_graph::Vec3f light_color{ 1.0f, 1.0f, 1.0f };
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

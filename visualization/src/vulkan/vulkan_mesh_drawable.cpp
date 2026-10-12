@@ -185,10 +185,11 @@ void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam,
     transform.view = view;
     transform.projection = projection;
     transform.normal_matrix = normal_matrix;
-    transform.camera_pos(0) = static_cast<float>(cam_translation(0));
-    transform.camera_pos(1) = static_cast<float>(cam_translation(1));
-    transform.camera_pos(2) = static_cast<float>(cam_translation(2));
-    transform.camera_pos(3) = 0.0f; // pad
+    transform.camera_pos = scene_graph::Vec4f{
+        static_cast<float>(cam_translation(0)),
+        static_cast<float>(cam_translation(1)),
+        static_cast<float>(cam_translation(2)),
+        0.0f };// w = pad
     _transform_ubos[fi].upload(&transform, sizeof(TransformUBO));
 }
 
@@ -197,10 +198,10 @@ void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam,
 void VulkanMeshDrawable::upload_material_ubo_for_layer(
     Film &film,
     uint32_t layer_slot,
-    const float layer_color[4],
+    const scene_graph::Vec4f &layer_color,
     float point_size,
     const MeshRenderState &rs,
-    const float *wireframe_color_override) {
+    const scene_graph::Vec4f *wireframe_color_override) {
     const int fi = film.current_frame();
 
     MaterialUBO material;
@@ -209,33 +210,26 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
     // For the solid layer (slot 0), override with the layer's own color
     // so that each layer independently controls its base color.
     if (layer_slot == 0 && rs.color_source == ColorSource::Uniform) {
-        material.uniform_color(0) = layer_color[0];
-        material.uniform_color(1) = layer_color[1];
-        material.uniform_color(2) = layer_color[2];
-        material.uniform_color(3) = layer_color[3];
+        material.uniform_color = layer_color;
     } else {
-        material.uniform_color(0) = rs.uniform_color[0];
-        material.uniform_color(1) = rs.uniform_color[1];
-        material.uniform_color(2) = rs.uniform_color[2];
-        material.uniform_color(3) = rs.uniform_color[3];
+        material.uniform_color = rs.uniform_color;
     }
 
     // Lighting — scene light direction + per-mesh material response.
-    material.light_dir(0) = _scene_light_state.light_dir[0];
-    material.light_dir(1) = _scene_light_state.light_dir[1];
-    material.light_dir(2) = _scene_light_state.light_dir[2];
-    material.light_dir(3) = rs.material.ambient_strength;
+    const auto &ld = _scene_light_state.light_dir;
+    material.light_dir =
+        scene_graph::Vec4f{ ld(0), ld(1), ld(2), rs.material.ambient_strength };
 
     // Light color (from scene light) + diffuse strength in .w.
-    material.light_color(0) = _scene_light_state.light_color[0];
-    material.light_color(1) = _scene_light_state.light_color[1];
-    material.light_color(2) = _scene_light_state.light_color[2];
-    material.light_color(3) = rs.material.diffuse_strength;
+    const auto &lcol = _scene_light_state.light_color;
+    material.light_color = scene_graph::Vec4f{
+        lcol(0), lcol(1), lcol(2), rs.material.diffuse_strength };
 
-    material.specular_params(0) = rs.material.specular_strength;
-    material.specular_params(1) = rs.material.specular_strength;
-    material.specular_params(2) = rs.material.specular_strength;
-    material.specular_params(3) = rs.material.shininess;
+    material.specular_params = scene_graph::Vec4f{
+        rs.material.specular_strength,
+        rs.material.specular_strength,
+        rs.material.specular_strength,
+        rs.material.shininess };
 
     // Scalar / sizing parameters.
     material.scalar_params(0) = rs.scalar_min;
@@ -247,12 +241,8 @@ void VulkanMeshDrawable::upload_material_ubo_for_layer(
     // (merged solid+wireframe pass), use the wireframe color here
     // so the fragment shader can read it from u_layer_color for the
     // wireframe overlay blend.
-    const float *lc =
-        wireframe_color_override ? wireframe_color_override : layer_color;
-    material.layer_color(0) = lc[0];
-    material.layer_color(1) = lc[1];
-    material.layer_color(2) = lc[2];
-    material.layer_color(3) = lc[3];
+    material.layer_color =
+        wireframe_color_override ? *wireframe_color_override : layer_color;
 
     // Write to the slot's aligned offset within the multi-slot buffer.
     vk::DeviceSize offset =
@@ -354,7 +344,7 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
                                       layers.solid.color,
                                       layers.wireframe.width,
                                       rs,
-                                      layers.wireframe.color);
+                                      &layers.wireframe.color);
     } else {
         // Separate passes.
         if (layers.solid.enabled && _buffers.has_triangle_indices()) {
