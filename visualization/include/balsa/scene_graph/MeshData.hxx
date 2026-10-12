@@ -8,6 +8,10 @@
 #include <cstring>
 #include <type_traits>
 
+#include <zipper/MatrixBase.hxx>
+#include <zipper/VectorBase.hxx>
+#include <zipper/expression/nullary/MDSpan.hpp>
+
 namespace balsa::scene_graph {
 
 namespace detail {
@@ -90,28 +94,15 @@ MeshAttribute::MeshAttribute(
     m_data.resize(std::size_t{m_component_count} * m_count);
     if (m_data.empty()) return;
 
-    // Fast path: memory is already column-major (element-major) float.
-    constexpr bool element_major =
-        rank1 || std::is_same_v<Layout, ::zipper::storage::layout_left>;
-    if constexpr (std::is_same_v<V, float> && element_major
-                  && std::is_same_v<Accessor,
-                                    ::zipper::default_accessor_policy<T>>) {
-        if (data.is_exhaustive()) {
-            std::memcpy(
-                m_data.data(), data.data_handle(), m_data.size() * sizeof(float));
-            return;
-        }
-    }
-
-    auto dst = view();
-    for (std::size_t i = 0; i < m_count; ++i) {
-        if constexpr (rank1) {
-            dst[0, i] = static_cast<float>(data[i]);
-        } else {
-            for (std::size_t c = 0; c < m_component_count; ++c) {
-                dst[c, i] = static_cast<float>(data[c, i]);
-            }
-        }
+    // zipper reads data through its own layout and accessor.
+    using source_t =
+        ::zipper::expression::nullary::MDSpan<T, Extents, Layout, Accessor>;
+    if constexpr (rank1) {
+        balsa::zipper::VectorX<float>::span_type dst{std::span<float>(m_data)};
+        dst = ::zipper::VectorBase<source_t>(source_t(data)).template cast<float>();
+    } else {
+        ::zipper::MatrixBase dst(view());
+        dst = ::zipper::MatrixBase<source_t>(source_t(data)).template cast<float>();
     }
 }
 

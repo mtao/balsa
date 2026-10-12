@@ -1371,6 +1371,21 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
         ::zipper::mdspan<const float, dextents<2>>(xyz.data(), 0, 2)));
     // Flat data that is not a multiple of the component count is rejected.
     CHECK_FALSE(md.add_attribute("bad", sg::AttributeDomain::Vertex, 4, xyz));
+
+    // Strided input: every other value of an interleaved buffer, i.e. the
+    // first 2 of each 4-float record (components stride 1, elements 4).
+    const std::vector<double> interleaved{0, 1, 9, 9, 2, 3, 9, 9, 4, 5, 9, 9};
+    using Stride = ::zipper::storage::layout_stride;
+    auto st = md.add_attribute(
+        "uv", sg::AttributeDomain::Vertex,
+        ::zipper::mdspan<const double, dextents<2>, Stride>(
+            interleaved.data(),
+            Stride::mapping<dextents<2>>(dextents<2>{2, 3},
+                                         std::array<std::size_t, 2>{1, 4})));
+    REQUIRE(st);
+    CHECK(st->component_count() == 2);
+    CHECK(st->count() == 3);
+    CHECK(std::ranges::equal(st->data(), std::vector<float>{0, 1, 2, 3, 4, 5}));
 }
 
 TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh_data]") {
