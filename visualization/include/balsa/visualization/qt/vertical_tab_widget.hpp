@@ -25,6 +25,8 @@ class VerticalTabBar : public QTabBar {
   protected:
     QSize tabSizeHint(int index) const override;
     QSize minimumTabSizeHint(int index) const override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
     void paintEvent(QPaintEvent *event) override;
 };
 

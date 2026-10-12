@@ -21,6 +21,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -32,6 +33,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <array>
 
 namespace balsa::visualization::qt {
 
@@ -58,24 +60,6 @@ static void
     btn->setStyleSheet(
         QStringLiteral("background-color: %1; border: 1px solid gray;")
             .arg(c.name(QColor::HexArgb)));
-}
-
-// ── Helper: make a labeled double spin box ──────────────────────────
-
-static QDoubleSpinBox *make_spin(const char *label,
-                                 QWidget *parent,
-                                 QHBoxLayout *row,
-                                 double min,
-                                 double max,
-                                 double step) {
-    row->addWidget(new QLabel(label, parent));
-    auto *spin = new QDoubleSpinBox(parent);
-    spin->setRange(min, max);
-    spin->setDecimals(3);
-    spin->setSingleStep(step);
-    spin->setKeyboardTracking(false);
-    row->addWidget(spin);
-    return spin;
 }
 
 // ── Construction / Destruction ───────────────────────────────────────
@@ -184,32 +168,60 @@ void MeshControlsWidget::build_transform_section(QWidget *parent,
     _transform_group->setEnabled(false);
     auto *grp_layout = new QVBoxLayout(_transform_group);
 
+    // A grid keeps the T/R/S rows column-aligned even though their spin
+    // boxes have different ranges (and therefore different size hints).
+    auto *grid = new QGridLayout;
+    auto add_row = [&](int row,
+                       const char *name,
+                       double min,
+                       double max,
+                       double step) -> std::array<QDoubleSpinBox *, 3> {
+        grid->addWidget(new QLabel(name, _transform_group), row, 0);
+        std::array<QDoubleSpinBox *, 3> spins{};
+        constexpr std::array<const char *, 3> axes{"X", "Y", "Z"};
+        for (int a = 0; a < 3; ++a) {
+            auto *label =
+                new QLabel(axes[static_cast<std::size_t>(a)], _transform_group);
+            label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            grid->addWidget(label, row, 1 + 2 * a);
+            auto *spin = new QDoubleSpinBox(_transform_group);
+            spin->setRange(min, max);
+            spin->setDecimals(3);
+            spin->setSingleStep(step);
+            spin->setKeyboardTracking(false);
+            spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+            grid->addWidget(spin, row, 2 + 2 * a);
+            spins[static_cast<std::size_t>(a)] = spin;
+        }
+        return spins;
+    };
+    for (int a = 0; a < 3; ++a) grid->setColumnStretch(2 + 2 * a, 1);
+
     // Translation
-    auto *t_row = new QHBoxLayout;
-    t_row->addWidget(new QLabel("T", _transform_group));
-    _tx = make_spin("X", _transform_group, t_row, -1e6, 1e6, 0.1);
-    _ty = make_spin("Y", _transform_group, t_row, -1e6, 1e6, 0.1);
-    _tz = make_spin("Z", _transform_group, t_row, -1e6, 1e6, 0.1);
-    grp_layout->addLayout(t_row);
-
+    {
+        auto [x, y, z] = add_row(0, "T", -1e6, 1e6, 0.1);
+        _tx = x;
+        _ty = y;
+        _tz = z;
+    }
     // Rotation (degrees)
-    auto *r_row = new QHBoxLayout;
-    r_row->addWidget(new QLabel("R", _transform_group));
-    _rx = make_spin("X", _transform_group, r_row, -360.0, 360.0, 1.0);
-    _ry = make_spin("Y", _transform_group, r_row, -360.0, 360.0, 1.0);
-    _rz = make_spin("Z", _transform_group, r_row, -360.0, 360.0, 1.0);
-    grp_layout->addLayout(r_row);
-
+    {
+        auto [x, y, z] = add_row(1, "R", -360.0, 360.0, 1.0);
+        _rx = x;
+        _ry = y;
+        _rz = z;
+    }
     // Scale
-    auto *s_row = new QHBoxLayout;
-    s_row->addWidget(new QLabel("S", _transform_group));
-    _sx = make_spin("X", _transform_group, s_row, -1e6, 1e6, 0.1);
-    _sy = make_spin("Y", _transform_group, s_row, -1e6, 1e6, 0.1);
-    _sz = make_spin("Z", _transform_group, s_row, -1e6, 1e6, 0.1);
+    {
+        auto [x, y, z] = add_row(2, "S", -1e6, 1e6, 0.1);
+        _sx = x;
+        _sy = y;
+        _sz = z;
+    }
     _sx->setValue(1.0);
     _sy->setValue(1.0);
     _sz->setValue(1.0);
-    grp_layout->addLayout(s_row);
+    grp_layout->addLayout(grid);
 
     // Reset button
     _reset_transform_btn = new QPushButton("Reset Transform", _transform_group);
@@ -459,7 +471,8 @@ void MeshControlsWidget::build_color_group(QWidget *parent,
     cmap_row->addWidget(new QLabel("Colormap:", _scalar_field_container));
     _colormap_combo = new QComboBox(_scalar_field_container);
     for (const auto name : colormap_names()) {
-        _colormap_combo->addItem(QString::fromUtf8(name.data(), static_cast<int>(name.size())));
+        _colormap_combo->addItem(
+            QString::fromUtf8(name.data(), static_cast<int>(name.size())));
     }
     cmap_row->addWidget(_colormap_combo);
     sf_layout->addLayout(cmap_row);
@@ -784,7 +797,6 @@ sg::MeshData *MeshControlsWidget::selected_mesh_data() {
     return _selected->find_feature<sg::MeshData>();
 }
 
-
 // ═════════════════════════════════════════════════════════════════════
 // sync_from_state
 // ═════════════════════════════════════════════════════════════════════
@@ -995,7 +1007,6 @@ void MeshControlsWidget::sync_from_state() {
                          static_cast<float>(light.color(2)),
                          1.0f);
     }
-
 }
 
 void MeshControlsWidget::sync_color_group_visibility() {
@@ -1050,30 +1061,33 @@ void MeshControlsWidget::sync_attribute_bindings() {
     };
 
     // Position: vertex attribute, 1+ components
-    int pos_idx = populate_combo(_position_attr_combo,
-                                 mesh_data->position_binding(),
-                                 [](const sg::MeshAttributeHandle &da) {
-                                     return da->domain == sg::AttributeDomain::Vertex
-                                            && da->component_count >= 1;
-                                 });
+    int pos_idx =
+        populate_combo(_position_attr_combo,
+                       mesh_data->position_binding(),
+                       [](const sg::MeshAttributeHandle &da) {
+                           return da->domain == sg::AttributeDomain::Vertex
+                                  && da->component_count >= 1;
+                       });
     _position_attr_combo->setCurrentIndex(pos_idx);
 
     // Normal: vertex attribute, 2+ components
-    int norm_idx = populate_combo(_normal_attr_combo,
-                                  mesh_data->normal_binding(),
-                                  [](const sg::MeshAttributeHandle &da) {
-                                      return da->domain == sg::AttributeDomain::Vertex
-                                             && da->component_count >= 2;
-                                  });
+    int norm_idx =
+        populate_combo(_normal_attr_combo,
+                       mesh_data->normal_binding(),
+                       [](const sg::MeshAttributeHandle &da) {
+                           return da->domain == sg::AttributeDomain::Vertex
+                                  && da->component_count >= 2;
+                       });
     _normal_attr_combo->setCurrentIndex(norm_idx);
 
     // Scalar: any vertex attribute
-    int scl_idx = populate_combo(_scalar_attr_combo,
-                                 mesh_data->scalar_binding(),
-                                 [](const sg::MeshAttributeHandle &da) {
-                                     return da->domain == sg::AttributeDomain::Vertex
-                                            && da->component_count >= 1;
-                                 });
+    int scl_idx =
+        populate_combo(_scalar_attr_combo,
+                       mesh_data->scalar_binding(),
+                       [](const sg::MeshAttributeHandle &da) {
+                           return da->domain == sg::AttributeDomain::Vertex
+                                  && da->component_count >= 1;
+                       });
     _scalar_attr_combo->setCurrentIndex(scl_idx);
 
     // Scalar component selector
@@ -1211,7 +1225,8 @@ void MeshControlsWidget::on_uniform_color_clicked() {
 void MeshControlsWidget::on_colormap_changed(int index) {
     auto *md = selected_mesh_data();
     const auto names = colormap_names();
-    if (!md || index < 0 || static_cast<std::size_t>(index) >= names.size()) return;
+    if (!md || index < 0 || static_cast<std::size_t>(index) >= names.size())
+        return;
     md->render_state().colormap_name = names[static_cast<std::size_t>(index)];
     {
         QSignalBlocker block(_colormap_custom_edit);
@@ -1322,8 +1337,7 @@ void MeshControlsWidget::on_scalar_attr_changed(int index) {
             const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_scalar(discovered[disc_idx],
-                                  md->scalar_component());
+                md->assign_scalar(discovered[disc_idx], md->scalar_component());
             }
         }
     }

@@ -23,23 +23,42 @@ VerticalTabBar::VerticalTabBar(QWidget *parent) : QTabBar(parent) {
     setDrawBase(false);
     setExpanding(false);
     setElideMode(Qt::ElideNone);
-    setUsesScrollButtons(true);
+    setUsesScrollButtons(false);
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 }
 
 VerticalTabBar::~VerticalTabBar() = default;
 
 QSize VerticalTabBar::tabSizeHint(int /*index*/) const {
-    return { k_tab_width, k_tab_height };
+    return {k_tab_width, k_tab_height};
 }
 
 QSize VerticalTabBar::minimumTabSizeHint(int index) const {
     return tabSizeHint(index);
 }
 
+// Tall enough for every visible tab, so the bar never needs to scroll.
+// The Expanding vertical policy lets it grow past this to fill the column.
+QSize VerticalTabBar::sizeHint() const {
+    int visible = 0;
+    for (int i = 0; i < count(); ++i) {
+        if (isTabVisible(i)) ++visible;
+    }
+    return {k_tab_width, visible * k_tab_height};
+}
+
+QSize VerticalTabBar::minimumSizeHint() const { return sizeHint(); }
+
 void VerticalTabBar::paintEvent(QPaintEvent * /*event*/) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setRenderHint(QPainter::TextAntialiasing, true);
+
+    // Sidebar background spanning the full height, plus a right-edge
+    // separator, so the area below the tabs reads as part of the bar.
+    p.fillRect(rect(), palette().midlight());
+    p.setPen(palette().mid().color());
+    p.drawLine(rect().topRight(), rect().bottomRight());
 
     for (int i = 0; i < count(); ++i) {
         if (!isTabVisible(i)) continue;
@@ -59,9 +78,10 @@ void VerticalTabBar::paintEvent(QPaintEvent * /*event*/) {
         }
 
         // Text color
-        QColor text_color = enabled
-                              ? (selected ? palette().text().color() : palette().windowText().color())
-                              : palette().color(QPalette::Disabled, QPalette::WindowText);
+        QColor text_color =
+            enabled ? (selected ? palette().text().color()
+                                : palette().windowText().color())
+                    : palette().color(QPalette::Disabled, QPalette::WindowText);
         p.setPen(text_color);
 
         // Icon character (upper portion of the cell)
@@ -70,7 +90,8 @@ void VerticalTabBar::paintEvent(QPaintEvent * /*event*/) {
             QFont icon_font = p.font();
             icon_font.setPixelSize(k_icon_font_size);
             p.setFont(icon_font);
-            QRect icon_rect(rect.left(), rect.top() + 6, rect.width(), rect.height() / 2);
+            QRect icon_rect(
+                rect.left(), rect.top() + 6, rect.width(), rect.height() / 2);
             p.drawText(icon_rect, Qt::AlignHCenter | Qt::AlignTop, icon_char);
         }
 
@@ -78,7 +99,10 @@ void VerticalTabBar::paintEvent(QPaintEvent * /*event*/) {
         QFont label_font = p.font();
         label_font.setPixelSize(k_label_font_size);
         p.setFont(label_font);
-        QRect label_rect(rect.left(), rect.top() + rect.height() / 2, rect.width(), rect.height() / 2 - 4);
+        QRect label_rect(rect.left(),
+                         rect.top() + rect.height() / 2,
+                         rect.width(),
+                         rect.height() / 2 - 4);
         p.drawText(label_rect, Qt::AlignHCenter | Qt::AlignTop, tabText(i));
 
         // Subtle bottom separator
@@ -113,7 +137,9 @@ VerticalTabWidget::VerticalTabWidget(QWidget *parent) : QWidget(parent) {
 
 VerticalTabWidget::~VerticalTabWidget() = default;
 
-int VerticalTabWidget::addTab(QWidget *page, const QString &icon_char, const QString &label) {
+int VerticalTabWidget::addTab(QWidget *page,
+                              const QString &icon_char,
+                              const QString &label) {
     // Wrap the page in a QScrollArea
     auto *scroll = new QScrollArea(_stack);
     scroll->setWidgetResizable(true);
@@ -125,7 +151,7 @@ int VerticalTabWidget::addTab(QWidget *page, const QString &icon_char, const QSt
     _tab_bar->setTabData(idx, icon_char);
     _stack->addWidget(scroll);
 
-    _tabs.push_back({ page, scroll });
+    _tabs.push_back({page, scroll});
     return idx;
 }
 
@@ -134,9 +160,7 @@ QWidget *VerticalTabWidget::widget(int index) const {
     return _tabs[static_cast<std::size_t>(index)].page;
 }
 
-int VerticalTabWidget::currentIndex() const {
-    return _tab_bar->currentIndex();
-}
+int VerticalTabWidget::currentIndex() const { return _tab_bar->currentIndex(); }
 
 void VerticalTabWidget::setCurrentIndex(int index) {
     _tab_bar->setCurrentIndex(index);
@@ -161,4 +185,4 @@ void VerticalTabWidget::setTabEnabled(int index, bool enabled) {
     _tab_bar->setTabEnabled(index, enabled);
 }
 
-}// namespace balsa::visualization::qt
+} // namespace balsa::visualization::qt
