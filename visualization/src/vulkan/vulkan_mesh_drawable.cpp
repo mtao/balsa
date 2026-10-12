@@ -136,7 +136,7 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     // Upload scalar field.
     const auto &scl = mesh_data->scalar_binding();
     if (scl.is_bound()) {
-        const auto *fdata = static_cast<const float *>(scl.raw_data());
+        const float *fdata = scl.raw_data();
         _buffers.upload_scalars(film,
                                 std::span<const float>(fdata, scl.size()));
     }

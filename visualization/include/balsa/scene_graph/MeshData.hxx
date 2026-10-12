@@ -78,31 +78,24 @@ MeshAttribute::MeshAttribute(
     AttributeDomain domain,
     ::zipper::mdspan<T, Extents, Layout, Accessor> data)
   : name(std::move(name)), domain(domain) {
-    using V = std::remove_cv_t<T>;
-    static_assert(std::is_arithmetic_v<V>,
-                  "attribute values must be arithmetic");
-    constexpr bool rank1 = Extents::rank() == 1;
-
-    if constexpr (rank1) {
-        m_component_count = 1;
-        m_count = data.extent(0);
-    } else {
-        assert(data.extent(0) <= max_components);
-        m_component_count = static_cast<uint8_t>(data.extent(0));
-        m_count = data.extent(1);
-    }
-    m_data.resize(std::size_t{m_component_count} * m_count);
-    if (m_data.empty()) return;
-
-    // zipper reads data through its own layout and accessor.
+    using S = detail::attribute_storage_t<std::remove_cv_t<T>>;
+    static_assert(!std::is_void_v<S>,
+                  "attribute values must be float, double, or an integer "
+                  "of at most 32 bits");
     using source_t =
         ::zipper::expression::nullary::MDSpan<T, Extents, Layout, Accessor>;
-    if constexpr (rank1) {
-        balsa::zipper::VectorX<float>::span_type dst{std::span<float>(m_data)};
-        dst = ::zipper::VectorBase<source_t>(source_t(data)).template cast<float>();
+
+    if constexpr (Extents::rank() == 1) {
+        matrix_type<S> values(1, data.extent(0));
+        values.row(0) =
+            ::zipper::VectorBase<source_t>(source_t(data)).template cast<S>();
+        m_values = std::move(values);
     } else {
-        ::zipper::MatrixBase dst(view());
-        dst = ::zipper::MatrixBase<source_t>(source_t(data)).template cast<float>();
+        assert(data.extent(0) <= max_components);
+        matrix_type<S> values(data.extent(0), data.extent(1));
+        values =
+            ::zipper::MatrixBase<source_t>(source_t(data)).template cast<S>();
+        m_values = std::move(values);
     }
 }
 
@@ -150,6 +143,7 @@ auto MeshData::add_attribute(std::string name,
             flat.data(), std::size_t{component_count},
             flat.size() / component_count));
 }
+
 template <typename T, typename Extents, typename Layout, typename Accessor>
     requires(Extents::rank() == 2)
 auto MeshData::set_triangle_indices(

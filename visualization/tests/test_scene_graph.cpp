@@ -286,12 +286,12 @@ TEST_CASE("MeshData scalar binding extracts components", "[scene_graph]") {
     const auto &b = md.scalar_binding();
     CHECK(b.component_count() == 1);
     REQUIRE(b.size() == 4);
-    auto data = static_cast<const float *>(b.raw_data());
+    auto data = b.raw_data();
     CHECK(data[0] == 3.0f);
     CHECK(data[1] == 0.0f);
 
     REQUIRE(md.assign_scalar("uv", -1)); // magnitude
-    data = static_cast<const float *>(md.scalar_binding().raw_data());
+    data = md.scalar_binding().raw_data();
     CHECK(data[0] == Catch::Approx(5.0f));
     CHECK(md.scalar_component() == -1);
 
@@ -315,7 +315,7 @@ TEST_CASE("MeshData rebinds when attributes change", "[scene_graph]") {
     auto pos = md.find_attribute("vertex_positions");
     REQUIRE(pos);
     CHECK(md.position_binding().attribute() == pos);
-    CHECK(md.position_binding().raw_data() == pos->data().data());
+    CHECK(md.position_binding().raw_data() == pos->view<float>()->data_handle());
 
     // Replacing the bound attribute updates the binding.
     const std::array<float, 6> pos2 = {0, 0, 1, 1, 2, 2};
@@ -1325,6 +1325,15 @@ TEST_CASE("role_binding_view", "[scene_graph][mesh_data]") {
     CHECK(d[2, 1] == 5.0f);
 }
 
+// Element-major values of an attribute stored as T (empty if not T).
+template <typename T>
+static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
+    -> std::vector<T> {
+    const auto v = a.view<T>();
+    if (!v) return {};
+    return {v->data_handle(), v->data_handle() + v->size()};
+}
+
 TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
     namespace sg = balsa::scene_graph;
     using ::zipper::dextents;
@@ -1339,21 +1348,25 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
     REQUIRE(p);
     CHECK(p->component_count() == 3);
     CHECK(p->count() == 2);
-    CHECK(std::ranges::equal(p->data(), xyz));
+    CHECK(p->type() == sg::AttributeType::Float32);
+    CHECK(flat_values<float>(*p) == xyz);
 
-    // 3 x N row-major doubles: components on rows, converted to float
-    // and reordered into element-major storage.
+    // 3 x N row-major doubles: components on rows, kept as double and
+    // reordered into element-major storage.
     const std::vector<double> rows{0, 3, 1, 4, 2, 5};
     auto q = md.add_attribute(
         "q", sg::AttributeDomain::Vertex,
         ::zipper::mdspan<const double, dextents<2>, ::zipper::storage::row_major>(
             rows.data(), 3, 2));
     REQUIRE(q);
-    CHECK(std::ranges::equal(q->data(), xyz));
-    auto qv = q->view<3>();
+    CHECK(q->type() == sg::AttributeType::Float64);
+    CHECK(q->holds<double>());
+    CHECK_FALSE(q->view<float>());
+    CHECK(flat_values<double>(*q) == std::vector<double>{0, 1, 2, 3, 4, 5});
+    auto qv = q->view<double, 3>();
     REQUIRE(qv);
-    CHECK((*qv)[1, 1] == 4.0f);
-    CHECK_FALSE(q->view<2>());
+    CHECK((*qv)[1, 1] == 4.0);
+    CHECK_FALSE((q->view<double, 2>()));
 
     // Rank-1 data is a single-component attribute.
     const std::vector<int> s{7, 8, 9};
@@ -1363,7 +1376,15 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
     REQUIRE(r);
     CHECK(r->component_count() == 1);
     CHECK(r->count() == 3);
-    CHECK(r->data()[2] == 9.0f);
+    CHECK(r->type() == sg::AttributeType::Int32);
+    CHECK(flat_values<int32_t>(*r) == std::vector<int32_t>{7, 8, 9});
+
+    // Narrow integers widen to the 32-bit stored type of the same sign.
+    const std::vector<uint8_t> labels{1, 2, 255};
+    auto u = md.add_attribute("labels", sg::AttributeDomain::Vertex, 1, labels);
+    REQUIRE(u);
+    CHECK(u->type() == sg::AttributeType::UInt32);
+    CHECK(flat_values<uint32_t>(*u) == std::vector<uint32_t>{1, 2, 255});
 
     // Zero components is rejected.
     CHECK_FALSE(md.add_attribute(
@@ -1385,7 +1406,47 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
     REQUIRE(st);
     CHECK(st->component_count() == 2);
     CHECK(st->count() == 3);
-    CHECK(std::ranges::equal(st->data(), std::vector<float>{0, 1, 2, 3, 4, 5}));
+    CHECK(flat_values<double>(*st) == std::vector<double>{0, 1, 2, 3, 4, 5});
+}
+
+TEST_CASE("role_binding_converts_to_float", "[scene_graph][mesh_data]") {
+    namespace sg = balsa::scene_graph;
+    sg::MeshData md;
+
+    // Float attributes are read in place.
+    const std::vector<float> fpos{0, 1, 2, 3, 4, 5};
+    auto f = md.add_attribute("vertex_positions", sg::AttributeDomain::Vertex, 3, fpos);
+    REQUIRE(md.has_positions());
+    CHECK_FALSE(md.position_binding().is_converted());
+    CHECK(md.position_binding().raw_data() == f->view<float>()->data_handle());
+
+    // Double positions are converted into the binding's buffer.
+    const std::vector<double> dpos{0.5, 1, 2, 3, 4, 5.25};
+    auto d = md.add_attribute("dpos", sg::AttributeDomain::Vertex, 3, dpos);
+    REQUIRE(md.assign_position(d));
+    const auto &b = md.position_binding();
+    CHECK(b.is_converted());
+    CHECK(b.component_count() == 3);
+    CHECK(b.size() == 2);
+    auto v = b.view<3>();
+    REQUIRE(v);
+    CHECK((*v)[0, 0] == 0.5f);
+    CHECK((*v)[2, 1] == 5.25f);
+
+    // Integer scalars: single component, a chosen component, magnitude.
+    const std::vector<int32_t> ids{4, -2, 7};
+    md.add_attribute("ids", sg::AttributeDomain::Vertex, 1, ids);
+    REQUIRE(md.assign_scalar("ids"));
+    auto s = md.scalar_binding().view<1>();
+    REQUIRE(s);
+    CHECK((*s)[0, 1] == -2.0f);
+
+    const std::vector<uint32_t> pairs{3, 4, 6, 8};
+    md.add_attribute("pairs", sg::AttributeDomain::Vertex, 2, pairs);
+    REQUIRE(md.assign_scalar("pairs", 1));
+    CHECK((*md.scalar_binding().view<1>())[0, 1] == 8.0f);
+    REQUIRE(md.assign_scalar("pairs", -1));
+    CHECK((*md.scalar_binding().view<1>())[0, 1] == Catch::Approx(10.0f));
 }
 
 TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh_data]") {
