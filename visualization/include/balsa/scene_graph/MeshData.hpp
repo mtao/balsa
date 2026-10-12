@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -89,6 +90,29 @@ struct RoleBinding {
         return _extracts ? _extracted.data() : _attr->data.data();
     }
     auto clear() -> void;
+
+    /// Plain mdspan view, extents (D, size()), layout_left:
+    /// (c, i) -> raw_data()[c + D * i].  Wrap in zipper types if desired.
+    /// nullopt if unbound or component_count() != D.
+    template <std::size_t D>
+    using view_type = ::zipper::mdspan<const float,
+                                       ::zipper::extents<D, std::dynamic_extent>,
+                                       ::zipper::storage::col_major>;
+    using dynamic_view_type = ::zipper::mdspan<const float,
+                                               ::zipper::dextents<2>,
+                                               ::zipper::storage::col_major>;
+
+    template <std::size_t D>
+    auto view() const -> std::optional<view_type<D>> {
+        if (!is_bound() || component_count() != D) return std::nullopt;
+        return view_type<D>(static_cast<const float *>(raw_data()), size());
+    }
+    /// Component count chosen at runtime.
+    auto view() const -> dynamic_view_type {
+        return dynamic_view_type(static_cast<const float *>(raw_data()),
+                                 static_cast<std::size_t>(component_count()),
+                                 size());
+    }
 
   private:
     friend class MeshData;

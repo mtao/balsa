@@ -1306,3 +1306,21 @@ TEST_CASE("Object rotate() post-multiplies quaternion", "[scene_graph][trs]") {
     CHECK(static_cast<float>(m(0, 1)) == Catch::Approx(0.0f).margin(1e-5f));
     CHECK(static_cast<float>(m(1, 0)) == Catch::Approx(0.0f).margin(1e-5f));
 }
+
+TEST_CASE("role_binding_view", "[scene_graph][mesh_data]") {
+    balsa::scene_graph::MeshData md;
+    const std::vector<float> xyz{0, 1, 2, 3, 4, 5};
+    md.add_attribute("vertex_positions",
+                     balsa::scene_graph::AttributeDomain::Vertex, 3,
+                     std::span<const float>(xyz));
+    const auto &b = md.position_binding();
+    auto p = b.view<3>();
+    REQUIRE(p.has_value());
+    CHECK(p->extent(1) == 2);
+    CHECK((*p)[1, 0] == 1.0f);
+    CHECK((*p)[0, 1] == 3.0f);
+    CHECK_FALSE(b.view<2>().has_value());
+    auto d = b.view();
+    CHECK(d.extent(0) == 3);
+    CHECK(d[2, 1] == 5.0f);
+}
