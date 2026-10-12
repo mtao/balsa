@@ -384,57 +384,57 @@ auto has_headlight(const PanelContext &c) -> bool {
 
 auto register_builtin_panels() -> void {
     static const bool once = [] {
-        register_tab({ .id = "object", .label = "Object", .icon_glyph = "\u25A2", .sort_order = 0 });     // ▢
-        register_tab({ .id = "data", .label = "Data", .icon_glyph = "\u25B3", .sort_order = 10 });        // △
-        register_tab({ .id = "material", .label = "Material", .icon_glyph = "\u25CF", .sort_order = 20 }); // ●
-        register_tab({ .id = "scene", .label = "Scene", .icon_glyph = "\u2600", .sort_order = 30 });      // ☀
+        register_tab({ .id = "object", .label = "Object", .icon_glyph = "\u25A2", .sort_key = 0 });     // ▢
+        register_tab({ .id = "data", .label = "Data", .icon_glyph = "\u25B3", .sort_key = 10 });        // △
+        register_tab({ .id = "material", .label = "Material", .icon_glyph = "\u25CF", .sort_key = 20 }); // ●
+        register_tab({ .id = "scene", .label = "Scene", .icon_glyph = "\u2600", .sort_key = 30 });      // ☀
 
         register_panel({ .id = "object.object",
                          .tab_id = "object",
-                         .sort_order = 0,
+                         .sort_key = 0,
                          .label = "Object",
                          .is_available = has_active_object,
                          .fill_layout = for_active_object(fill_object) });
         register_panel({ .id = "object.transform",
                          .tab_id = "object",
-                         .sort_order = 10,
+                         .sort_key = 10,
                          .label = "Transform",
                          .is_available = has_active_object,
                          .fill_layout = for_active_object(fill_transform) });
         register_panel({ .id = "data.render_layers",
                          .tab_id = "data",
-                         .sort_order = 0,
+                         .sort_key = 0,
                          .label = "Render Layers",
                          .is_available = has_active_mesh,
                          .fill_layout = for_active_mesh(fill_render_layers) });
         register_panel({ .id = "data.shading",
                          .tab_id = "data",
-                         .sort_order = 10,
+                         .sort_key = 10,
                          .label = "Shading & Rendering",
                          .is_available = has_active_mesh,
                          .fill_layout = for_active_mesh(fill_shading) });
         register_panel({ .id = "data.color",
                          .tab_id = "data",
-                         .sort_order = 20,
+                         .sort_key = 20,
                          .label = "Color",
                          .is_available = has_active_mesh,
                          .fill_layout = for_active_mesh(fill_color) });
         register_panel({ .id = "data.attributes",
                          .tab_id = "data",
-                         .sort_order = 30,
+                         .sort_key = 30,
                          .label = "Attribute Bindings",
                          .expanded_by_default = false,
                          .is_available = has_active_mesh,
                          .fill_layout = for_active_mesh(fill_attributes) });
         register_panel({ .id = "material.response",
                          .tab_id = "material",
-                         .sort_order = 0,
+                         .sort_key = 0,
                          .label = "Material Response",
                          .is_available = has_lit_mesh,
                          .fill_layout = for_active_mesh(fill_material) });
         register_panel({ .id = "scene.lighting",
                          .tab_id = "scene",
-                         .sort_order = 0,
+                         .sort_key = 0,
                          .label = "Lighting",
                          .is_available = has_headlight,
                          .fill_layout = for_headlight(fill_lighting) });

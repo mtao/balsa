@@ -42,7 +42,7 @@ auto register_tab(Tab tab) -> void { upsert(tab_registry(), std::move(tab)); }
 auto registered_tabs() -> std::vector<const Tab *> {
     std::vector<const Tab *> out;
     for (const auto &t : tab_registry()) out.push_back(&t);
-    std::ranges::stable_sort(out, {}, &Tab::sort_order);
+    std::ranges::stable_sort(out, {}, &Tab::sort_key);
     return out;
 }
 
@@ -63,7 +63,7 @@ auto available_panels(const PanelContext &ctx, std::string_view tab_id) -> std::
     for (const auto &p : registry()) {
         if (p.tab_id == tab_id && p.is_available(ctx)) out.push_back(&p);
     }
-    std::ranges::stable_sort(out, {}, &Panel::sort_order);
+    std::ranges::stable_sort(out, {}, &Panel::sort_key);
     return out;
 }
 

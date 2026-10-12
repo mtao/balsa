@@ -34,18 +34,18 @@ struct Tab {
     std::string id; ///< e.g. "object", "data"
     std::string label;
     std::string icon_glyph; ///< single character shown on the Qt tab bar
-    int sort_order = 0;
+    int sort_key = 0; ///< tabs are sorted ascending; ties keep registration order
 };
 
 /// Register (or replace, matched by id) a tab.
 auto register_tab(Tab tab) -> void;
-/// Registered tabs sorted by sort_order.
+/// Registered tabs sorted by sort_key.
 auto registered_tabs() -> std::vector<const Tab *>;
 
 struct Panel {
     std::string id; ///< unique, e.g. "data.render_layers"
     std::string tab_id;
-    int sort_order = 0; ///< ascending within a tab
+    int sort_key = 0; ///< panels in a tab are sorted ascending; ties keep registration order
     std::string label;
     bool expanded_by_default = true;
 
@@ -62,7 +62,7 @@ auto register_panel(Panel panel) -> void;
 auto unregister_panel(std::string_view id) -> bool;
 auto registered_panels() -> std::span<const Panel>;
 
-/// Panels of a tab whose is_available() passes, sorted by sort_order.
+/// Panels of a tab whose is_available() passes, sorted by sort_key.
 auto available_panels(const PanelContext &ctx, std::string_view tab_id)
     -> std::vector<const Panel *>;
 
