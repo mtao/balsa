@@ -1,5 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_OBJECTS_NODE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_OBJECTS_NODE_HPP
+#pragma once
 #include <memory>
 #include <vector>
 
@@ -19,5 +18,3 @@ struct Node : public std::enable_shared_from_this<Node> {
     std::vector<Node> _children;
 };
 }// namespace balsa::visualization::vulkan::objects
-
-#endif

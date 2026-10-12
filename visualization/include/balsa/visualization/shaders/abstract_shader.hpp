@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_SHADERS_ABSTRACT_SHADER_HPP)
-#define BALSA_VISUALIZATION_SHADERS_ABSTRACT_SHADER_HPP
-
+#pragma once
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -29,4 +27,3 @@ class AbstractShader {
     virtual std::vector<uint32_t> frag_spirv() const { return {}; }
 };
 }// namespace balsa::visualization::shaders
-#endif

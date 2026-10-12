@@ -1306,3 +1306,41 @@ TEST_CASE("Object rotate() post-multiplies quaternion", "[scene_graph][trs]") {
     CHECK(static_cast<float>(m(0, 1)) == Catch::Approx(0.0f).margin(1e-5f));
     CHECK(static_cast<float>(m(1, 0)) == Catch::Approx(0.0f).margin(1e-5f));
 }
+
+TEST_CASE("role_binding_view", "[scene_graph][mesh_data]") {
+    balsa::scene_graph::MeshData md;
+    const std::vector<float> xyz{0, 1, 2, 3, 4, 5};
+    md.add_attribute("vertex_positions",
+                     balsa::scene_graph::AttributeDomain::Vertex, 3,
+                     std::span<const float>(xyz));
+    const auto &b = md.position_binding();
+    auto p = b.view<3>();
+    REQUIRE(p.has_value());
+    CHECK(p->extent(1) == 2);
+    CHECK((*p)[1, 0] == 1.0f);
+    CHECK((*p)[0, 1] == 3.0f);
+    CHECK_FALSE(b.view<2>().has_value());
+    auto d = b.view();
+    CHECK(d.extent(0) == 3);
+    CHECK(d[2, 1] == 5.0f);
+}
+
+#include <balsa/visualization/normalize_mesh.hpp>
+TEST_CASE("normalize_to_unit_box_centers_mesh", "[scene_graph][normalize]") {
+    balsa::scene_graph::Object obj("m");
+    balsa::scene_graph::MeshData md;
+    // Box from (10, 20, 30) to (14, 22, 31): center (12, 21, 30.5), range 4.
+    const std::vector<float> xyz{10, 20, 30, 14, 22, 31};
+    md.add_attribute("vertex_positions",
+                     balsa::scene_graph::AttributeDomain::Vertex, 3,
+                     std::span<const float>(xyz));
+    REQUIRE(balsa::visualization::normalize_to_unit_box(obj, md));
+    auto M = obj.local_transform().to_matrix();
+    auto apply = [&](float x, float y, float z, int r) {
+        return M(r, 0) * x + M(r, 1) * y + M(r, 2) * z + M(r, 3);
+    };
+    // center -> origin; corners -> within [-0.5, 0.5]
+    for (int r = 0; r < 3; ++r) CHECK(apply(12, 21, 30.5f, r) == Catch::Approx(0.0f).margin(1e-6));
+    CHECK(apply(14, 22, 31, 0) == Catch::Approx(0.5f));
+    CHECK(apply(10, 20, 30, 0) == Catch::Approx(-0.5f));
+}

@@ -18,6 +18,11 @@
 
 #include <zipper/Vector.hpp>
 #include <zipper/concepts/Vector.hpp>
+#include <zipper/as.hpp>
+#include <zipper/expression/nullary/Constant.hpp>
+#include <zipper/transform/Scaling.hpp>
+#include <zipper/transform/Translation.hpp>
+#include <zipper/transform/transform_compose.hpp>
 
 #include "balsa/geometry/spatial/KDOP.hpp"
 
@@ -122,6 +127,68 @@ class BoundingBox {
             v(j) = m_aabb.width(static_cast<int8_t>(j));
         }
         return v;
+    }
+
+    // ── center ──────────────────────────────────────────────────────
+
+    /// Midpoint of the box: (min + max) / 2.  For integral T this rounds
+    /// toward zero.
+    auto center() const -> ::zipper::Vector<T, Dim> {
+        return ((min() + max()) / T(2)).eval();
+    }
+
+    // ── Local <-> world ─────────────────────────────────────────────
+    //
+    // Local coordinates map the box onto the origin-centered cube
+    // [-1, 1]^Dim: local = (world - center()) / half_range().  Degenerate
+    // (zero-width) axes use a half-range of 1 so the maps stay invertible.
+    // Only meaningful for floating-point T.
+
+    /// Per-axis half extent, with zero-width axes replaced by 1.
+    auto half_range() const -> ::zipper::Vector<T, Dim>
+        requires std::floating_point<T>
+    {
+        auto h = (range() / T(2)).eval();
+        const ::zipper::Vector<T, Dim> ones =
+            ::zipper::expression::nullary::Constant<T, Dim>(T(1));
+        return ::zipper::as_vector((h.as_array() == T(0)).select(ones.as_array(), h.as_array()))
+            .eval();
+    }
+
+    template <::zipper::concepts::Vector Vec>
+    auto to_local(const Vec &world) const -> ::zipper::Vector<T, Dim>
+        requires std::floating_point<T>
+    {
+        return ::zipper::as_vector((world - center()).as_array()
+                                   / half_range().as_array())
+            .eval();
+    }
+
+    template <::zipper::concepts::Vector Vec>
+    auto to_world(const Vec &local) const -> ::zipper::Vector<T, Dim>
+        requires std::floating_point<T>
+    {
+        return (center()
+                + ::zipper::as_vector(local.as_array() * half_range().as_array()))
+            .eval();
+    }
+
+    /// Affine map local -> world: translate(center) * scale(half_range).
+    auto to_world_transform() const
+        requires std::floating_point<T>
+    {
+        return ::zipper::transform::Translation<T, Dim>(center())
+               * ::zipper::transform::Scaling<T, Dim>(half_range());
+    }
+
+    /// Affine map world -> local: scale(1 / half_range) * translate(-center).
+    auto to_local_transform() const
+        requires std::floating_point<T>
+    {
+        return ::zipper::transform::Scaling<T, Dim>(
+                   ::zipper::as_vector(T(1) / half_range().as_array()).eval())
+               * ::zipper::transform::Translation<T, Dim>(
+                   (-center()).eval());
     }
 
     // ── Convenience dimension names ─────────────────────────────────

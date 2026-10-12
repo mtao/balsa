@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_ORBIT_CAMERA_CONTROLLER_HPP)
-#define BALSA_VISUALIZATION_VULKAN_ORBIT_CAMERA_CONTROLLER_HPP
-
+#pragma once
 #include <algorithm>
 #include <cmath>
 
@@ -36,10 +34,6 @@ class OrbitCameraController : public InputHandler {
   public:
     explicit OrbitCameraController(MeshScene *scene)
       : _scene(scene) {
-        // Initialize _up to (0, 1, 0)
-        _up(0) = 0.0f;
-        _up(1) = 1.0f;
-        _up(2) = 0.0f;
         apply();
     }
 
@@ -146,8 +140,8 @@ class OrbitCameraController : public InputHandler {
     float _theta = 0.0f;// azimuthal angle (radians)
     float _phi = 0.3f;// polar angle (radians, 0 = equator)
     float _distance = 3.0f;
-    scene_graph::Vec3f _center;// initialized below
-    scene_graph::Vec3f _up;// initialized below
+    scene_graph::Vec3f _center{ 0.0f, 0.0f, 0.0f };
+    scene_graph::Vec3f _up{ 0.0f, 1.0f, 0.0f };
 
     static constexpr float _max_phi = 1.5f;// ~86 degrees, avoid gimbal lock
     static constexpr float _min_distance = 0.01f;
@@ -160,15 +154,10 @@ class OrbitCameraController : public InputHandler {
     bool _middle_down = false;
 
     scene_graph::Vec3f compute_eye() const {
-        float cos_phi = std::cos(_phi);
-        float ex = _distance * cos_phi * std::sin(_theta);
-        float ey = _distance * std::sin(_phi);
-        float ez = _distance * cos_phi * std::cos(_theta);
-        scene_graph::Vec3f offset;
-        offset(0) = ex;
-        offset(1) = ey;
-        offset(2) = ez;
-        return _center + offset;
+        const float cos_phi = std::cos(_phi);
+        return _center + scene_graph::Vec3f{ _distance * cos_phi * std::sin(_theta),
+                                             _distance * std::sin(_phi),
+                                             _distance * cos_phi * std::cos(_theta) };
     }
 
     // If the active camera is not the default camera, extract orbit
@@ -180,17 +169,10 @@ class OrbitCameraController : public InputHandler {
 
         // Extract eye position from the active camera's world transform.
         auto world_xf = _scene->active_camera_object().world_transform();
-        scene_graph::Vec3f eye;
-        eye(0) = world_xf.translation()(0);
-        eye(1) = world_xf.translation()(1);
-        eye(2) = world_xf.translation()(2);
+        scene_graph::Vec3f eye(world_xf.translation());
 
         // Extract forward direction (camera looks along -Z in its local space).
-        scene_graph::Vec3f forward;
-        forward(0) = -world_xf.linear()(0, 2);
-        forward(1) = -world_xf.linear()(1, 2);
-        forward(2) = -world_xf.linear()(2, 2);
-        forward = forward.normalized();
+        scene_graph::Vec3f forward = (-world_xf.linear().col(2)).normalized();
 
         // Derive center from eye + forward * distance.
         _center = eye + forward * _distance;
@@ -198,7 +180,7 @@ class OrbitCameraController : public InputHandler {
         // Compute spherical coordinates from (eye - center).
         scene_graph::Vec3f offset = eye - _center;
         _distance = offset.norm();
-        if (_distance < _min_distance) _distance = _min_distance;
+        _distance = std::max(_distance, _min_distance);
 
         _phi = std::asin(std::clamp(offset(1) / _distance, -1.0f, 1.0f));
         _theta = std::atan2(offset(0), offset(2));
@@ -216,5 +198,3 @@ class OrbitCameraController : public InputHandler {
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

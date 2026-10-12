@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_GLFW_VULKAN_FILM_HPP)
-#define BALSA_VISUALIZATION_GLFW_VULKAN_FILM_HPP
-
+#pragma once
 #include "balsa/visualization/vulkan/native_film.hpp"
 class GLFWwindow;
 
@@ -21,5 +19,3 @@ class Film : public visualization::vulkan::NativeFilm {
     GLFWwindow *_window;
 };
 }// namespace balsa::visualization::glfw::vulkan
-
-#endif

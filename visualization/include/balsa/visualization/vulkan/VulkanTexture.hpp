@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_VULKAN_TEXTURE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_VULKAN_TEXTURE_HPP
-
+#pragma once
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -108,5 +106,3 @@ class VulkanTexture {
 };
 
 } // namespace balsa::visualization::vulkan
-
-#endif

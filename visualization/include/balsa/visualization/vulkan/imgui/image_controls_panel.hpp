@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_IMGUI_IMAGE_CONTROLS_PANEL_HPP)
-#define BALSA_VISUALIZATION_VULKAN_IMGUI_IMAGE_CONTROLS_PANEL_HPP
-
+#pragma once
 namespace balsa::visualization::vulkan {
 
 class ImageScene;
@@ -24,5 +22,3 @@ namespace imgui {
 
 } // namespace imgui
 } // namespace balsa::visualization::vulkan
-
-#endif

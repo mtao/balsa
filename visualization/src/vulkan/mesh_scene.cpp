@@ -284,12 +284,8 @@ ResolvedLightState MeshScene::resolve_scene_lights() const {
     scene_graph::Rotation3f lin(world_xf.linear());
     auto world_dir = (lin * light->direction).normalized();
 
-    state.light_dir[0] = world_dir(0);
-    state.light_dir[1] = world_dir(1);
-    state.light_dir[2] = world_dir(2);
-    state.light_color[0] = light->color(0);
-    state.light_color[1] = light->color(1);
-    state.light_color[2] = light->color(2);
+    state.light_dir = world_dir;
+    state.light_color = light->color;
 
     return state;
 }

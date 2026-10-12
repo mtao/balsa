@@ -337,8 +337,8 @@ void HelloTriangleScene::draw(balsa::visualization::vulkan::Film &film) {
 
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)extent[0];
-    viewport.height = (float)extent[1];
+    viewport.width = static_cast<float>(extent[0]);
+    viewport.height = static_cast<float>(extent[1]);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     cb.setViewport(0, { viewport });

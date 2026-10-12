@@ -1,5 +1,6 @@
 #include "balsa/visualization/qt/mesh_controls_widget.hpp"
 #include "balsa/visualization/qt/vertical_tab_widget.hpp"
+#include "balsa/visualization/qt/zipper_compat.hpp"
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
 // tbb::profiling::emit().  Undefine it before pulling in headers
@@ -21,6 +22,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -32,6 +34,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <array>
 
 namespace balsa::visualization::qt {
 
@@ -60,22 +63,8 @@ static void
             .arg(c.name(QColor::HexArgb)));
 }
 
-// ── Helper: make a labeled double spin box ──────────────────────────
-
-static QDoubleSpinBox *make_spin(const char *label,
-                                 QWidget *parent,
-                                 QHBoxLayout *row,
-                                 double min,
-                                 double max,
-                                 double step) {
-    row->addWidget(new QLabel(label, parent));
-    auto *spin = new QDoubleSpinBox(parent);
-    spin->setRange(min, max);
-    spin->setDecimals(3);
-    spin->setSingleStep(step);
-    spin->setKeyboardTracking(false);
-    row->addWidget(spin);
-    return spin;
+static void set_button_color(QPushButton *btn, const sg::Vec4f &c) {
+    set_button_color(btn, c(0), c(1), c(2), c(3));
 }
 
 // ── Construction / Destruction ───────────────────────────────────────
@@ -184,32 +173,60 @@ void MeshControlsWidget::build_transform_section(QWidget *parent,
     _transform_group->setEnabled(false);
     auto *grp_layout = new QVBoxLayout(_transform_group);
 
+    // A grid keeps the T/R/S rows column-aligned even though their spin
+    // boxes have different ranges (and therefore different size hints).
+    auto *grid = new QGridLayout;
+    auto add_row = [&](int row,
+                       const char *name,
+                       double min,
+                       double max,
+                       double step) -> std::array<QDoubleSpinBox *, 3> {
+        grid->addWidget(new QLabel(name, _transform_group), row, 0);
+        std::array<QDoubleSpinBox *, 3> spins{};
+        constexpr std::array<const char *, 3> axes{"X", "Y", "Z"};
+        for (int a = 0; a < 3; ++a) {
+            auto *label =
+                new QLabel(axes[static_cast<std::size_t>(a)], _transform_group);
+            label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            grid->addWidget(label, row, 1 + 2 * a);
+            auto *spin = new QDoubleSpinBox(_transform_group);
+            spin->setRange(min, max);
+            spin->setDecimals(3);
+            spin->setSingleStep(step);
+            spin->setKeyboardTracking(false);
+            spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+            grid->addWidget(spin, row, 2 + 2 * a);
+            spins[static_cast<std::size_t>(a)] = spin;
+        }
+        return spins;
+    };
+    for (int a = 0; a < 3; ++a) grid->setColumnStretch(2 + 2 * a, 1);
+
     // Translation
-    auto *t_row = new QHBoxLayout;
-    t_row->addWidget(new QLabel("T", _transform_group));
-    _tx = make_spin("X", _transform_group, t_row, -1e6, 1e6, 0.1);
-    _ty = make_spin("Y", _transform_group, t_row, -1e6, 1e6, 0.1);
-    _tz = make_spin("Z", _transform_group, t_row, -1e6, 1e6, 0.1);
-    grp_layout->addLayout(t_row);
-
+    {
+        auto [x, y, z] = add_row(0, "T", -1e6, 1e6, 0.1);
+        _tx = x;
+        _ty = y;
+        _tz = z;
+    }
     // Rotation (degrees)
-    auto *r_row = new QHBoxLayout;
-    r_row->addWidget(new QLabel("R", _transform_group));
-    _rx = make_spin("X", _transform_group, r_row, -360.0, 360.0, 1.0);
-    _ry = make_spin("Y", _transform_group, r_row, -360.0, 360.0, 1.0);
-    _rz = make_spin("Z", _transform_group, r_row, -360.0, 360.0, 1.0);
-    grp_layout->addLayout(r_row);
-
+    {
+        auto [x, y, z] = add_row(1, "R", -360.0, 360.0, 1.0);
+        _rx = x;
+        _ry = y;
+        _rz = z;
+    }
     // Scale
-    auto *s_row = new QHBoxLayout;
-    s_row->addWidget(new QLabel("S", _transform_group));
-    _sx = make_spin("X", _transform_group, s_row, -1e6, 1e6, 0.1);
-    _sy = make_spin("Y", _transform_group, s_row, -1e6, 1e6, 0.1);
-    _sz = make_spin("Z", _transform_group, s_row, -1e6, 1e6, 0.1);
+    {
+        auto [x, y, z] = add_row(2, "S", -1e6, 1e6, 0.1);
+        _sx = x;
+        _sy = y;
+        _sz = z;
+    }
     _sx->setValue(1.0);
     _sy->setValue(1.0);
     _sz->setValue(1.0);
-    grp_layout->addLayout(s_row);
+    grp_layout->addLayout(grid);
 
     // Reset button
     _reset_transform_btn = new QPushButton("Reset Transform", _transform_group);
@@ -459,7 +476,8 @@ void MeshControlsWidget::build_color_group(QWidget *parent,
     cmap_row->addWidget(new QLabel("Colormap:", _scalar_field_container));
     _colormap_combo = new QComboBox(_scalar_field_container);
     for (const auto name : colormap_names()) {
-        _colormap_combo->addItem(QString::fromUtf8(name.data(), static_cast<int>(name.size())));
+        _colormap_combo->addItem(
+            QString::fromUtf8(name.data(), static_cast<int>(name.size())));
     }
     cmap_row->addWidget(_colormap_combo);
     sf_layout->addLayout(cmap_row);
@@ -784,7 +802,6 @@ sg::MeshData *MeshControlsWidget::selected_mesh_data() {
     return _selected->find_feature<sg::MeshData>();
 }
 
-
 // ═════════════════════════════════════════════════════════════════════
 // sync_from_state
 // ═════════════════════════════════════════════════════════════════════
@@ -907,11 +924,7 @@ void MeshControlsWidget::sync_from_state() {
 
         // Color
         _color_source_combo->setCurrentIndex(static_cast<int>(s.color_source));
-        set_button_color(_uniform_color_button,
-                         s.uniform_color[0],
-                         s.uniform_color[1],
-                         s.uniform_color[2],
-                         s.uniform_color[3]);
+        set_button_color(_uniform_color_button, s.uniform_color);
 
         int cmap_idx = find_colormap_index(s.colormap_name);
         if (cmap_idx >= 0) { _colormap_combo->setCurrentIndex(cmap_idx); }
@@ -928,19 +941,11 @@ void MeshControlsWidget::sync_from_state() {
         const auto &layers = s.layers;
 
         _solid_enabled_check->setChecked(layers.solid.enabled);
-        set_button_color(_solid_color_button,
-                         layers.solid.color[0],
-                         layers.solid.color[1],
-                         layers.solid.color[2],
-                         layers.solid.color[3]);
+        set_button_color(_solid_color_button, layers.solid.color);
         _solid_color_button->setVisible(layers.solid.enabled);
 
         _wireframe_enabled_check->setChecked(layers.wireframe.enabled);
-        set_button_color(_wireframe_color_button,
-                         layers.wireframe.color[0],
-                         layers.wireframe.color[1],
-                         layers.wireframe.color[2],
-                         layers.wireframe.color[3]);
+        set_button_color(_wireframe_color_button, layers.wireframe.color);
         _wireframe_color_button->setVisible(layers.wireframe.enabled);
         _wireframe_details_container->setVisible(layers.wireframe.enabled);
         _wireframe_width_slider->setValue(
@@ -949,11 +954,7 @@ void MeshControlsWidget::sync_from_state() {
             QStringLiteral("Width: %1").arg(layers.wireframe.width, 0, 'f', 1));
 
         _points_enabled_check->setChecked(layers.points.enabled);
-        set_button_color(_point_color_button,
-                         layers.points.color[0],
-                         layers.points.color[1],
-                         layers.points.color[2],
-                         layers.points.color[3]);
+        set_button_color(_point_color_button, layers.points.color);
         _point_color_button->setVisible(layers.points.enabled);
         _points_details_container->setVisible(layers.points.enabled);
         _point_size_slider->setValue(
@@ -990,12 +991,11 @@ void MeshControlsWidget::sync_from_state() {
         _scene_light_y_spin->setValue(static_cast<double>(light.direction(1)));
         _scene_light_z_spin->setValue(static_cast<double>(light.direction(2)));
         set_button_color(_scene_light_color_button,
-                         static_cast<float>(light.color(0)),
-                         static_cast<float>(light.color(1)),
-                         static_cast<float>(light.color(2)),
-                         1.0f);
+                         sg::Vec4f{ light.color(0),
+                                    light.color(1),
+                                    light.color(2),
+                                    1.0f });
     }
-
 }
 
 void MeshControlsWidget::sync_color_group_visibility() {
@@ -1050,30 +1050,33 @@ void MeshControlsWidget::sync_attribute_bindings() {
     };
 
     // Position: vertex attribute, 1+ components
-    int pos_idx = populate_combo(_position_attr_combo,
-                                 mesh_data->position_binding(),
-                                 [](const sg::MeshAttributeHandle &da) {
-                                     return da->domain == sg::AttributeDomain::Vertex
-                                            && da->component_count >= 1;
-                                 });
+    int pos_idx =
+        populate_combo(_position_attr_combo,
+                       mesh_data->position_binding(),
+                       [](const sg::MeshAttributeHandle &da) {
+                           return da->domain == sg::AttributeDomain::Vertex
+                                  && da->component_count >= 1;
+                       });
     _position_attr_combo->setCurrentIndex(pos_idx);
 
     // Normal: vertex attribute, 2+ components
-    int norm_idx = populate_combo(_normal_attr_combo,
-                                  mesh_data->normal_binding(),
-                                  [](const sg::MeshAttributeHandle &da) {
-                                      return da->domain == sg::AttributeDomain::Vertex
-                                             && da->component_count >= 2;
-                                  });
+    int norm_idx =
+        populate_combo(_normal_attr_combo,
+                       mesh_data->normal_binding(),
+                       [](const sg::MeshAttributeHandle &da) {
+                           return da->domain == sg::AttributeDomain::Vertex
+                                  && da->component_count >= 2;
+                       });
     _normal_attr_combo->setCurrentIndex(norm_idx);
 
     // Scalar: any vertex attribute
-    int scl_idx = populate_combo(_scalar_attr_combo,
-                                 mesh_data->scalar_binding(),
-                                 [](const sg::MeshAttributeHandle &da) {
-                                     return da->domain == sg::AttributeDomain::Vertex
-                                            && da->component_count >= 1;
-                                 });
+    int scl_idx =
+        populate_combo(_scalar_attr_combo,
+                       mesh_data->scalar_binding(),
+                       [](const sg::MeshAttributeHandle &da) {
+                           return da->domain == sg::AttributeDomain::Vertex
+                                  && da->component_count >= 1;
+                       });
     _scalar_attr_combo->setCurrentIndex(scl_idx);
 
     // Scalar component selector
@@ -1195,15 +1198,12 @@ void MeshControlsWidget::on_uniform_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
     auto &uc = md->render_state().uniform_color;
-    QColor initial = QColor::fromRgbF(uc[0], uc[1], uc[2], uc[3]);
+    QColor initial = to_qcolor(uc);
     QColor chosen = QColorDialog::getColor(
         initial, this, "Uniform Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        uc[0] = static_cast<float>(chosen.redF());
-        uc[1] = static_cast<float>(chosen.greenF());
-        uc[2] = static_cast<float>(chosen.blueF());
-        uc[3] = static_cast<float>(chosen.alphaF());
-        set_button_color(_uniform_color_button, uc[0], uc[1], uc[2], uc[3]);
+        uc = as_zipper(chosen);
+        set_button_color(_uniform_color_button, uc);
         emit scene_changed();
     }
 }
@@ -1211,7 +1211,8 @@ void MeshControlsWidget::on_uniform_color_clicked() {
 void MeshControlsWidget::on_colormap_changed(int index) {
     auto *md = selected_mesh_data();
     const auto names = colormap_names();
-    if (!md || index < 0 || static_cast<std::size_t>(index) >= names.size()) return;
+    if (!md || index < 0 || static_cast<std::size_t>(index) >= names.size())
+        return;
     md->render_state().colormap_name = names[static_cast<std::size_t>(index)];
     {
         QSignalBlocker block(_colormap_custom_edit);
@@ -1322,8 +1323,7 @@ void MeshControlsWidget::on_scalar_attr_changed(int index) {
             const auto &discovered = md->attributes();
             if (disc_idx >= 0
                 && disc_idx < static_cast<int>(discovered.size())) {
-                md->assign_scalar(discovered[disc_idx],
-                                  md->scalar_component());
+                md->assign_scalar(discovered[disc_idx], md->scalar_component());
             }
         }
     }
@@ -1357,15 +1357,12 @@ void MeshControlsWidget::on_solid_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
     auto &c = md->render_state().layers.solid.color;
-    QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+    QColor initial = to_qcolor(c);
     QColor chosen = QColorDialog::getColor(
         initial, this, "Solid Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        c[0] = static_cast<float>(chosen.redF());
-        c[1] = static_cast<float>(chosen.greenF());
-        c[2] = static_cast<float>(chosen.blueF());
-        c[3] = static_cast<float>(chosen.alphaF());
-        set_button_color(_solid_color_button, c[0], c[1], c[2], c[3]);
+        c = as_zipper(chosen);
+        set_button_color(_solid_color_button, c);
         emit scene_changed();
     }
 }
@@ -1383,15 +1380,12 @@ void MeshControlsWidget::on_wireframe_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
     auto &c = md->render_state().layers.wireframe.color;
-    QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+    QColor initial = to_qcolor(c);
     QColor chosen = QColorDialog::getColor(
         initial, this, "Wireframe Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        c[0] = static_cast<float>(chosen.redF());
-        c[1] = static_cast<float>(chosen.greenF());
-        c[2] = static_cast<float>(chosen.blueF());
-        c[3] = static_cast<float>(chosen.alphaF());
-        set_button_color(_wireframe_color_button, c[0], c[1], c[2], c[3]);
+        c = as_zipper(chosen);
+        set_button_color(_wireframe_color_button, c);
         emit scene_changed();
     }
 }
@@ -1419,15 +1413,12 @@ void MeshControlsWidget::on_point_color_clicked() {
     auto *md = selected_mesh_data();
     if (!md) return;
     auto &c = md->render_state().layers.points.color;
-    QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+    QColor initial = to_qcolor(c);
     QColor chosen = QColorDialog::getColor(
         initial, this, "Point Color", QColorDialog::ShowAlphaChannel);
     if (chosen.isValid()) {
-        c[0] = static_cast<float>(chosen.redF());
-        c[1] = static_cast<float>(chosen.greenF());
-        c[2] = static_cast<float>(chosen.blueF());
-        c[3] = static_cast<float>(chosen.alphaF());
-        set_button_color(_point_color_button, c[0], c[1], c[2], c[3]);
+        c = as_zipper(chosen);
+        set_button_color(_point_color_button, c);
         emit scene_changed();
     }
 }
@@ -1497,28 +1488,21 @@ void MeshControlsWidget::on_scene_light_enabled_changed(bool checked) {
 void MeshControlsWidget::on_scene_light_dir_changed() {
     if (!_scene) return;
     auto &light = _scene->headlight();
-    light.direction(0) = static_cast<float>(_scene_light_x_spin->value());
-    light.direction(1) = static_cast<float>(_scene_light_y_spin->value());
-    light.direction(2) = static_cast<float>(_scene_light_z_spin->value());
+    light.direction =
+        read_vec3(_scene_light_x_spin, _scene_light_y_spin, _scene_light_z_spin);
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_scene_light_color_clicked() {
     if (!_scene) return;
     auto &light = _scene->headlight();
-    QColor initial = QColor::fromRgbF(static_cast<qreal>(light.color(0)),
-                                      static_cast<qreal>(light.color(1)),
-                                      static_cast<qreal>(light.color(2)));
-    QColor chosen = QColorDialog::getColor(initial, this, "Light Color");
+    QColor chosen =
+        QColorDialog::getColor(to_qcolor(light.color), this, "Light Color");
     if (chosen.isValid()) {
-        light.color(0) = static_cast<float>(chosen.redF());
-        light.color(1) = static_cast<float>(chosen.greenF());
-        light.color(2) = static_cast<float>(chosen.blueF());
-        set_button_color(_scene_light_color_button,
-                         static_cast<float>(chosen.redF()),
-                         static_cast<float>(chosen.greenF()),
-                         static_cast<float>(chosen.blueF()),
-                         1.0f);
+        chosen.setAlphaF(1.0);
+        sg::Vec4f c = as_zipper(chosen);
+        light.color = c.head<3>();
+        set_button_color(_scene_light_color_button, c);
         emit scene_changed();
     }
 }
@@ -1539,31 +1523,19 @@ void MeshControlsWidget::on_name_edited(const QString &text) {
 
 void MeshControlsWidget::on_translation_changed() {
     if (!_selected) return;
-    sg::Vec3f t;
-    t(0) = static_cast<float>(_tx->value());
-    t(1) = static_cast<float>(_ty->value());
-    t(2) = static_cast<float>(_tz->value());
-    _selected->set_translation(t);
+    _selected->set_translation(read_vec3(_tx, _ty, _tz));
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_rotation_changed() {
     if (!_selected) return;
-    sg::Vec3f euler;
-    euler(0) = static_cast<float>(_rx->value());
-    euler(1) = static_cast<float>(_ry->value());
-    euler(2) = static_cast<float>(_rz->value());
-    _selected->set_rotation_euler(euler);
+    _selected->set_rotation_euler(read_vec3(_rx, _ry, _rz));
     emit scene_changed();
 }
 
 void MeshControlsWidget::on_scale_changed() {
     if (!_selected) return;
-    sg::Vec3f s;
-    s(0) = static_cast<float>(_sx->value());
-    s(1) = static_cast<float>(_sy->value());
-    s(2) = static_cast<float>(_sz->value());
-    _selected->set_scale_factors(s);
+    _selected->set_scale_factors(read_vec3(_sx, _sy, _sz));
     emit scene_changed();
 }
 

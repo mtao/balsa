@@ -1,7 +1,5 @@
 
-#if !defined(BALSA_VISUALIZATION_VULKAN_SCENE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_SCENE_HPP
-
+#pragma once
 #include <memory>
 #include <limits>
 #include <vulkan/vulkan_core.h>
@@ -22,4 +20,3 @@ namespace visualization::vulkan {
     };
 }// namespace visualization::vulkan
 }// namespace balsa
-#endif

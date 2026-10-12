@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_MESH_CONVERSION_HPP)
-#define BALSA_VISUALIZATION_MESH_CONVERSION_HPP
-
+#pragma once
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 
 namespace balsa::scene_graph {
@@ -18,5 +16,3 @@ auto to_mesh_data(const geometry::triangle_mesh::OBJMesh<float, 3> &obj,
                   scene_graph::MeshData &mesh_data) -> void;
 
 } // namespace balsa::visualization
-
-#endif

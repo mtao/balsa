@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_SHADERS_MESH_SHADER_HPP)
-#define BALSA_VISUALIZATION_SHADERS_MESH_SHADER_HPP
-
+#pragma once
 #include <string>
 #include <shaderc/shaderc.hpp>
 #include <vulkan/vulkan.hpp>
@@ -131,5 +129,3 @@ std::vector<uint32_t> MeshShader<ET>::frag_spirv() const {
 }
 
 }// namespace balsa::visualization::shaders
-
-#endif

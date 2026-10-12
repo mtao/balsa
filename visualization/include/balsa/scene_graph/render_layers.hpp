@@ -1,5 +1,5 @@
-#if !defined(BALSA_SCENE_GRAPH_RENDER_LAYERS_HPP)
-#define BALSA_SCENE_GRAPH_RENDER_LAYERS_HPP
+#pragma once
+#include "balsa/scene_graph/types.hpp"
 
 namespace balsa::scene_graph {
 
@@ -15,20 +15,20 @@ namespace balsa::scene_graph {
 
 // Filled-triangle pass.
 struct SolidLayer {
-    float color[4] = { 0.8f, 0.8f, 0.8f, 1.0f };// face color (RGBA)
+    Vec4f color{ 0.8f, 0.8f, 0.8f, 1.0f };// face color (RGBA)
     bool enabled = true;
 };
 
 // Edge-line pass.
 struct WireframeLayer {
-    float color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };// wire color (RGBA)
+    Vec4f color{ 0.0f, 0.0f, 0.0f, 1.0f };// wire color (RGBA)
     float width = 1.5f;
     bool enabled = true;
 };
 
 // Point-cloud pass.
 struct PointLayer {
-    float color[4] = { 1.0f, 0.0f, 0.0f, 1.0f };// point color (RGBA)
+    Vec4f color{ 1.0f, 0.0f, 0.0f, 1.0f };// point color (RGBA)
     float size = 3.0f;
     bool enabled = false;// off by default
 };
@@ -54,5 +54,3 @@ struct MaterialProperties {
 };
 
 }// namespace balsa::scene_graph
-
-#endif

@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_DRAWABLE_GROUP_HPP)
-#define BALSA_SCENE_GRAPH_DRAWABLE_GROUP_HPP
-
+#pragma once
 #include <cstddef>
 #include <vector>
 
@@ -46,5 +44,3 @@ class DrawableGroup {
 };
 
 }// namespace balsa::scene_graph
-
-#endif

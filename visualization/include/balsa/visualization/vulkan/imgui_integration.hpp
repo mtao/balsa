@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_IMGUI_INTEGRATION_HPP)
-#define BALSA_VISUALIZATION_VULKAN_IMGUI_INTEGRATION_HPP
-
+#pragma once
 #include <vulkan/vulkan.h>
 
 // Forward declarations -- avoid pulling in GLFW / ImGui headers
@@ -80,5 +78,3 @@ class ImGuiIntegration {
 };
 
 }// namespace balsa::visualization::vulkan
-
-#endif

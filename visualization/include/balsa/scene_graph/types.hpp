@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_TYPES_HPP)
-#define BALSA_SCENE_GRAPH_TYPES_HPP
-
+#pragma once
 // Scene graph type aliases.
 //
 // The scene graph needs column-major matrices to match Vulkan/GLSL and
@@ -46,5 +44,3 @@ using Scaling3f = ::zipper::transform::Scaling<float, 3>;
 using Quaternionf = ::zipper::Quaternion<float>;
 
 }// namespace balsa::scene_graph
-
-#endif

@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_IMAGE_PIPELINE_MANAGER_HPP)
-#define BALSA_VISUALIZATION_VULKAN_IMAGE_PIPELINE_MANAGER_HPP
-
+#pragma once
 #include <vulkan/vulkan.hpp>
 
 #include "balsa/scene_graph/types.hpp"
@@ -128,5 +126,3 @@ class ImagePipelineManager {
 };
 
 } // namespace balsa::visualization::vulkan
-
-#endif

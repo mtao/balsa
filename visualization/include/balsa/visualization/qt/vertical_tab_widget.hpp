@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_QT_VERTICAL_TAB_WIDGET_HPP)
-#define BALSA_VISUALIZATION_QT_VERTICAL_TAB_WIDGET_HPP
-
+#pragma once
 #include <QTabBar>
 #include <QWidget>
 
@@ -25,6 +23,8 @@ class VerticalTabBar : public QTabBar {
   protected:
     QSize tabSizeHint(int index) const override;
     QSize minimumTabSizeHint(int index) const override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
     void paintEvent(QPaintEvent *event) override;
 };
 
@@ -76,5 +76,3 @@ class VerticalTabWidget : public QWidget {
 };
 
 }// namespace balsa::visualization::qt
-
-#endif

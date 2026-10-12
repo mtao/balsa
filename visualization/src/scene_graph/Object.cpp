@@ -1,29 +1,18 @@
 #include "balsa/scene_graph/Object.hpp"
 
 #include <algorithm>
-#include <numbers>
 
+#include <zipper/expression/nullary/Constant.hpp>
+#include <zipper/transform/common.hpp>
 #include <zipper/transform/decompose.hpp>
 #include <zipper/transform/quaternion_transform.hpp>
 
 namespace balsa::scene_graph {
 
-namespace {
-    constexpr float k_deg2rad = std::numbers::pi_v<float> / 180.0f;
-    constexpr float k_rad2deg = 180.0f / std::numbers::pi_v<float>;
-}// namespace
-
 // ── Constructor / Destructor ────────────────────────────────────────
 
 Object::Object(std::string name)
-  : name(std::move(name)) {
-    // _translation: Vec3f default-constructs to zero.
-    // _rotation: explicitly initialized to identity quaternion {1,0,0,0}.
-    // _scale: needs explicit init to {1,1,1}.
-    _scale(0) = 1.0f;
-    _scale(1) = 1.0f;
-    _scale(2) = 1.0f;
-}
+  : name(std::move(name)) {}
 
 Object::~Object() = default;
 
@@ -77,19 +66,12 @@ Object &Object::operator=(Object &&other) noexcept {
 // ── Euler angles ────────────────────────────────────────────────────
 
 Vec3f Object::rotation_euler() const {
-    auto rad = ::zipper::transform::euler_angles(_rotation);
-    Vec3f deg;
-    deg(0) = static_cast<float>(rad(0)) * k_rad2deg;
-    deg(1) = static_cast<float>(rad(1)) * k_rad2deg;
-    deg(2) = static_cast<float>(rad(2)) * k_rad2deg;
-    return deg;
+    const Vec3f rad = ::zipper::transform::euler_angles(_rotation);
+    return Vec3f(::zipper::transform::degrees(1.0f) * rad);
 }
 
 void Object::set_rotation_euler(const Vec3f &degrees) {
-    Vec3f radians;
-    radians(0) = degrees(0) * k_deg2rad;
-    radians(1) = degrees(1) * k_deg2rad;
-    radians(2) = degrees(2) * k_deg2rad;
+    const Vec3f radians(::zipper::transform::radians(1.0f) * degrees);
     _rotation = ::zipper::transform::from_euler_angles(radians);
 }
 
@@ -105,19 +87,13 @@ void Object::rotate(const Quaternionf &q) {
 }
 
 void Object::set_uniform_scale(float s) {
-    _scale(0) = s;
-    _scale(1) = s;
-    _scale(2) = s;
+    _scale = ::zipper::expression::nullary::Constant<float, 3>(s);
 }
 
 void Object::reset_transform() {
-    _translation(0) = 0;
-    _translation(1) = 0;
-    _translation(2) = 0;
+    _translation = ::zipper::expression::nullary::Constant<float, 3>(0.0f);
     _rotation = Quaternionf(1, 0, 0, 0);
-    _scale(0) = 1;
-    _scale(1) = 1;
-    _scale(2) = 1;
+    _scale = ::zipper::expression::nullary::Constant<float, 3>(1.0f);
 }
 
 // ── Composed transforms ─────────────────────────────────────────────
@@ -133,10 +109,8 @@ AffineTransformf Object::local_transform() const {
 void Object::set_from_transform(const AffineTransformf &xf) {
     auto [t, r, s] = ::zipper::transform::trs_decompose(xf);
 
-    for (int i = 0; i < 3; ++i) {
-        _translation(i) = static_cast<float>(t(i));
-        _scale(i) = static_cast<float>(s(i));
-    }
+    _translation = t.vector();
+    _scale = s.factors();
     _rotation = ::zipper::transform::to_quaternion(r.matrix());
 }
 
@@ -164,7 +138,7 @@ Object &Object::add_child(std::unique_ptr<Object> child) {
     // Detach from previous parent if needed.
     if (child->_parent) {
         auto &siblings = child->_parent->_children;
-        auto it = std::find_if(siblings.begin(), siblings.end(), [&](const auto &p) { return p.get() == child.get(); });
+        auto it = std::ranges::find(siblings, child.get(), &std::unique_ptr<Object>::get);
         if (it != siblings.end()) {
             // Release ownership without destroying — we're taking it.
             it->release();
@@ -181,7 +155,7 @@ std::unique_ptr<Object> Object::detach() {
     if (permanent) return nullptr;// permanent objects cannot be detached
 
     auto &siblings = _parent->_children;
-    auto it = std::find_if(siblings.begin(), siblings.end(), [this](const auto &p) { return p.get() == this; });
+    auto it = std::ranges::find(siblings, this, &std::unique_ptr<Object>::get);
 
     if (it == siblings.end()) return nullptr;
 
@@ -195,7 +169,7 @@ std::unique_ptr<Object> Object::detach() {
 
 bool Object::remove_feature(AbstractFeature *feature) {
     if (!feature) return false;
-    auto it = std::find_if(_features.begin(), _features.end(), [feature](const auto &p) { return p.get() == feature; });
+    auto it = std::ranges::find(_features, feature, &std::unique_ptr<AbstractFeature>::get);
     if (it == _features.end()) return false;
     _features.erase(it);
     return true;

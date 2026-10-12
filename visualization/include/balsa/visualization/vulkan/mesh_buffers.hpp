@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_MESH_BUFFERS_HPP)
-#define BALSA_VISUALIZATION_VULKAN_MESH_BUFFERS_HPP
-
+#pragma once
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -185,5 +183,3 @@ class MeshBuffers {
 };
 
 } // namespace balsa::visualization::vulkan
-
-#endif

@@ -22,11 +22,10 @@ template <::zipper::concepts::Matrix VType>
 auto bounding_box(const VType &V) {
     using T = typename VType::value_type;
     constexpr auto Dim = VType::extents_type::static_extent(0);
-    BoundingBox<T, Dim> bb;
-    for (zipper::index_type j = 0; j < V.extent(1); ++j) {
-        bb.expand(V.col(j));
+    if (V.extent(1) == 0) {
+        return BoundingBox<T, Dim>{};
     }
-    return bb;
+    return BoundingBox<T, Dim>(V.rowwise().min(), V.rowwise().max());
 }
 
 } // namespace balsa::geometry

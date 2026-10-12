@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_FILM_HPP)
-#define BALSA_VISUALIZATION_VULKAN_FILM_HPP
-
+#pragma once
 #include <array>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -87,5 +85,3 @@ class Film {
   private:
 };
 }// namespace balsa::visualization::vulkan
-
-#endif

@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_VULKAN_VULKAN_IMAGE_DRAWABLE_HPP)
-#define BALSA_VISUALIZATION_VULKAN_VULKAN_IMAGE_DRAWABLE_HPP
-
+#pragma once
 #include <cstdint>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -102,5 +100,3 @@ class VulkanImageDrawable : public VulkanDrawable {
 };
 
 } // namespace balsa::visualization::vulkan
-
-#endif

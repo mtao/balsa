@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_LIGHT_HPP)
-#define BALSA_SCENE_GRAPH_LIGHT_HPP
-
+#pragma once
 #include "AbstractFeature.hpp"
 #include "types.hpp"
 
@@ -52,5 +50,3 @@ class Light : public AbstractFeature {
 };
 
 }// namespace balsa::scene_graph
-
-#endif

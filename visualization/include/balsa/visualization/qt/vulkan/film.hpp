@@ -1,6 +1,4 @@
-#if !defined(BALSA_VISUALIZATION_QT_VULKAN_FILM_HPP)
-#define BALSA_VISUALIZATION_QT_VULKAN_FILM_HPP
-
+#pragma once
 #include "balsa/visualization/vulkan/film.hpp"
 
 
@@ -61,5 +59,3 @@ class Film : public visualization::vulkan::Film {
     QVulkanWindow &_window;
 };
 }// namespace balsa::visualization::qt::vulkan
-
-#endif
