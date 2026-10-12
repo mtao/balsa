@@ -15,6 +15,7 @@
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "types.hpp"
 
+#include <zipper/DataArray.hpp>
 #include <zipper/storage/layout_types.hpp>
 #include <zipper/types.hpp>
 
@@ -35,9 +36,9 @@ enum class AttributeDomain : int8_t {
 //
 // A named attribute: count() elements of component_count() values each,
 // stored in its own element type (see AttributeType).  Storage is a
-// column-major matrix with extents (component_count, count), i.e. one
-// column per element, so memory is element-major (x0 y0 z0 x1 y1 z1 ...).
-// The matrix is the only source of the shape.
+// column-major zipper::DataArray with extents (component_count, count),
+// i.e. one column per element, so memory is element-major
+// (x0 y0 z0 x1 y1 z1 ...).  The array is the only source of the shape.
 //
 // Constructed from any rank-1 (scalar per element) or rank-2
 // (components x elements) mdspan of arithmetic values, in any layout or
@@ -67,9 +68,14 @@ namespace detail {
 
 class MeshAttribute {
   public:
-    /// Element-major matrix holding one attribute's values.
+    /// Plain column-major (components x count) storage for one attribute;
+    /// no arithmetic semantics.  Wrap a view in zipper::MatrixBase for math.
+    /// (zipper's "left-major" means leftmost index slowest, i.e. row-major;
+    /// LeftMajor = false is column-major.  The public DataArray alias only
+    /// covers static extents.)
     template <typename T>
-    using matrix_type = balsa::zipper::ColVectors<T, std::dynamic_extent>;
+    using storage_type = ::zipper::detail::
+        DataArray_<T, ::zipper::dextents<2>, /*LeftMajor=*/false>;
     template <typename T, std::size_t D = std::dynamic_extent>
     using const_view_type =
         ::zipper::mdspan<const T,
@@ -96,7 +102,7 @@ class MeshAttribute {
     }
     template <typename T>
     [[nodiscard]] auto holds() const -> bool {
-        return std::holds_alternative<matrix_type<T>>(m_values);
+        return std::holds_alternative<storage_type<T>>(m_values);
     }
 
     /// Calls f with a dynamic const view of the values, whatever their type.
@@ -121,7 +127,7 @@ class MeshAttribute {
     /// static D, component_count() == D; nullopt otherwise.
     template <typename T, std::size_t D = std::dynamic_extent>
     [[nodiscard]] auto view() const -> std::optional<const_view_type<T, D>> {
-        const auto *m = std::get_if<matrix_type<T>>(&m_values);
+        const auto *m = std::get_if<storage_type<T>>(&m_values);
         if (m == nullptr) return std::nullopt;
         const auto all = m->expression().as_mdspan();
         if constexpr (D == std::dynamic_extent) {
@@ -134,10 +140,10 @@ class MeshAttribute {
 
   private:
     // Alternative order matches AttributeType.
-    std::variant<matrix_type<float>,
-                 matrix_type<double>,
-                 matrix_type<int32_t>,
-                 matrix_type<uint32_t>>
+    std::variant<storage_type<float>,
+                 storage_type<double>,
+                 storage_type<int32_t>,
+                 storage_type<uint32_t>>
         m_values;
 };
 

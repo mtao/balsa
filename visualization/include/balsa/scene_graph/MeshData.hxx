@@ -86,15 +86,16 @@ MeshAttribute::MeshAttribute(
         ::zipper::expression::nullary::MDSpan<T, Extents, Layout, Accessor>;
 
     if constexpr (Extents::rank() == 1) {
-        matrix_type<S> values(1, data.extent(0));
-        values.row(0) =
-            ::zipper::VectorBase<source_t>(source_t(data)).template cast<S>();
+        storage_type<S> values(std::size_t{1}, data.extent(0));
+        typename balsa::zipper::VectorX<S>::span_type dst{
+            std::span<S>(values.data(), data.extent(0))};
+        dst = ::zipper::VectorBase<source_t>(source_t(data)).template cast<S>();
         m_values = std::move(values);
     } else {
         assert(data.extent(0) <= max_components);
-        matrix_type<S> values(data.extent(0), data.extent(1));
-        values =
-            ::zipper::MatrixBase<source_t>(source_t(data)).template cast<S>();
+        storage_type<S> values(data.extent(0), data.extent(1));
+        values = ::zipper::DataArrayBase<source_t>(source_t(data))
+                     .template cast<S>();
         m_values = std::move(values);
     }
 }
