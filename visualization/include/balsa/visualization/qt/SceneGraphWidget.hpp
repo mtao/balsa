@@ -27,7 +27,7 @@ class SceneGraphModel;
 //               Delete, Duplicate)
 //             - Inline rename (double-click)
 //
-// Transform controls have been moved to MeshControlsWidget (Object tab).
+// Transform controls have been moved to ControlsWidget (Object tab).
 //
 // Signals:
 //   object_selected(Object*)  -- when tree selection changes

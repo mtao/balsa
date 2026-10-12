@@ -192,6 +192,7 @@ auto draw_shading(sg::MeshData &mesh, Layout &layout) -> void {
     auto *md = &mesh;
     auto &rs = md->render_state();
     auto constrain = [md] { md->render_state().constrain(md->has_normals()); };
+    constrain(); // state may have been set before normals were known
 
     auto normals = enum_value<NormalSource>(
         { "From Attribute", "Computed (flat)", "None (unlit)" },
