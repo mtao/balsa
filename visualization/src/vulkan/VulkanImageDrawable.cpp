@@ -196,15 +196,11 @@ auto VulkanImageDrawable::update_ubos(const scene_graph::Camera &cam,
     float img_w = image_data ? static_cast<float>(image_data->width()) : 1.0f;
     float img_h = image_data ? static_cast<float>(image_data->height()) : 1.0f;
 
-    params.tone_params(0) = exposure;
-    params.tone_params(1) = gamma;
-    params.tone_params(2) = channel;
-    params.tone_params(3) = 0.0f;
-
-    params.image_size(0) = img_w;
-    params.image_size(1) = img_h;
-    params.image_size(2) = (img_w > 0.0f) ? 1.0f / img_w : 0.0f;
-    params.image_size(3) = (img_h > 0.0f) ? 1.0f / img_h : 0.0f;
+    params.tone_params = scene_graph::Vec4f{ exposure, gamma, channel, 0.0f };
+    params.image_size = scene_graph::Vec4f{ img_w,
+                          img_h,
+                          (img_w > 0.0f) ? 1.0f / img_w : 0.0f,
+                          (img_h > 0.0f) ? 1.0f / img_h : 0.0f };
 
     _params_ubos[fi].upload(&params, sizeof(ImageParamsUBO));
 }

@@ -1,6 +1,4 @@
-#if !defined(BALSA_SCENE_GRAPH_OBJECT_HPP_NEW)
-#define BALSA_SCENE_GRAPH_OBJECT_HPP_NEW
-
+#pragma once
 #include <cmath>
 #include <memory>
 #include <numbers>
@@ -149,9 +147,9 @@ class Object {
     bool permanent = false;
 
   private:
-    Vec3f _translation;// default: {0, 0, 0}
+    Vec3f _translation{ 0.0f, 0.0f, 0.0f };
     Quaternionf _rotation{ 1, 0, 0, 0 };// identity quaternion (w=1)
-    Vec3f _scale;// default: {1, 1, 1} — set in ctor
+    Vec3f _scale{ 1.0f, 1.0f, 1.0f };
     Object *_parent = nullptr;
     std::vector<std::unique_ptr<Object>> _children;
     std::vector<std::unique_ptr<AbstractFeature>> _features;
@@ -188,5 +186,3 @@ const F *Object::find_feature() const {
 }
 
 }// namespace balsa::scene_graph
-
-#endif

@@ -3,6 +3,7 @@
 #include "balsa/visualization/vulkan/VulkanImageDrawable.hpp"
 
 #include <algorithm>
+#include <zipper/expression/nullary/Identity.hpp>
 #include <cmath>
 #include <cstring>
 #include <spdlog/spdlog.h>
@@ -203,28 +204,10 @@ auto ImageScene::update_mvp() -> void {
         }
     }
 
-    scene_graph::Mat4f mvp;
-    // Start with identity
+    // Scale by zoom/fit, translate by pan (column 3; access is (row, col)).
+    scene_graph::Mat4f mvp = ::zipper::expression::nullary::Identity<float, 4, 4>();
     mvp(0, 0) = _zoom * fit_x;
     mvp(1, 1) = _zoom * fit_y;
-    mvp(2, 2) = 1.0f;
-    mvp(3, 3) = 1.0f;
-
-    // Off-diagonals zero
-    mvp(0, 1) = 0.0f;
-    mvp(0, 2) = 0.0f;
-    mvp(0, 3) = 0.0f;
-    mvp(1, 0) = 0.0f;
-    mvp(1, 2) = 0.0f;
-    mvp(1, 3) = 0.0f;
-    mvp(2, 0) = 0.0f;
-    mvp(2, 1) = 0.0f;
-    mvp(2, 3) = 0.0f;
-    mvp(3, 0) = 0.0f;
-    mvp(3, 1) = 0.0f;
-    mvp(3, 2) = 0.0f;
-
-    // Translation: column 3 (column-major)
     mvp(0, 3) = _pan_x;
     mvp(1, 3) = _pan_y;
 
