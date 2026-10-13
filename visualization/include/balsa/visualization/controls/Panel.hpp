@@ -21,37 +21,40 @@ class MeshScene;
 
 namespace balsa::visualization::controls {
 
-struct Context {
+/// What the panels describe: the scene and the current selection.
+struct PanelContext {
     vulkan::MeshScene *scene = nullptr;
-    scene_graph::Object *object = nullptr; ///< active (selected) object
+    scene_graph::Object *active_object = nullptr; ///< selected object, if any
 
-    [[nodiscard]] auto mesh_data() const -> scene_graph::MeshData *;
+    [[nodiscard]] auto active_mesh_data() const -> scene_graph::MeshData *;
     [[nodiscard]] auto headlight() const -> scene_graph::Light *;
 };
 
 struct Tab {
     std::string id; ///< e.g. "object", "data"
     std::string label;
-    std::string icon; ///< single glyph used by the Qt tab bar
-    int order = 0;
+    std::string icon_glyph; ///< single character shown on the Qt tab bar
+    int sort_key = 0; ///< tabs are sorted ascending; ties keep registration order
 };
 
 /// Register (or replace, matched by id) a tab.
 auto register_tab(Tab tab) -> void;
-/// Registered tabs sorted by order.
-auto tabs() -> std::vector<const Tab *>;
+/// Registered tabs sorted by sort_key.
+auto registered_tabs() -> std::vector<const Tab *>;
 
 struct Panel {
     std::string id; ///< unique, e.g. "data.render_layers"
     std::string tab_id;
-    int order = 0; ///< ascending within a tab
+    int sort_key = 0; ///< panels in a tab are sorted ascending; ties keep registration order
     std::string label;
-    bool default_open = true;
+    bool expanded_by_default = true;
 
-    std::function<bool(const Context &)> poll = [](const Context &) -> bool {
-        return true;
-    };
-    std::function<void(const Context &, Layout &)> draw;
+    /// Whether the panel applies to the context (e.g. a mesh is selected).
+    std::function<bool(const PanelContext &)> is_available =
+        [](const PanelContext &) -> bool { return true; };
+    /// Adds the panel's properties to the layout; only called when
+    /// is_available() passes.
+    std::function<void(const PanelContext &, Layout &)> fill_layout;
 };
 
 /// Register (or replace, matched by id) a panel.
@@ -59,8 +62,8 @@ auto register_panel(Panel panel) -> void;
 auto unregister_panel(std::string_view id) -> bool;
 auto registered_panels() -> std::span<const Panel>;
 
-/// Panels of a tab whose poll() passes, sorted by order.
-auto panels_for(const Context &ctx, std::string_view tab_id)
+/// Panels of a tab whose is_available() passes, sorted by sort_key.
+auto available_panels(const PanelContext &ctx, std::string_view tab_id)
     -> std::vector<const Panel *>;
 
 /// Registers the built-in tabs and panels.
