@@ -3,7 +3,7 @@
 #include <balsa/geometry/bounding_box.hpp>
 #include <balsa/scene_graph/MeshData.hpp>
 #include <balsa/scene_graph/Object.hpp>
-#include <balsa/zipper/types.hpp>
+#include <zipper/MatrixBase.hxx>
 #include <zipper/expression/nullary/Constant.hpp>
 #include <zipper/utils/max_coeff.hpp>
 
@@ -12,11 +12,17 @@ namespace balsa::visualization {
 auto normalize_to_unit_box(scene_graph::Object &object,
                            const scene_graph::MeshData &mesh_data) -> bool {
     if (!mesh_data.has_positions()) { return false; }
-    const auto view = mesh_data.position_binding().view<3>();
-    if (!view || view->extent(1) == 0) { return false; }
-    // Opt into zipper for the math.
-    const balsa::zipper::ColVectors<float, 3>::const_span_type positions(*view);
-    const auto bbox = geometry::bounding_box(positions);
+    const auto &positions = mesh_data.position_binding();
+    if (positions.component_count() != 3 || positions.size() == 0) {
+        return false;
+    }
+    // Positions may be stored in any attribute type; compute in float.
+    const auto bbox = positions.visit([&](const auto &values) {
+        using T = std::remove_const_t<
+            typename std::decay_t<decltype(values)>::element_type>;
+        const ::zipper::MatrixBase P(*positions.view<T, 3>());
+        return geometry::bounding_box(P.template cast<float>());
+    });
 
     // Largest extent across axes; guard degenerate meshes.
     float range = ::zipper::utils::maxCoeff(bbox.range());

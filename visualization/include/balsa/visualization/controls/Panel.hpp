@@ -25,8 +25,8 @@ struct Context {
     vulkan::MeshScene *scene = nullptr;
     scene_graph::Object *object = nullptr; ///< active (selected) object
 
-    auto mesh_data() const -> scene_graph::MeshData *;
-    auto headlight() const -> scene_graph::Light *;
+    [[nodiscard]] auto mesh_data() const -> scene_graph::MeshData *;
+    [[nodiscard]] auto headlight() const -> scene_graph::Light *;
 };
 
 struct Tab {
@@ -48,7 +48,9 @@ struct Panel {
     std::string label;
     bool default_open = true;
 
-    std::function<bool(const Context &)> poll = [](const Context &) { return true; };
+    std::function<bool(const Context &)> poll = [](const Context &) -> bool {
+        return true;
+    };
     std::function<void(const Context &, Layout &)> draw;
 };
 
@@ -58,7 +60,8 @@ auto unregister_panel(std::string_view id) -> bool;
 auto registered_panels() -> std::span<const Panel>;
 
 /// Panels of a tab whose poll() passes, sorted by order.
-auto panels_for(const Context &ctx, std::string_view tab_id) -> std::vector<const Panel *>;
+auto panels_for(const Context &ctx, std::string_view tab_id)
+    -> std::vector<const Panel *>;
 
 /// Registers the built-in tabs and panels.
 /// Idempotent.

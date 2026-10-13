@@ -1,11 +1,11 @@
 #include "balsa/scene_graph/MeshData.hpp"
 
 #include <spdlog/spdlog.h>
+#include <zipper/MatrixBase.hpp>
+#include <zipper/VectorBase.hpp>
 
 #include <algorithm>
 #include <array>
-#include <cmath>
-#include <numeric>
 #include <ranges>
 
 namespace balsa::scene_graph {
@@ -14,46 +14,37 @@ namespace balsa::scene_graph {
 
 auto RoleBinding::clear() -> void {
     _attr = {};
-    _extracts = false;
-    _extracted.clear();
+    _component.reset();
+    _magnitude.reset();
 }
+
+namespace {
+    // Per-element magnitudes of attr as a single-component attribute:
+    // float stays float, other types become double.
+    auto magnitude_of(const MeshAttribute &attr) -> MeshAttribute {
+        return attr.visit([&](const auto &values) {
+            using V = std::remove_const_t<
+                typename std::decay_t<decltype(values)>::element_type>;
+            using R = std::conditional_t<std::is_same_v<V, float>, float, double>;
+            std::vector<R> norms(values.extent(1));
+            typename balsa::zipper::VectorX<R>::span_type out{
+                std::span<R>(norms)};
+            const auto as_r = ::zipper::MatrixBase(values).template cast<R>();
+            out = as_r.colwise().norm();
+            return MeshAttribute(
+                attr.name + " (magnitude)",
+                attr.domain,
+                ::zipper::mdspan<const R, ::zipper::dextents<1>>(norms.data(),
+                                                                norms.size()));
+        });
+    }
+} // namespace
 
 // ── MeshData ────────────────────────────────────────────────────────
 
 MeshData::MeshData() = default;
 
-auto MeshData::add_attribute(std::string name,
-                             AttributeDomain domain,
-                             uint8_t component_count,
-                             std::span<const float> data)
-    -> MeshAttributeHandle {
-    return insert_attribute(MeshAttribute{
-        std::move(name), domain, component_count, {data.begin(), data.end()}});
-}
-
-auto MeshData::add_attribute(std::string name,
-                             AttributeDomain domain,
-                             uint8_t component_count,
-                             std::span<const double> data)
-    -> MeshAttributeHandle {
-    MeshAttribute attr{std::move(name), domain, component_count, {}};
-    attr.data.assign_range(data | std::views::transform([](double v) {
-                               return static_cast<float>(v);
-                           }));
-    return insert_attribute(std::move(attr));
-}
-
 auto MeshData::insert_attribute(MeshAttribute attr) -> MeshAttributeHandle {
-    if (attr.component_count == 0
-        || attr.data.size() % attr.component_count != 0) {
-        spdlog::warn(
-            "MeshData: attribute '{}' has {} values, not a multiple "
-            "of {} components",
-            attr.name,
-            attr.data.size(),
-            attr.component_count);
-    }
-
     auto it = std::ranges::find_if(
         _attributes, [&](const auto &a) { return a->name == attr.name; });
     MeshAttributeHandle handle;
@@ -237,7 +228,7 @@ auto MeshData::bind_vector(const MeshAttributeHandle &attr,
     RoleBinding binding;
     if (!attr) return binding;
     if (attr->domain != AttributeDomain::Vertex
-        || attr->component_count < min_components) {
+        || attr->component_count() < min_components) {
         spdlog::warn(
             "MeshData: attribute '{}' is not a vertex attribute with "
             ">= {} components",
@@ -253,12 +244,12 @@ auto MeshData::bind_scalar(const MeshAttributeHandle &attr, int component)
     -> RoleBinding {
     RoleBinding binding;
     if (!attr) return binding;
-    if (attr->domain != AttributeDomain::Vertex || attr->component_count == 0) {
+    if (attr->domain != AttributeDomain::Vertex || attr->component_count() == 0) {
         spdlog::warn("MeshData: attribute '{}' is not a vertex attribute",
                      attr->name);
         return binding;
     }
-    if (component >= attr->component_count) {
+    if (component >= attr->component_count()) {
         spdlog::warn("MeshData: component {} out of range for '{}'",
                      component,
                      attr->name);
@@ -266,22 +257,14 @@ auto MeshData::bind_scalar(const MeshAttributeHandle &attr, int component)
     }
 
     binding._attr = attr;
-    if (attr->component_count == 1) return binding;
-
-    binding._extracts = true;
-
-    auto elements = attr->data | std::views::chunk(attr->component_count);
     if (component >= 0) {
-        binding._extracted.assign_range(
-            elements | std::views::transform([component](auto e) {
-                return e[static_cast<std::size_t>(component)];
-            }));
+        binding._component = static_cast<uint8_t>(component);
+    } else if (attr->component_count() == 1) {
+        binding._component = 0;
     } else {
-        binding._extracted.assign_range(
-            elements | std::views::transform([](auto e) {
-                return std::sqrt(
-                    std::inner_product(e.begin(), e.end(), e.begin(), 0.0f));
-            }));
+        binding._magnitude =
+            std::make_shared<const MeshAttribute>(magnitude_of(*attr));
+        binding._component = 0;
     }
     return binding;
 }
