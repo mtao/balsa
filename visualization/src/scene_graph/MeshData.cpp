@@ -29,6 +29,7 @@ namespace {
             std::vector<R> norms(values.extent(1));
             typename balsa::zipper::VectorX<R>::span_type out{
                 std::span<R>(norms)};
+            // Named: colwise() rejects temporaries (mtao/zipper#42).
             const auto as_r = ::zipper::MatrixBase(values).template cast<R>();
             out = as_r.colwise().norm();
             return MeshAttribute(
