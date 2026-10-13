@@ -14,10 +14,31 @@ namespace balsa::scene_graph {
 
 auto RoleBinding::clear() -> void {
     _attr = {};
-    _component_count = 0;
-    _converted = false;
-    _buffer.clear();
+    _component.reset();
+    _magnitude.reset();
 }
+
+namespace {
+    // Per-element magnitudes of attr as a single-component attribute:
+    // float stays float, other types become double.
+    auto magnitude_of(const MeshAttribute &attr) -> MeshAttribute {
+        return attr.visit([&](const auto &values) {
+            using V = std::remove_const_t<
+                typename std::decay_t<decltype(values)>::element_type>;
+            using R = std::conditional_t<std::is_same_v<V, float>, float, double>;
+            std::vector<R> norms(values.extent(1));
+            typename balsa::zipper::VectorX<R>::span_type out{
+                std::span<R>(norms)};
+            const auto as_r = ::zipper::MatrixBase(values).template cast<R>();
+            out = as_r.colwise().norm();
+            return MeshAttribute(
+                attr.name + " (magnitude)",
+                attr.domain,
+                ::zipper::mdspan<const R, ::zipper::dextents<1>>(norms.data(),
+                                                                norms.size()));
+        });
+    }
+} // namespace
 
 // ── MeshData ────────────────────────────────────────────────────────
 
@@ -216,21 +237,6 @@ auto MeshData::bind_vector(const MeshAttributeHandle &attr,
         return binding;
     }
     binding._attr = attr;
-    binding._component_count = attr->component_count();
-    if (attr->holds<float>()) return binding;
-
-    // Rendering reads floats: convert into the binding's own buffer.
-    binding._converted = true;
-    binding._buffer.resize(std::size_t{binding._component_count}
-                           * attr->count());
-    ::zipper::MatrixBase converted(
-        ::zipper::mdspan<float, ::zipper::dextents<2>, ::zipper::storage::col_major>(
-            binding._buffer.data(),
-            std::size_t{binding._component_count},
-            attr->count()));
-    attr->visit([&](const auto &values) {
-        converted = ::zipper::MatrixBase(values).template cast<float>();
-    });
     return binding;
 }
 
@@ -251,26 +257,15 @@ auto MeshData::bind_scalar(const MeshAttributeHandle &attr, int component)
     }
 
     binding._attr = attr;
-    binding._component_count = 1;
-    if (attr->component_count() == 1 && attr->holds<float>()) return binding;
-
-    // One float per element: the chosen component (the only one for
-    // single-component attributes) or the magnitude.  Columns are elements.
-    binding._converted = true;
-    binding._buffer.resize(attr->count());
-    balsa::zipper::VectorX<float>::span_type extracted(
-        std::span<float>(binding._buffer));
-    const auto row = static_cast<::zipper::index_type>(std::max(component, 0));
-    const bool magnitude = component < 0 && attr->component_count() > 1;
-    attr->visit([&](const auto &values) {
-        const auto elements =
-            ::zipper::MatrixBase(values).template cast<float>();
-        if (magnitude) {
-            extracted = elements.colwise().norm();
-        } else {
-            extracted = elements.row(row);
-        }
-    });
+    if (component >= 0) {
+        binding._component = static_cast<uint8_t>(component);
+    } else if (attr->component_count() == 1) {
+        binding._component = 0;
+    } else {
+        binding._magnitude =
+            std::make_shared<const MeshAttribute>(magnitude_of(*attr));
+        binding._component = 0;
+    }
     return binding;
 }
 

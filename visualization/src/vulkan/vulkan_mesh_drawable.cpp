@@ -7,7 +7,36 @@
 
 #include <spdlog/spdlog.h>
 
+#include <zipper/MatrixBase.hxx>
+
+#include <vector>
+
 namespace balsa::visualization::vulkan {
+
+namespace {
+    // Bound values as element-major floats, as the vertex buffers expect.
+    // Contiguous float bindings are returned in place; anything else is
+    // converted into staging.
+    auto float_values(const scene_graph::RoleBinding &binding,
+                      std::vector<float> &staging) -> std::span<const float> {
+        return binding.visit([&](const auto &values) -> std::span<const float> {
+            using T = std::remove_const_t<
+                typename std::decay_t<decltype(values)>::element_type>;
+            const std::size_t n = values.extent(0) * values.extent(1);
+            if constexpr (std::is_same_v<T, float>) {
+                if (values.is_exhaustive()) return { values.data_handle(), n };
+            }
+            staging.resize(n);
+            ::zipper::MatrixBase out(
+                ::zipper::mdspan<float,
+                                 ::zipper::dextents<2>,
+                                 ::zipper::storage::col_major>(
+                    staging.data(), values.extent(0), values.extent(1)));
+            out = ::zipper::MatrixBase(values).template cast<float>();
+            return staging;
+        });
+    }
+} // namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
@@ -111,15 +140,15 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     if (!mesh_data) return;
     if (mesh_data->version() == _synced_version) return;
 
-    // Upload positions from the role binding's GPU-ready data.
+    std::vector<float> staging;
+
+    // Upload positions.
     const auto &pos = mesh_data->position_binding();
     if (pos.is_bound()) {
-        const void *data = pos.raw_data();
-        std::size_t byte_size =
-            pos.size() * pos.component_count() * sizeof(float);
+        const auto data = float_values(pos, staging);
         _buffers.upload_positions(film,
-                                  data,
-                                  byte_size,
+                                  data.data(),
+                                  data.size_bytes(),
                                   static_cast<uint32_t>(pos.size()),
                                   pos.component_count());
     }
@@ -127,18 +156,15 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     // Upload normals.
     const auto &nrm = mesh_data->normal_binding();
     if (nrm.is_bound()) {
-        const void *data = nrm.raw_data();
-        std::size_t byte_size =
-            nrm.size() * nrm.component_count() * sizeof(float);
-        _buffers.upload_normals(film, data, byte_size, nrm.component_count());
+        const auto data = float_values(nrm, staging);
+        _buffers.upload_normals(
+            film, data.data(), data.size_bytes(), nrm.component_count());
     }
 
     // Upload scalar field.
     const auto &scl = mesh_data->scalar_binding();
     if (scl.is_bound()) {
-        const float *fdata = scl.raw_data();
-        _buffers.upload_scalars(film,
-                                std::span<const float>(fdata, scl.size()));
+        _buffers.upload_scalars(film, float_values(scl, staging));
     }
 
     // Upload triangle indices.

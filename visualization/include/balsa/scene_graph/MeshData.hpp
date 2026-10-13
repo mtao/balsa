@@ -1,6 +1,7 @@
 #pragma once
 #include <concepts>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -44,14 +45,26 @@ enum class AttributeDomain : int8_t {
 // Constructed from any rank-1 (scalar per element) or rank-2
 // (components x elements) mdspan of arithmetic values, in any layout or
 // accessor.  Values keep their type, widened to the nearest stored type
-// (e.g. int16 -> int32, uint8 -> uint32).  Rendering converts to float
-// when an attribute is bound (see RoleBinding).
+// (e.g. int16 -> int32, uint8 -> uint32).
 
 enum class AttributeType : uint8_t {
     Float32,
     Float64,
     Int32,
     UInt32,
+};
+
+/// Why a typed view of an attribute or binding could not be made, with
+/// what was actually there.
+struct ViewError {
+    enum class Reason : uint8_t {
+        Unbound,             ///< role binding has no attribute
+        WrongType,           ///< values are stored as actual_type
+        WrongComponentCount, ///< values have actual_components components
+    };
+    Reason reason;
+    AttributeType actual_type = AttributeType::Float32;
+    uint8_t actual_components = 0;
 };
 
 namespace detail {
@@ -148,17 +161,28 @@ class MeshAttribute {
         return visit([](const auto &v) { return v.extent(1); });
     }
 
-    /// Extents (component_count(), count()) if the values are T and, for
-    /// static D, component_count() == D; nullopt otherwise.
+    /// Extents (component_count(), count()).  Fails with WrongType unless
+    /// the values are stored as T, and, for static D, with
+    /// WrongComponentCount unless component_count() == D.
     template <typename T, std::size_t D = std::dynamic_extent>
-    [[nodiscard]] auto view() const -> std::optional<const_view_type<T, D>> {
+    [[nodiscard]] auto view() const
+        -> std::expected<const_view_type<T, D>, ViewError> {
         const auto *m = std::get_if<storage_type<T>>(&m_values);
-        if (m == nullptr) return std::nullopt;
+        if (m == nullptr) {
+            return std::unexpected(ViewError{ ViewError::Reason::WrongType,
+                                              type(),
+                                              component_count() });
+        }
         const auto all = m->expression().as_mdspan();
         if constexpr (D == std::dynamic_extent) {
             return all;
         } else {
-            if (all.extent(0) != D) return std::nullopt;
+            if (all.extent(0) != D) {
+                return std::unexpected(
+                    ViewError{ ViewError::Reason::WrongComponentCount,
+                               type(),
+                               component_count() });
+            }
             return const_view_type<T, D>(all.data_handle(), all.extent(1));
         }
     }
@@ -200,58 +224,62 @@ class MeshAttributeHandle {
 // ── RoleBinding ─────────────────────────────────────────────────────
 //
 // Binds a visualization role (positions, normals, scalar field) to an
-// attribute via a MeshAttributeHandle, so raw_data()/size() are direct
-// reads with no name lookup.  raw_data() is always float, as uploaded to
-// the GPU: it points into a float attribute directly, or into a buffer
-// owned by the binding when the attribute has another type or a scalar
-// component/magnitude is extracted.
+// attribute via a MeshAttributeHandle, so reads need no name lookup.
+// Values keep the attribute's type; converting to what a renderer needs
+// (e.g. float vertex data) is the renderer's job.
+//
+// A binding views the whole attribute, one selected component (a strided
+// view into the attribute, no copy), or the per-element magnitude
+// (computed into a derived attribute: float stays float, other types
+// become double).
 
 struct RoleBinding {
+    /// (components, size) view of the bound values.  Strided: a selected
+    /// component steps over the other components of each element.
+    template <typename T, std::size_t D = std::dynamic_extent>
+    using view_type = ::zipper::mdspan<const T,
+                                       ::zipper::extents<D, std::dynamic_extent>,
+                                       ::zipper::storage::layout_stride>;
+
     [[nodiscard]] auto is_bound() const -> bool { return _attr.valid(); }
     [[nodiscard]] auto attribute() const -> const MeshAttributeHandle & {
         return _attr;
     }
-    // Number of float components per element in raw_data().
+    /// Components per element in the bound values (1 for a selected
+    /// component or the magnitude).
     [[nodiscard]] auto component_count() const -> uint8_t {
-        return _component_count;
+        if (!is_bound()) return 0;
+        return _component ? 1 : source().component_count();
     }
     [[nodiscard]] auto size() const -> std::size_t {
         return !_attr ? 0 : _attr->count();
     }
-    /// Whether raw_data() is a float buffer owned by the binding rather
-    /// than the attribute's own storage.
-    [[nodiscard]] auto is_converted() const -> bool { return _converted; }
-    [[nodiscard]] auto raw_data() const -> const float * {
-        if (!_attr) return nullptr;
-        if (_converted) return _buffer.data();
-        return _attr->view<float>()->data_handle();
+    /// Type of the bound values (meaningless when unbound).
+    [[nodiscard]] auto type() const -> AttributeType {
+        return !_attr ? AttributeType::Float32 : source().type();
     }
     auto clear() -> void;
 
-    /// Plain mdspan views over raw_data() with extents
-    /// (component_count(), size()), column-major:
-    /// (c, i) -> raw_data()[c + component_count() * i].
-    /// Wrap in zipper types if desired.
-    template <std::size_t D = std::dynamic_extent>
-    using view_type = MeshAttribute::const_view_type<float, D>;
+    /// Fails with Unbound, WrongType unless the values are T, or (for
+    /// static D) WrongComponentCount unless component_count() == D.
+    template <typename T, std::size_t D = std::dynamic_extent>
+    [[nodiscard]] auto view() const
+        -> std::expected<view_type<T, D>, ViewError>;
 
-    /// Empty (0 x 0) if unbound.
-    [[nodiscard]] auto view() const -> view_type<> {
-        return view_type<>(raw_data(), std::size_t{component_count()}, size());
-    }
-    /// nullopt if unbound or component_count() != D.
-    template <std::size_t D>
-    [[nodiscard]] auto view() const -> std::optional<view_type<D>> {
-        if (!is_bound() || component_count() != D) return std::nullopt;
-        return view_type<D>(raw_data(), size());
-    }
+    /// Calls f with view<T>() for the bound values' type T.  Precondition:
+    /// is_bound().
+    template <typename F>
+    auto visit(F &&f) const -> decltype(auto);
 
   private:
     friend class MeshData;
+    [[nodiscard]] auto source() const -> const MeshAttribute & {
+        return _magnitude ? *_magnitude : *_attr;
+    }
+
     MeshAttributeHandle _attr;
-    uint8_t _component_count = 0;
-    bool _converted = false; // raw_data() reads _buffer
-    std::vector<float> _buffer;
+    std::optional<uint8_t> _component; ///< selected component of source()
+    std::shared_ptr<const MeshAttribute> _magnitude;
 };
 
 // ── MeshData ────────────────────────────────────────────────────────
