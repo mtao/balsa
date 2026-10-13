@@ -37,7 +37,7 @@ static bool is_ancestor_of(const scene_graph::Object *candidate,
 // ── Deep duplicate ──────────────────────────────────────────────────
 
 static std::unique_ptr<scene_graph::Object>
-    deep_duplicate(const scene_graph::Object &src, MeshScene &scene) {
+    deep_duplicate(const scene_graph::Object &src) {
     auto copy = std::make_unique<scene_graph::Object>(src.name + " Copy");
     copy->visible = src.visible;
     copy->selectable = src.selectable;
@@ -45,22 +45,27 @@ static std::unique_ptr<scene_graph::Object>
     copy->set_rotation(src.rotation());
     copy->set_scale_factors(src.scale_factors());
 
-    // Duplicate mesh features if present.  Geometry contents are not
-    // copied yet; the render state is the most important part.
-    if (src.find_feature<scene_graph::MeshGeometry>()) {
-        copy->emplace_feature<scene_graph::MeshGeometry>();
+    // Duplicate mesh features if present.  Geometry first: the shading's
+    // roles are re-targeted to the copied attributes by name.
+    if (auto *geometry = src.find_feature<scene_graph::MeshGeometry>()) {
+        copy->emplace_feature<scene_graph::MeshGeometry>().copy_from(*geometry);
     }
     if (auto *shading = src.find_feature<scene_graph::BasicShading>()) {
-        auto &new_shading = copy->emplace_feature<scene_graph::BasicShading>();
-        new_shading.render_state() = shading->render_state();
+        copy->emplace_feature<scene_graph::BasicShading>().copy_from(*shading);
     }
 
     // Recursively duplicate children
     for (auto &child : src.children()) {
-        copy->add_child(deep_duplicate(*child, scene));
+        copy->add_child(deep_duplicate(*child));
     }
 
     return copy;
+}
+
+// Give obj and its descendants the drawables their mesh features need.
+static void ensure_drawables(scene_graph::Object &obj, MeshScene &scene) {
+    scene.ensure_drawable(obj);
+    for (auto &child : obj.children()) ensure_drawables(*child, scene);
 }
 
 
@@ -216,7 +221,8 @@ static bool draw_object_node(scene_graph::Object &obj,
         if (!obj.permanent && ImGui::MenuItem("Duplicate")) {
             auto *parent = obj.parent();
             if (parent) {
-                parent->add_child(deep_duplicate(obj, scene));
+                ensure_drawables(parent->add_child(deep_duplicate(obj)),
+                                 scene);
                 changed = true;
             }
         }

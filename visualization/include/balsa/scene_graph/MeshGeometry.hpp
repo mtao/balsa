@@ -113,6 +113,10 @@ class MeshGeometry : public AbstractFeature {
 
     // Remove all attributes and topology.
     auto clear() -> void;
+    // Replace the contents with a deep copy of other's.  The copied
+    // attributes are new instances: handles into other do not refer to
+    // them, and changing one geometry does not affect the other.
+    auto copy_from(const MeshGeometry &other) -> void;
 
     // ── Dirty tracking ──────────────────────────────────────────────
 

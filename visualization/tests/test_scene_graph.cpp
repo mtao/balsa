@@ -61,6 +61,15 @@ static auto fill_single_tri(balsa::scene_graph::MeshGeometry &md) -> void {
     md.set_triangle_indices(TriangleIndices(tris.data(), tris.size() / 3));
 }
 
+// Element-major values of an attribute stored as T (empty if not T).
+template <typename T>
+static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
+    -> std::vector<T> {
+    const auto v = a.view<T>();
+    if (!v) return {};
+    return {v->data_handle(), v->data_handle() + v->size()};
+}
+
 // An Object holding a mesh: geometry plus the built-in shading.
 struct MeshObject {
     balsa::scene_graph::Object object{"mesh"};
@@ -496,6 +505,48 @@ TEST_CASE("MeshGeometry accepts indices in any orientation and layout",
                 e.data(), 2)));
         CHECK(std::ranges::equal(md.edge_indices(), e));
     }
+}
+
+TEST_CASE("MeshGeometry and BasicShading copy_from", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+    using balsa::visualization::vulkan::NormalSource;
+
+    MeshObject src;
+    fill_quad(src.geometry, /*with_normals=*/true);
+    const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
+    src.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
+    REQUIRE(src.shading.assign_scalar("uv", 1));
+    src.shading.clear_normal();
+    src.shading.render_state().normal_source = NormalSource::None;
+
+    MeshObject dst;
+    dst.geometry.copy_from(src.geometry);
+    dst.shading.copy_from(src.shading);
+
+    // Geometry: same contents, independent attribute instances.
+    CHECK(dst.geometry.triangle_count() == 2);
+    CHECK(dst.geometry.edge_count() == 5);
+    const auto src_uv = src.geometry.find_attribute("uv");
+    const auto dst_uv = dst.geometry.find_attribute("uv");
+    REQUIRE(dst_uv);
+    CHECK_FALSE(dst_uv == src_uv);
+    CHECK_FALSE(dst.geometry.owns(src_uv));
+    CHECK(flat_values<float>(*dst_uv) == flat_values<float>(*src_uv));
+
+    // Shading: roles re-targeted by name; cleared roles stay cleared.
+    CHECK(dst.shading.position_binding().attribute()
+          == dst.geometry.find_attribute("vertex_positions"));
+    CHECK(dst.shading.scalar_binding().attribute() == dst_uv);
+    CHECK(dst.shading.scalar_component() == 1);
+    CHECK((*dst.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+    CHECK_FALSE(dst.shading.has_normals());
+    CHECK(dst.shading.render_state().normal_source == NormalSource::None);
+
+    // Changing the copy leaves the source alone.
+    const std::array<float, 8> uv2 = {0, 9, 0, 9, 0, 9, 0, 9};
+    dst.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv2);
+    CHECK((*dst.shading.scalar_binding().view<float, 1>())[0, 0] == 9.0f);
+    CHECK((*src.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
 }
 
 TEST_CASE("MeshGeometry and BasicShading as Object features", "[scene_graph]") {
@@ -1398,15 +1449,6 @@ TEST_CASE("role_binding_view", "[scene_graph][mesh]") {
     REQUIRE(d);
     CHECK(d->extent(0) == 3);
     CHECK((*d)[2, 1] == 5.0f);
-}
-
-// Element-major values of an attribute stored as T (empty if not T).
-template <typename T>
-static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
-    -> std::vector<T> {
-    const auto v = a.view<T>();
-    if (!v) return {};
-    return {v->data_handle(), v->data_handle() + v->size()};
 }
 
 TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh]") {

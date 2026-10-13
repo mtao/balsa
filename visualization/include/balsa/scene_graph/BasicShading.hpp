@@ -83,6 +83,13 @@ class BasicShading : public AbstractFeature {
         return position_binding().size();
     }
 
+    // ── Copying ─────────────────────────────────────────────────────
+
+    // Copy other's render state and role assignments.  Assigned roles are
+    // re-targeted to the same-named attribute of this shading's geometry
+    // (unbound if there is none); explicitly cleared roles stay cleared.
+    auto copy_from(const BasicShading &other) -> void;
+
     // ── Dirty tracking ──────────────────────────────────────────────
 
     [[nodiscard]] auto version() const -> uint64_t { return _version; }

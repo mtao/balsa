@@ -89,4 +89,17 @@ auto MeshGeometry::clear() -> void {
     ++_version;
 }
 
+auto MeshGeometry::copy_from(const MeshGeometry &other) -> void {
+    if (&other == this) return;
+    _attributes.clear();
+    _attributes.reserve(other._attributes.size());
+    for (const auto &a : other._attributes) {
+        _attributes.push_back(std::make_shared<MeshAttribute>(*a));
+    }
+    _tri_indices = other._tri_indices;
+    _edge_indices = other._edge_indices;
+    _explicit_edges = other._explicit_edges;
+    ++_version;
+}
+
 } // namespace balsa::scene_graph

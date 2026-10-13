@@ -177,6 +177,25 @@ auto BasicShading::clear_position() -> void { clear(_position); }
 auto BasicShading::clear_normal() -> void { clear(_normal); }
 auto BasicShading::clear_scalar() -> void { clear(_scalar); }
 
+auto BasicShading::copy_from(const BasicShading &other) -> void {
+    if (&other == this) return;
+    other.sync();
+    sync();
+    auto copy_role = [this](Role &dst, const Role &src, Kind kind) {
+        dst.user_set = src.user_set;
+        dst.component = src.component;
+        dst.attribute =
+            src.user_set && src.attribute ? find(src.attribute->name)
+                                          : MeshAttributeHandle{};
+        resolve(dst, kind);
+    };
+    copy_role(_position, other._position, Kind::Position);
+    copy_role(_normal, other._normal, Kind::Normal);
+    copy_role(_scalar, other._scalar, Kind::Scalar);
+    _render_state = other._render_state;
+    ++_version;
+}
+
 auto BasicShading::position_binding() const -> const RoleBinding & {
     sync();
     return _position.binding;
