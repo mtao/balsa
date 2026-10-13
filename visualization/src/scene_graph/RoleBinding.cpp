@@ -3,9 +3,7 @@
 #include <zipper/MatrixBase.hxx>
 #include <zipper/VectorBase.hxx>
 
-#include <span>
 #include <type_traits>
-#include <vector>
 
 namespace balsa::scene_graph {
 
@@ -17,18 +15,14 @@ namespace {
             using V = std::remove_const_t<
                 typename std::decay_t<decltype(values)>::element_type>;
             using R = std::conditional_t<std::is_same_v<V, float>, float, double>;
-            std::vector<R> norms(values.extent(1));
-            typename balsa::zipper::VectorX<R>::span_type out{
-                std::span<R>(norms)};
-            out = ::zipper::MatrixBase(values)
-                      .template cast<R>()
-                      .colwise()
-                      .norm();
-            return MeshAttribute(
-                attr.name + " (magnitude)",
-                attr.domain,
-                ::zipper::mdspan<const R, ::zipper::dextents<1>>(norms.data(),
-                                                                norms.size()));
+            const auto norms = ::zipper::MatrixBase(values)
+                                   .template cast<R>()
+                                   .colwise()
+                                   .norm()
+                                   .eval();
+            return MeshAttribute(attr.name + " (magnitude)",
+                                 attr.domain,
+                                 norms.expression().as_mdspan());
         });
     }
 } // namespace
