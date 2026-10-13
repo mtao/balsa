@@ -3,68 +3,66 @@
 
 #include <spdlog/spdlog.h>
 
+#include <zipper/MatrixBase.hxx>
+
 #include <concepts>
-#include <cstring>
 #include <type_traits>
 
 namespace balsa::scene_graph {
 
-namespace detail {
+template <std::size_t K, typename MDS>
+auto MeshGeometry::to_element_indices(const MDS &indices)
+    -> std::optional<element_indices<K>> {
+    using E = typename MDS::extents_type;
+    static_assert(std::integral<std::remove_cv_t<typename MDS::element_type>>,
+                  "indices must be integral");
 
-    // Flatten a rank-2 mdspan of element indices (N x K or K x N, any
-    // layout) into element-major order: K indices per element.
-    // Returns false if neither extent equals K.
-    template <std::size_t K, typename MDS>
-    auto flatten_element_indices(const MDS &m, std::vector<uint32_t> &out)
-        -> bool {
-        using E = typename MDS::extents_type;
-        using L = typename MDS::layout_type;
-        using V = std::remove_cv_t<typename MDS::element_type>;
-        static_assert(std::integral<V>, "indices must be integral");
+    // An element per row (N x K) or per column (K x N).  A static extent
+    // of K decides (the row extent first); otherwise rows win if both
+    // runtime extents are K.
+    constexpr auto dyn = std::dynamic_extent;
+    constexpr bool static_rows = E::static_extent(1) == K;
+    constexpr bool static_columns = !static_rows && E::static_extent(0) == K;
+    constexpr bool can_be_rows =
+        static_rows || (!static_columns && E::static_extent(1) == dyn);
+    constexpr bool can_be_columns =
+        static_columns || (!static_rows && E::static_extent(0) == dyn);
 
-        bool rows = false;
-        if constexpr (E::static_extent(1) == K) {
-            rows = true;
-        } else if constexpr (E::static_extent(0) == K) {
-            rows = false;
-        } else {
-            if (m.extent(1) == K) {
-                rows = true;
-            } else if (m.extent(0) == K) {
-                rows = false;
-            } else {
-                return false;
-            }
-        }
-
-        const std::size_t n = rows ? m.extent(0) : m.extent(1);
-        out.resize(n * K);
-
-        // Fast path: memory is already element-major uint32.
-        constexpr bool u32 = std::is_same_v<V, uint32_t>;
-        constexpr bool right =
-            std::is_same_v<L, ::zipper::storage::layout_right>;
-        constexpr bool left = std::is_same_v<L, ::zipper::storage::layout_left>;
-        if constexpr (u32 && (right || left)) {
-            if (rows == right) {
-                if (n > 0) {
-                    std::memcpy(
-                        out.data(), m.data_handle(), n * K * sizeof(uint32_t));
-                }
-                return true;
-            }
-        }
-
-        for (std::size_t i = 0; i < n; ++i) {
-            for (std::size_t k = 0; k < K; ++k) {
-                out[i * K + k] =
-                    static_cast<uint32_t>(rows ? m[i, k] : m[k, i]);
-            }
-        }
-        return true;
+    const bool rows = can_be_rows && indices.extent(1) == K;
+    if (!rows && !(can_be_columns && indices.extent(0) == K)) {
+        return std::nullopt;
     }
 
-} // namespace detail
+    const ::zipper::MatrixBase source(indices);
+    element_indices<K> out(rows ? indices.extent(0) : indices.extent(1));
+    ::zipper::MatrixBase dest(out.expression().as_mdspan());
+    if constexpr (can_be_rows) {
+        if (rows) {
+            dest = source.transpose().template cast<uint32_t>();
+            return out;
+        }
+    }
+    if constexpr (can_be_columns) {
+        dest = source.template cast<uint32_t>();
+    }
+    return out;
+}
+
+template <std::size_t K>
+auto MeshGeometry::topology_view(std::string_view name) const
+    -> element_indices_view<K> {
+    if (const auto attr = find_attribute(name)) {
+        if (auto view = attr->view<uint32_t, K>()) return *view;
+    }
+    return element_indices_view<K>(nullptr, 0);
+}
+
+template <std::size_t K>
+auto MeshGeometry::set_topology(std::string_view name,
+                                AttributeDomain domain,
+                                element_indices_view<K> indices) -> void {
+    insert_attribute(MeshAttribute(std::string(name), domain, indices));
+}
 
 template <AttributeValue T,
           typename Extents,
@@ -86,7 +84,11 @@ auto MeshGeometry::add_attribute(std::string name,
             return {};
         }
     }
-    return insert_attribute(
+    if (is_reserved_name(name)) {
+        spdlog::warn("MeshGeometry: attribute name '{}' is reserved", name);
+        return {};
+    }
+    return add_user_attribute(
         MeshAttribute(std::move(name), domain, std::move(data)));
 }
 
@@ -118,9 +120,12 @@ template <typename T, typename Extents, typename Layout, typename Accessor>
     requires(Extents::rank() == 2)
 auto MeshGeometry::set_triangle_indices(
     ::zipper::mdspan<T, Extents, Layout, Accessor> indices) -> bool {
-    std::vector<uint32_t> flat;
-    if (!detail::flatten_element_indices<3>(indices, flat)) return false;
-    assign_triangles(std::move(flat));
+    const auto converted = to_element_indices<3>(indices);
+    if (!converted) return false;
+    set_topology<3>(face_vertices_name,
+                    AttributeDomain::Face,
+                    converted->expression().as_mdspan());
+    if (!_explicit_edges) derive_edges();
     return true;
 }
 
@@ -128,9 +133,12 @@ template <typename T, typename Extents, typename Layout, typename Accessor>
     requires(Extents::rank() == 2)
 auto MeshGeometry::set_edge_indices(
     ::zipper::mdspan<T, Extents, Layout, Accessor> indices) -> bool {
-    std::vector<uint32_t> flat;
-    if (!detail::flatten_element_indices<2>(indices, flat)) return false;
-    assign_edges(std::move(flat));
+    const auto converted = to_element_indices<2>(indices);
+    if (!converted) return false;
+    set_topology<2>(edge_vertices_name,
+                    AttributeDomain::Edge,
+                    converted->expression().as_mdspan());
+    _explicit_edges = true;
     return true;
 }
 

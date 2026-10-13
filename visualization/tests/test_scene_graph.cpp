@@ -70,6 +70,12 @@ static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
     return {v->data_handle(), v->data_handle() + v->size()};
 }
 
+// Element-major contents of a K x count index view.
+template <typename View>
+static auto flat_indices(const View &v) -> std::vector<uint32_t> {
+    return {v.data_handle(), v.data_handle() + v.size()};
+}
+
 // An Object holding a mesh: geometry plus the built-in shading.
 struct MeshObject {
     balsa::scene_graph::Object object{"mesh"};
@@ -194,7 +200,11 @@ TEST_CASE("MeshGeometry auto-derives edges from triangles", "[scene_graph]") {
 
     // Verify edge indices are valid vertex references.
     auto edges = geo.edge_indices();
-    for (std::size_t i = 0; i < edges.size(); ++i) { CHECK(edges[i] < 4); }
+    REQUIRE(edges.extent(1) == 5);
+    for (std::size_t e = 0; e < edges.extent(1); ++e) {
+        CHECK(edges[0, e] < edges[1, e]); // stored low, high
+        CHECK(edges[1, e] < 4);
+    }
 }
 
 TEST_CASE("MeshGeometry topology from single triangle", "[scene_graph]") {
@@ -310,6 +320,53 @@ TEST_CASE("MeshGeometry attributes", "[scene_graph]") {
     }
     CHECK(found_pos);
     CHECK(found_nrm);
+}
+
+TEST_CASE("MeshGeometry stores topology as attributes", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshGeometry geo;
+    CHECK(geo.triangle_indices().extent(1) == 0);
+    CHECK(geo.edge_indices().extent(1) == 0);
+    fill_quad(geo);
+
+    // Triangles: Face-domain uint32 attribute, 3 x F; edges: Edge-domain
+    // 2 x E, derived from the triangles.
+    const auto faces = geo.find_attribute(MeshGeometry::face_vertices_name);
+    REQUIRE(faces);
+    CHECK(faces->domain == AttributeDomain::Face);
+    CHECK(faces->type() == AttributeType::UInt32);
+    CHECK(faces->component_count() == 3);
+    CHECK(faces->count() == 2);
+    const auto edges = geo.find_attribute(MeshGeometry::edge_vertices_name);
+    REQUIRE(edges);
+    CHECK(edges->domain == AttributeDomain::Edge);
+    CHECK(edges->component_count() == 2);
+    CHECK(edges->count() == geo.edge_count());
+
+    const auto tris = geo.triangle_indices();
+    CHECK(tris.static_extent(0) == 3);
+    CHECK(tris[2, 1] == 3u); // third corner of the second triangle
+    CHECK(tris.data_handle() == faces->view<uint32_t>()->data_handle());
+
+    // Reserved names can't be added or removed directly.
+    const std::array<float, 2> junk = {0, 0};
+    CHECK_FALSE(geo.add_attribute(".face_vertices", AttributeDomain::Face, 1, junk));
+    CHECK_FALSE(geo.add_attribute(".anything", AttributeDomain::Vertex, 1, junk));
+    CHECK_FALSE(geo.remove_attribute(MeshGeometry::face_vertices_name));
+    CHECK(geo.triangle_count() == 2);
+
+    // Face attributes line up with the face attribute's count.
+    const std::array<float, 2> area = {0.5f, 0.5f};
+    REQUIRE(geo.add_attribute("face_area", AttributeDomain::Face, 1, area));
+    CHECK(geo.find_attribute("face_area")->count() == geo.triangle_count());
+
+    // Topology is copied with the other attributes.
+    MeshGeometry copy;
+    copy.copy_from(geo);
+    CHECK(flat_indices(copy.triangle_indices())
+          == flat_indices(geo.triangle_indices()));
+    CHECK(copy.edge_count() == geo.edge_count());
 }
 
 TEST_CASE("MeshGeometry explicit edges override derived", "[scene_graph]") {
@@ -448,7 +505,7 @@ TEST_CASE("MeshGeometry accepts indices in any orientation and layout",
     const std::array<uint32_t, 6> expected = {0, 1, 2, 0, 2, 3};
 
     auto check = [&](MeshGeometry &md) {
-        CHECK(std::ranges::equal(md.triangle_indices(), expected));
+        CHECK(std::ranges::equal(flat_indices(md.triangle_indices()), expected));
         CHECK(md.edge_count() == 5);
     };
 
@@ -491,6 +548,13 @@ TEST_CASE("MeshGeometry accepts indices in any orientation and layout",
             mdspan<const uint32_t, E, zs::layout_stride>(table.data() + 1, map)));
         check(md);
     }
+    SECTION("square 3 x 3: rows are triangles") {
+        const std::array<uint32_t, 9> buf = {0, 1, 2, 0, 2, 3, 1, 2, 3};
+        MeshGeometry md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const uint32_t, extents<3, 3>, zs::layout_right>(buf.data())));
+        CHECK(std::ranges::equal(flat_indices(md.triangle_indices()), buf));
+    }
     SECTION("wrong shape is rejected") {
         MeshGeometry md;
         CHECK_FALSE(md.set_triangle_indices(
@@ -503,7 +567,7 @@ TEST_CASE("MeshGeometry accepts indices in any orientation and layout",
         REQUIRE(md.set_edge_indices(
             mdspan<const uint32_t, extents<2, dynamic_extent>, zs::layout_left>(
                 e.data(), 2)));
-        CHECK(std::ranges::equal(md.edge_indices(), e));
+        CHECK(std::ranges::equal(flat_indices(md.edge_indices()), e));
     }
 }
 

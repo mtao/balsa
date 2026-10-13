@@ -175,16 +175,21 @@ void VulkanMeshDrawable::sync_buffers(Film &film) {
 
     // Upload triangle indices.
     if (geometry->has_triangle_indices()) {
-        auto tri_idx = geometry->triangle_indices();
+        // Column per triangle, so the buffer is element-major.
+        const auto triangles = geometry->triangle_indices();
         _buffers.upload_triangle_indices(
-            film, tri_idx, static_cast<uint32_t>(tri_idx.size() / 3));
+            film,
+            std::span(triangles.data_handle(), triangles.size()),
+            static_cast<uint32_t>(triangles.extent(1)));
     }
 
     // Upload edge indices.
     if (geometry->has_edge_indices()) {
-        auto edge_idx = geometry->edge_indices();
+        const auto edges = geometry->edge_indices();
         _buffers.upload_edge_indices(
-            film, edge_idx, static_cast<uint32_t>(edge_idx.size() / 2));
+            film,
+            std::span(edges.data_handle(), edges.size()),
+            static_cast<uint32_t>(edges.extent(1)));
     }
 
     _synced_geometry_version = geometry->version();

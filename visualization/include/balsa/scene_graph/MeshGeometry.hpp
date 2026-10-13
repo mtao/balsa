@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -10,6 +11,7 @@
 #include "AbstractFeature.hpp"
 #include "MeshAttribute.hpp"
 
+#include <zipper/DataArray.hpp>
 #include <zipper/storage/layout_types.hpp>
 #include <zipper/types.hpp>
 
@@ -17,16 +19,37 @@ namespace balsa::scene_graph {
 
 // ── MeshGeometry ────────────────────────────────────────────────────
 //
-// Feature holding a mesh's data as plain buffers: named, typed attributes
-// on vertices/edges/faces, and triangle/edge index buffers.  It knows
-// nothing about rendering; shading features on the same Object (e.g.
-// BasicShading) choose which attributes they use.
+// Feature holding a mesh's data as named, typed attributes on vertices,
+// edges and faces.  It knows nothing about rendering; shading features on
+// the same Object (e.g. BasicShading) choose which attributes they use.
 //
-// Edges are derived from triangles unless set explicitly.  version() is
-// bumped on every change, so consumers know when to re-read.
+// Topology is stored as attributes too: ".face_vertices" (Face domain,
+// 3 x uint32 per triangle) and ".edge_vertices" (Edge domain, 2 x uint32
+// per edge), so the number of faces/edges is the count of those
+// attributes.  Names starting with '.' are reserved for MeshGeometry:
+// topology changes only through set_triangle_indices/set_edge_indices.
+// Edges are derived from triangles unless set explicitly.
+//
+// version() is bumped on every change, so consumers know when to re-read.
 
 class MeshGeometry : public AbstractFeature {
   public:
+    /// Vertex indices of K-vertex elements (K = 3 triangles, 2 edges):
+    /// extents (K, count), one column per element, so memory is
+    /// element-major (a0 b0 c0 a1 b1 c1 ...).
+    template <std::size_t K>
+    using element_indices_view = MeshAttribute::const_view_type<uint32_t, K>;
+
+    /// Attributes holding the topology.
+    static constexpr std::string_view face_vertices_name = ".face_vertices";
+    static constexpr std::string_view edge_vertices_name = ".edge_vertices";
+    /// Names starting with '.' are reserved for MeshGeometry's own
+    /// attributes (the topology).
+    [[nodiscard]] static constexpr auto is_reserved_name(std::string_view name)
+        -> bool {
+        return name.starts_with('.');
+    }
+
     MeshGeometry();
 
     // ── Attributes ──────────────────────────────────────────────────
@@ -37,7 +60,9 @@ class MeshGeometry : public AbstractFeature {
     // row-major positions are a 3 x N layout_left mdspan over the same
     // memory.  Replacing keeps the attribute's identity, so existing
     // handles see the new values.  Returns an invalid handle if the
-    // shape is unusable.
+    // shape is unusable or the name is reserved.  Edge/face attributes
+    // whose count differs from the edge/face count are kept with a
+    // warning.
     template <AttributeValue T,
               typename Extents,
               typename Layout,
@@ -56,6 +81,7 @@ class MeshGeometry : public AbstractFeature {
                        uint8_t component_count,
                        const R &data) -> MeshAttributeHandle;
 
+    // Fails for missing and reserved names.
     auto remove_attribute(std::string_view name) -> bool;
 
     // Random-access view of MeshAttributeHandle.
@@ -92,23 +118,25 @@ class MeshGeometry : public AbstractFeature {
         set_edge_indices(::zipper::mdspan<T, Extents, Layout, Accessor> indices)
             -> bool;
 
-    [[nodiscard]] auto triangle_indices() const -> std::span<const uint32_t> {
-        return _tri_indices;
+    /// Empty (3 x 0) if there are no triangles.
+    [[nodiscard]] auto triangle_indices() const -> element_indices_view<3> {
+        return topology_view<3>(face_vertices_name);
     }
-    [[nodiscard]] auto edge_indices() const -> std::span<const uint32_t> {
-        return _edge_indices;
-    }
-    [[nodiscard]] auto has_triangle_indices() const -> bool {
-        return !_tri_indices.empty();
-    }
-    [[nodiscard]] auto has_edge_indices() const -> bool {
-        return !_edge_indices.empty();
+    /// Empty (2 x 0) if there are no edges.
+    [[nodiscard]] auto edge_indices() const -> element_indices_view<2> {
+        return topology_view<2>(edge_vertices_name);
     }
     [[nodiscard]] auto triangle_count() const -> std::size_t {
-        return _tri_indices.size() / 3;
+        return triangle_indices().extent(1);
     }
     [[nodiscard]] auto edge_count() const -> std::size_t {
-        return _edge_indices.size() / 2;
+        return edge_indices().extent(1);
+    }
+    [[nodiscard]] auto has_triangle_indices() const -> bool {
+        return triangle_count() > 0;
+    }
+    [[nodiscard]] auto has_edge_indices() const -> bool {
+        return edge_count() > 0;
     }
 
     // Remove all attributes and topology.
@@ -123,14 +151,33 @@ class MeshGeometry : public AbstractFeature {
     [[nodiscard]] auto version() const -> uint64_t { return _version; }
 
   private:
+    /// Owning storage behind element_indices_view<K> (column-major).
+    template <std::size_t K>
+    using element_indices = ::zipper::detail::DataArray_<
+        uint32_t,
+        ::zipper::extents<K, std::dynamic_extent>,
+        /*LeftMajor=*/false>;
+
+    /// indices as K x count element indices, from either orientation;
+    /// nullopt if neither extent is K.
+    template <std::size_t K, typename MDS>
+    static auto to_element_indices(const MDS &indices)
+        -> std::optional<element_indices<K>>;
+
+    template <std::size_t K>
+    [[nodiscard]] auto topology_view(std::string_view name) const
+        -> element_indices_view<K>;
+
+    // Checks the name and element count of a user attribute, then inserts.
+    auto add_user_attribute(MeshAttribute attr) -> MeshAttributeHandle;
     auto insert_attribute(MeshAttribute attr) -> MeshAttributeHandle;
     auto derive_edges() -> void;
-    auto assign_triangles(std::vector<uint32_t> flat) -> void;
-    auto assign_edges(std::vector<uint32_t> flat) -> void;
+    template <std::size_t K>
+    auto set_topology(std::string_view name,
+                      AttributeDomain domain,
+                      element_indices_view<K> indices) -> void;
 
     std::vector<std::shared_ptr<MeshAttribute>> _attributes;
-    std::vector<uint32_t> _tri_indices;
-    std::vector<uint32_t> _edge_indices;
     bool _explicit_edges = false;
     uint64_t _version = 0;
 };

@@ -85,14 +85,19 @@ auto button_property(std::string label, std::function<void()> run) -> Property {
     return make_property(std::move(label), Button{ .on_click = std::move(run) });
 }
 
-// Role choices: option 0 is "(none)", option k is the k-th attribute of
-// the shading's geometry.
+// Role choices: option 0 is "(none)", option k is the k-th user
+// attribute of the shading's geometry (reserved topology attributes are
+// not offered).
 
 auto attribute_handles(const sg::BasicShading &shading)
     -> std::vector<sg::MeshAttributeHandle> {
     const auto *geometry = shading.geometry();
     if (geometry == nullptr) return {};
-    return std::ranges::to<std::vector>(geometry->attributes());
+    return std::ranges::to<std::vector>(
+        geometry->attributes()
+        | std::views::filter([](const sg::MeshAttributeHandle &a) {
+              return !sg::MeshGeometry::is_reserved_name(a->name);
+          }));
 }
 
 auto attribute_names(const sg::BasicShading &shading)
