@@ -15,7 +15,7 @@ namespace balsa::scene_graph {
 // ── ImageData ───────────────────────────────────────────────────────
 //
 // Scene graph feature that holds CPU-side image pixel data.  Analogous
-// to MeshData but for 2D images.  Owns the pixel buffer and tracks
+// to MeshGeometry but for 2D images.  Owns the pixel buffer and tracks
 // modifications via a version counter + dirty region so that the
 // corresponding VulkanImageDrawable can sync only what changed.
 //

@@ -2,7 +2,8 @@
 #include "balsa/visualization/vulkan/imgui/controls.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/Light.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
@@ -19,7 +20,7 @@ namespace balsa::visualization::vulkan::imgui {
 
 static const char *icon_for_object(const scene_graph::Object &obj) {
     if (obj.find_feature<scene_graph::Camera>()) return "[C]";
-    if (obj.find_feature<scene_graph::MeshData>()) return "[M]";
+    if (obj.find_feature<scene_graph::MeshGeometry>()) return "[M]";
     return "[O]"; // Empty / generic object
 }
 
@@ -44,13 +45,14 @@ static std::unique_ptr<scene_graph::Object>
     copy->set_rotation(src.rotation());
     copy->set_scale_factors(src.scale_factors());
 
-    // Duplicate MeshData feature if present
-    if (auto *md = src.find_feature<scene_graph::MeshData>()) {
-        auto &new_md = copy->emplace_feature<scene_graph::MeshData>();
-        new_md.render_state() = md->render_state();
-        // Copy geometry data via the public setters
-        // (positions, normals, etc. would need accessor APIs to fully
-        //  copy; for now the render state is the most important part)
+    // Duplicate mesh features if present.  Geometry contents are not
+    // copied yet; the render state is the most important part.
+    if (src.find_feature<scene_graph::MeshGeometry>()) {
+        copy->emplace_feature<scene_graph::MeshGeometry>();
+    }
+    if (auto *shading = src.find_feature<scene_graph::BasicShading>()) {
+        auto &new_shading = copy->emplace_feature<scene_graph::BasicShading>();
+        new_shading.render_state() = shading->render_state();
     }
 
     // Recursively duplicate children
@@ -228,7 +230,7 @@ static bool draw_object_node(scene_graph::Object &obj,
                 state.renaming_object = nullptr;
             }
             // Use remove_mesh for mesh objects so GPU resources are freed
-            auto *mesh = obj.find_feature<scene_graph::MeshData>();
+            auto *mesh = obj.find_feature<scene_graph::MeshGeometry>();
             if (mesh) {
                 scene.remove_mesh(&obj);
             } else {
@@ -285,7 +287,7 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
                 if (state.renaming_object == obj) {
                     state.renaming_object = nullptr;
                 }
-                auto *mesh = obj->find_feature<scene_graph::MeshData>();
+                auto *mesh = obj->find_feature<scene_graph::MeshGeometry>();
                 if (mesh) {
                     scene.remove_mesh(obj);
                 } else {

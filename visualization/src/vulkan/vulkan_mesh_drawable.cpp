@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
@@ -111,7 +112,8 @@ void VulkanMeshDrawable::release() {
     }
     _descriptor_sets.clear();
 
-    _synced_version = 0;
+    _synced_geometry_version = 0;
+    _synced_shading_version = 0;
     _initialized = false;
 }
 
@@ -121,8 +123,8 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
     if (!_initialized) return;
     if (!object().visible) return;
 
-    // Sync GPU buffers from MeshData if dirty.
-    sync_from_mesh_data(film);
+    // Re-upload GPU buffers if the geometry or its shading changed.
+    sync_buffers(film);
 
     if (!_buffers.has_positions()) return;
 
@@ -135,15 +137,19 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 
 // ── Private: sync ───────────────────────────────────────────────────
 
-void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
-    auto *mesh_data = object().find_feature<scene_graph::MeshData>();
-    if (!mesh_data) return;
-    if (mesh_data->version() == _synced_version) return;
+void VulkanMeshDrawable::sync_buffers(Film &film) {
+    const auto *geometry = object().find_feature<scene_graph::MeshGeometry>();
+    const auto *shading = object().find_feature<scene_graph::BasicShading>();
+    if (!geometry || !shading) return;
+    if (geometry->version() == _synced_geometry_version
+        && shading->version() == _synced_shading_version) {
+        return;
+    }
 
     std::vector<float> staging;
 
     // Upload positions.
-    const auto &pos = mesh_data->position_binding();
+    const auto &pos = shading->position_binding();
     if (pos.is_bound()) {
         const auto data = float_values(pos, staging);
         _buffers.upload_positions(film,
@@ -154,7 +160,7 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     }
 
     // Upload normals.
-    const auto &nrm = mesh_data->normal_binding();
+    const auto &nrm = shading->normal_binding();
     if (nrm.is_bound()) {
         const auto data = float_values(nrm, staging);
         _buffers.upload_normals(
@@ -162,26 +168,27 @@ void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
     }
 
     // Upload scalar field.
-    const auto &scl = mesh_data->scalar_binding();
+    const auto &scl = shading->scalar_binding();
     if (scl.is_bound()) {
         _buffers.upload_scalars(film, float_values(scl, staging));
     }
 
     // Upload triangle indices.
-    if (mesh_data->has_triangle_indices()) {
-        auto tri_idx = mesh_data->triangle_indices();
+    if (geometry->has_triangle_indices()) {
+        auto tri_idx = geometry->triangle_indices();
         _buffers.upload_triangle_indices(
             film, tri_idx, static_cast<uint32_t>(tri_idx.size() / 3));
     }
 
     // Upload edge indices.
-    if (mesh_data->has_edge_indices()) {
-        auto edge_idx = mesh_data->edge_indices();
+    if (geometry->has_edge_indices()) {
+        auto edge_idx = geometry->edge_indices();
         _buffers.upload_edge_indices(
             film, edge_idx, static_cast<uint32_t>(edge_idx.size() / 2));
     }
 
-    _synced_version = mesh_data->version();
+    _synced_geometry_version = geometry->version();
+    _synced_shading_version = shading->version();
 }
 
 // ── Private: transform UBO ──────────────────────────────────────────
@@ -294,8 +301,9 @@ void VulkanMeshDrawable::bind_descriptor_set_for_layer(Film &film,
 // ── Private: multi-layer draw commands ──────────────────────────────
 
 void VulkanMeshDrawable::record_draw_commands(Film &film) {
-    auto *mesh_data = object().find_feature<scene_graph::MeshData>();
-    const auto &rs = mesh_data ? mesh_data->render_state() : MeshRenderState{};
+    const auto *shading = object().find_feature<scene_graph::BasicShading>();
+    const MeshRenderState rs =
+        shading ? shading->render_state() : MeshRenderState{};
     const auto &layers = rs.layers;
 
     auto cb = film.current_command_buffer();

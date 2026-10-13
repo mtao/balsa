@@ -25,9 +25,9 @@ namespace balsa::scene_graph {
 // returns the composed AffineTransformf by value; there is no stored
 // 4×4 matrix.
 //
-// Features are the extensibility mechanism: Camera, MeshData, Drawable
-// etc. are all features that can be attached to any Object via
-// emplace_feature<F>().
+// Features are the extensibility mechanism: Camera, MeshGeometry,
+// BasicShading, Drawable etc. are all features that can be attached to
+// any Object via emplace_feature<F>().
 //
 // Non-copyable.  Children are owned via unique_ptr; the parent pointer
 // is non-owning.  Objects can be moved.

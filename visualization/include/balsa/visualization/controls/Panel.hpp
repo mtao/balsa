@@ -11,7 +11,8 @@
 
 namespace balsa::scene_graph {
 class Object;
-class MeshData;
+class MeshGeometry;
+class BasicShading;
 class Light;
 } // namespace balsa::scene_graph
 
@@ -26,7 +27,9 @@ struct PanelContext {
     vulkan::MeshScene *scene = nullptr;
     scene_graph::Object *active_object = nullptr; ///< selected object, if any
 
-    [[nodiscard]] auto active_mesh_data() const -> scene_graph::MeshData *;
+    /// Features of the selected object, or nullptr.
+    [[nodiscard]] auto active_geometry() const -> scene_graph::MeshGeometry *;
+    [[nodiscard]] auto active_shading() const -> scene_graph::BasicShading *;
     [[nodiscard]] auto headlight() const -> scene_graph::Light *;
 };
 
