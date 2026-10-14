@@ -27,7 +27,7 @@
 #include <spdlog/spdlog.h>
 
 #include <balsa/scene_graph/BasicShading.hpp>
-#include <balsa/scene_graph/MeshGeometry.hpp>
+#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/visualization/glfw/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
@@ -213,7 +213,8 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
         // Add a mesh Object to the scene graph and fill its MeshGeometry.
         auto &mesh_obj = _scene->add_mesh(path.filename().string());
-        auto *geometry = mesh_obj.find_feature<sg::MeshGeometry>();
+        auto *geometry =
+            mesh_obj.find_feature<sg::MeshInstance>()->geometry();
         auto *shading = mesh_obj.find_feature<sg::BasicShading>();
         viz::to_mesh_geometry(obj, *geometry);
 

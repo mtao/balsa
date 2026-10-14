@@ -8,7 +8,6 @@
 #include <string_view>
 #include <vector>
 
-#include "AbstractFeature.hpp"
 #include "MeshAttribute.hpp"
 
 #include <zipper/DataArray.hpp>
@@ -19,9 +18,11 @@ namespace balsa::scene_graph {
 
 // ── MeshGeometry ────────────────────────────────────────────────────
 //
-// Feature holding a mesh's data as named, typed attributes on vertices,
-// edges and faces.  It knows nothing about rendering; shading features on
-// the same Object (e.g. BasicShading) choose which attributes they use.
+// A mesh's data as named, typed attributes on vertices, edges and faces.
+// It is a resource, not part of any one Object: Objects show it through a
+// MeshInstance feature (usually via std::shared_ptr, so several Objects
+// can share one geometry), and shading features (e.g. BasicShading)
+// choose which attributes they use.  It knows nothing about rendering.
 //
 // Topology is stored as attributes too: ".face_vertices" (Face domain,
 // 3 x uint32 per triangle) and ".edge_vertices" (Edge domain, 2 x uint32
@@ -32,7 +33,7 @@ namespace balsa::scene_graph {
 //
 // version() is bumped on every change, so consumers know when to re-read.
 
-class MeshGeometry : public AbstractFeature {
+class MeshGeometry {
   public:
     /// Vertex indices of K-vertex elements (K = 3 triangles, 2 edges):
     /// extents (K, count), one column per element, so memory is
@@ -51,6 +52,12 @@ class MeshGeometry : public AbstractFeature {
     }
 
     MeshGeometry();
+    // Copying would share attribute instances; use copy_from for a deep
+    // copy.
+    MeshGeometry(const MeshGeometry &) = delete;
+    auto operator=(const MeshGeometry &) -> MeshGeometry & = delete;
+    MeshGeometry(MeshGeometry &&) = default;
+    auto operator=(MeshGeometry &&) -> MeshGeometry & = default;
 
     // ── Attributes ──────────────────────────────────────────────────
     //

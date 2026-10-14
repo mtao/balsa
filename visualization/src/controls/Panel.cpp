@@ -5,15 +5,17 @@
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/BasicShading.hpp"
 #include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 
 namespace balsa::visualization::controls {
 
 auto PanelContext::active_geometry() const -> scene_graph::MeshGeometry * {
-    return active_object
-               ? active_object->find_feature<scene_graph::MeshGeometry>()
-               : nullptr;
+    auto *instance = active_object
+                         ? active_object->find_feature<scene_graph::MeshInstance>()
+                         : nullptr;
+    return instance ? instance->geometry() : nullptr;
 }
 
 auto PanelContext::active_shading() const -> scene_graph::BasicShading * {

@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 
 namespace balsa::scene_graph {
@@ -10,7 +11,9 @@ namespace balsa::scene_graph {
 BasicShading::BasicShading() = default;
 
 auto BasicShading::geometry() const -> const MeshGeometry * {
-    return is_attached() ? object().find_feature<MeshGeometry>() : nullptr;
+    if (!is_attached()) return nullptr;
+    const auto *instance = object().find_feature<MeshInstance>();
+    return instance ? instance->geometry() : nullptr;
 }
 
 // ── Resolution ──────────────────────────────────────────────────────

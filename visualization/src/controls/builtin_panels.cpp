@@ -8,6 +8,7 @@
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/BasicShading.hpp"
 #include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/colormap_list.hpp"
 #include "balsa/visualization/controls/Panel.hpp"
@@ -154,23 +155,28 @@ auto fill_object(sg::Object &object, Layout &layout) -> void {
     layout.add_property(bool_property("Visible", obj->visible));
 
     auto &info = layout.add_column("Mesh");
-    info.set_visible_when(
-        [obj] { return obj->find_feature<sg::MeshGeometry>() != nullptr; });
-    // Shows fn(feature) for the Object's feature F, if it has one.
-    auto count = [obj]<typename F>(std::string what, std::size_t (*fn)(const F &)) {
-        return make_property(std::move(what), ReadOnlyText{ .get = [obj, fn] {
-                        const auto *f = obj->find_feature<F>();
-                        return f ? std::to_string(fn(*f)) : std::string{};
+    auto geometry_of = [obj]() -> const sg::MeshGeometry * {
+        const auto *instance = obj->find_feature<sg::MeshInstance>();
+        return instance ? instance->geometry() : nullptr;
+    };
+    info.set_visible_when([geometry_of] { return geometry_of() != nullptr; });
+    auto count = [](std::string what, auto get) {
+        return make_property(std::move(what), ReadOnlyText{ .get = [get] {
+                        const auto n = get();
+                        return n ? std::to_string(*n) : std::string{};
                     } });
     };
-    info.add_property(count("Vertices", +[](const sg::BasicShading &s) {
-        return s.vertex_count();
+    info.add_property(count("Vertices", [obj] {
+        const auto *shading = obj->find_feature<sg::BasicShading>();
+        return shading ? std::optional(shading->vertex_count()) : std::nullopt;
     }));
-    info.add_property(count("Triangles", +[](const sg::MeshGeometry &g) {
-        return g.triangle_count();
+    info.add_property(count("Triangles", [geometry_of] {
+        const auto *g = geometry_of();
+        return g ? std::optional(g->triangle_count()) : std::nullopt;
     }));
-    info.add_property(count("Edges", +[](const sg::MeshGeometry &g) {
-        return g.edge_count();
+    info.add_property(count("Edges", [geometry_of] {
+        const auto *g = geometry_of();
+        return g ? std::optional(g->edge_count()) : std::nullopt;
     }));
 }
 

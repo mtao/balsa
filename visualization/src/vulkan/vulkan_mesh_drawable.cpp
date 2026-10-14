@@ -138,8 +138,8 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 // ── Private: sync ───────────────────────────────────────────────────
 
 void VulkanMeshDrawable::sync_buffers(Film &film) {
-    const auto *geometry = object().find_feature<scene_graph::MeshGeometry>();
     const auto *shading = object().find_feature<scene_graph::BasicShading>();
+    const auto *geometry = shading ? shading->geometry() : nullptr;
     if (!geometry || !shading) return;
     if (geometry->version() == _synced_geometry_version
         && shading->version() == _synced_shading_version) {

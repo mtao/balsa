@@ -7,7 +7,7 @@
 
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/Camera.hpp"
-#include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 
 // Restore Qt's emit macro.
 #define emit
@@ -346,7 +346,7 @@ QIcon SceneGraphModel::icon_for_object(sg::Object *obj) const {
 
     // Use built-in standard pixmap icons as simple type indicators.
     // Camera feature → "camera" style icon
-    // MeshGeometry feature → "mesh" style icon
+    // MeshInstance feature → "mesh" style icon
     // Neither → generic "empty" style icon
     //
     // For now we return empty QIcons.  A production build would load
@@ -356,7 +356,7 @@ QIcon SceneGraphModel::icon_for_object(sg::Object *obj) const {
         // Camera icon placeholder
         return QIcon::fromTheme(QStringLiteral("camera-video"));
     }
-    if (obj->find_feature<sg::MeshGeometry>()) {
+    if (obj->find_feature<sg::MeshInstance>()) {
         // Mesh icon placeholder
         return QIcon::fromTheme(QStringLiteral("application-x-blender"));
     }

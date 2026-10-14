@@ -9,7 +9,7 @@
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/BasicShading.hpp"
-#include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
 #define emit
@@ -172,7 +172,8 @@ void SceneGraphWidget::on_add_mesh() {
     auto *parent_obj = selected_object();
     auto *child = _model->add_child(parent_obj, "Mesh");
     if (child) {
-        child->emplace_feature<sg::MeshGeometry>();
+        child->emplace_feature<sg::MeshInstance>(
+            std::make_shared<sg::MeshGeometry>());
         child->emplace_feature<sg::BasicShading>();
         select_object(child);
     }

@@ -3,7 +3,7 @@
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/BasicShading.hpp"
-#include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
@@ -20,7 +20,7 @@ namespace balsa::visualization::vulkan::imgui {
 
 static const char *icon_for_object(const scene_graph::Object &obj) {
     if (obj.find_feature<scene_graph::Camera>()) return "[C]";
-    if (obj.find_feature<scene_graph::MeshGeometry>()) return "[M]";
+    if (obj.find_feature<scene_graph::MeshInstance>()) return "[M]";
     return "[O]"; // Empty / generic object
 }
 
@@ -45,10 +45,11 @@ static std::unique_ptr<scene_graph::Object>
     copy->set_rotation(src.rotation());
     copy->set_scale_factors(src.scale_factors());
 
-    // Duplicate mesh features if present.  Geometry first: the shading's
-    // roles are re-targeted to the copied attributes by name.
-    if (auto *geometry = src.find_feature<scene_graph::MeshGeometry>()) {
-        copy->emplace_feature<scene_graph::MeshGeometry>().copy_from(*geometry);
+    // Duplicate mesh features if present.  The copy shows the same
+    // (shared) geometry, with its own copy of the shading.
+    if (auto *instance = src.find_feature<scene_graph::MeshInstance>()) {
+        copy->emplace_feature<scene_graph::MeshInstance>(
+            instance->shared_geometry());
     }
     if (auto *shading = src.find_feature<scene_graph::BasicShading>()) {
         copy->emplace_feature<scene_graph::BasicShading>().copy_from(*shading);
@@ -236,7 +237,7 @@ static bool draw_object_node(scene_graph::Object &obj,
                 state.renaming_object = nullptr;
             }
             // Use remove_mesh for mesh objects so GPU resources are freed
-            auto *mesh = obj.find_feature<scene_graph::MeshGeometry>();
+            auto *mesh = obj.find_feature<scene_graph::MeshInstance>();
             if (mesh) {
                 scene.remove_mesh(&obj);
             } else {
@@ -293,7 +294,7 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
                 if (state.renaming_object == obj) {
                     state.renaming_object = nullptr;
                 }
-                auto *mesh = obj->find_feature<scene_graph::MeshGeometry>();
+                auto *mesh = obj->find_feature<scene_graph::MeshInstance>();
                 if (mesh) {
                     scene.remove_mesh(obj);
                 } else {

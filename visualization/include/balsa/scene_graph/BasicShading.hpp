@@ -15,11 +15,11 @@ class MeshGeometry;
 //
 // Shading context for the built-in lit, colour-mapped mesh renderer:
 // binds the position, normal and scalar-field roles to attributes of the
-// MeshGeometry on the same Object, and holds the render state (layers,
-// shading model, colour source, colormap, material).
+// MeshGeometry shown by the Object's MeshInstance, and holds the render
+// state (layers, shading model, colour source, colormap, material).
 //
 // Role assignments are kept and re-resolved against the geometry whenever
-// it changes: bindings follow attributes that are replaced in place and
+// it changes or the MeshInstance shows a different one: bindings follow attributes that are replaced in place and
 // are dropped for attributes that are removed.  A role you have not set
 // yourself binds "vertex_positions" / "vertex_normals" automatically.
 //
@@ -32,7 +32,7 @@ class BasicShading : public AbstractFeature {
 
     BasicShading();
 
-    /// The MeshGeometry on the same Object, or nullptr.
+    /// The geometry shown by the Object's MeshInstance, or nullptr.
     [[nodiscard]] auto geometry() const -> const MeshGeometry *;
 
     // ── Role assignment ─────────────────────────────────────────────

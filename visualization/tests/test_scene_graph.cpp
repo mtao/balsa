@@ -5,6 +5,7 @@
 #include <balsa/scene_graph/ImageData.hpp>
 #include <balsa/scene_graph/BasicShading.hpp>
 #include <balsa/scene_graph/MeshGeometry.hpp>
+#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/visualization/mesh_conversion.hpp>
 #include <balsa/scene_graph/Object.hpp>
@@ -76,11 +77,13 @@ static auto flat_indices(const View &v) -> std::vector<uint32_t> {
     return {v.data_handle(), v.data_handle() + v.size()};
 }
 
-// An Object holding a mesh: geometry plus the built-in shading.
+// An Object showing its own geometry with the built-in shading.
 struct MeshObject {
     balsa::scene_graph::Object object{"mesh"};
-    balsa::scene_graph::MeshGeometry &geometry =
-        object.emplace_feature<balsa::scene_graph::MeshGeometry>();
+    balsa::scene_graph::MeshInstance &instance =
+        object.emplace_feature<balsa::scene_graph::MeshInstance>(
+            std::make_shared<balsa::scene_graph::MeshGeometry>());
+    balsa::scene_graph::MeshGeometry &geometry = *instance.geometry();
     balsa::scene_graph::BasicShading &shading =
         object.emplace_feature<balsa::scene_graph::BasicShading>();
 };
@@ -120,7 +123,7 @@ TEST_CASE("Object features", "[scene_graph]") {
     CHECK(found == &cam);
 
     // Find a feature that doesn't exist returns nullptr.
-    MeshGeometry *mesh = obj.find_feature<MeshGeometry>();
+    MeshInstance *mesh = obj.find_feature<MeshInstance>();
     CHECK(mesh == nullptr);
 }
 
@@ -284,9 +287,16 @@ TEST_CASE("BasicShading without geometry binds nothing", "[scene_graph]") {
     CHECK(sh.geometry() == nullptr);
     CHECK_FALSE(sh.has_positions());
 
-    // Adding geometry later is picked up.
-    fill_quad(obj.emplace_feature<MeshGeometry>());
-    CHECK(sh.geometry() == obj.find_feature<MeshGeometry>());
+    // An instance without geometry binds nothing either.
+    auto &instance = obj.emplace_feature<MeshInstance>();
+    CHECK(sh.geometry() == nullptr);
+    CHECK_FALSE(sh.has_positions());
+
+    // Showing geometry later is picked up.
+    auto geometry = std::make_shared<MeshGeometry>();
+    fill_quad(*geometry);
+    instance.set_geometry(geometry);
+    CHECK(sh.geometry() == geometry.get());
     CHECK(sh.has_positions());
 
     // Attributes of other geometry are rejected.
@@ -613,22 +623,67 @@ TEST_CASE("MeshGeometry and BasicShading copy_from", "[scene_graph]") {
     CHECK((*src.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
 }
 
-TEST_CASE("MeshGeometry and BasicShading as Object features", "[scene_graph]") {
+TEST_CASE("MeshInstance and BasicShading as Object features", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
     Object obj("mesh_obj");
-    auto &geo = obj.emplace_feature<MeshGeometry>();
+    auto geo = std::make_shared<MeshGeometry>();
+    auto &instance = obj.emplace_feature<MeshInstance>(geo);
     auto &sh = obj.emplace_feature<BasicShading>();
 
     // Verify they can be found via find_feature.
-    CHECK(obj.find_feature<MeshGeometry>() == &geo);
+    CHECK(obj.find_feature<MeshInstance>() == &instance);
     CHECK(obj.find_feature<BasicShading>() == &sh);
-    CHECK(sh.geometry() == &geo);
+    CHECK(sh.geometry() == geo.get());
 
     // Fill the geometry and verify through the shading.
-    fill_single_tri(geo);
+    fill_single_tri(*geo);
     CHECK(sh.vertex_count() == 3);
     CHECK(sh.has_positions());
+}
+
+TEST_CASE("Objects share geometry with their own shading", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    auto geo = std::make_shared<MeshGeometry>();
+    fill_quad(*geo);
+    const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
+    geo->add_attribute("uv", AttributeDomain::Vertex, 2, uv);
+
+    Object a("a");
+    Object b("b");
+    a.emplace_feature<MeshInstance>(geo);
+    b.emplace_feature<MeshInstance>(geo);
+    auto &sa = a.emplace_feature<BasicShading>();
+    auto &sb = b.emplace_feature<BasicShading>();
+
+    // Same attributes, bound independently.
+    REQUIRE(sa.assign_scalar("uv", 0));
+    REQUIRE(sb.assign_scalar("uv", 1));
+    CHECK(sa.scalar_binding().attribute() == sb.scalar_binding().attribute());
+    CHECK((*sa.scalar_binding().view<float, 1>())[0, 0] == 3.0f);
+    CHECK((*sb.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+
+    // A geometry change is seen through both objects.
+    const std::array<float, 8> uv2 = {7, 8, 0, 1, 1, 0, 0, 0};
+    geo->add_attribute("uv", AttributeDomain::Vertex, 2, uv2);
+    CHECK((*sa.scalar_binding().view<float, 1>())[0, 0] == 7.0f);
+    CHECK((*sb.scalar_binding().view<float, 1>())[0, 0] == 8.0f);
+
+    // The geometry outlives the objects showing it.
+    std::weak_ptr<MeshGeometry> weak = geo;
+    geo.reset();
+    CHECK_FALSE(weak.expired());
+
+    // Showing different geometry rebinds; roles bound by default follow
+    // the new geometry's vertex_positions, explicit ones without a match
+    // unbind.
+    auto other = std::make_shared<MeshGeometry>();
+    fill_single_tri(*other);
+    a.find_feature<MeshInstance>()->set_geometry(other);
+    CHECK(sa.vertex_count() == 3);
+    CHECK_FALSE(sa.has_scalar_field());
+    CHECK(sb.vertex_count() == 4);
 }
 
 TEST_CASE("Object detach", "[scene_graph]") {

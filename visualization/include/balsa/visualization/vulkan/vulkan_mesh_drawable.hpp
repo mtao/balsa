@@ -15,10 +15,11 @@ class MeshPipelineManager;
 
 // ── VulkanMeshDrawable ──────────────────────────────────────────────
 //
-// Scene-graph–aware bridge feature that draws an Object's MeshGeometry
-// with its BasicShading through the Vulkan rendering pipeline.
+// Scene-graph–aware bridge feature that draws the MeshGeometry an Object
+// shows (through its MeshInstance) with its BasicShading through the
+// Vulkan rendering pipeline.
 //
-// Lives as a feature on the same Object as the MeshGeometry and
+// Lives as a feature on the same Object as the MeshInstance and
 // BasicShading features.  Owns the GPU resources (MeshBuffers, UBO
 // buffers, descriptor set) and re-uploads buffers when either feature's
 // version changes.
@@ -27,7 +28,7 @@ class MeshPipelineManager;
 // standalone glm::mat4 field (unlike the legacy MeshDrawable).
 //
 // Lifecycle:
-//   1. Attach to an Object that has MeshGeometry and BasicShading
+//   1. Attach to an Object that has a MeshInstance and BasicShading
 //   2. Call init(film, pipeline_manager) once Vulkan is ready
 //   3. Each frame: draw(camera, film) — syncs data if dirty, updates
 //      UBOs, and issues draw commands
@@ -79,7 +80,7 @@ class VulkanMeshDrawable : public VulkanDrawable {
     }
 
   private:
-    // Re-upload GPU buffers from the sibling MeshGeometry, through the
+    // Re-upload GPU buffers from the shown MeshGeometry, through the
     // BasicShading's role bindings, if either changed since the last sync.
     void sync_buffers(Film &film);
 
