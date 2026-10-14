@@ -24,16 +24,6 @@ static const char *icon_for_object(const scene_graph::Object &obj) {
     return "[O]"; // Empty / generic object
 }
 
-// ── Ancestor check (for drag-drop loop prevention) ──────────────────
-
-static bool is_ancestor_of(const scene_graph::Object *candidate,
-                           const scene_graph::Object *node) {
-    for (auto *p = node->parent(); p != nullptr; p = p->parent()) {
-        if (p == candidate) return true;
-    }
-    return false;
-}
-
 // ── Deep duplicate ──────────────────────────────────────────────────
 
 static std::unique_ptr<scene_graph::Object>
@@ -66,7 +56,8 @@ static std::unique_ptr<scene_graph::Object>
 // Give obj and its descendants the drawables their mesh features need.
 static void ensure_drawables(scene_graph::Object &obj, MeshScene &scene) {
     scene.ensure_drawable(obj);
-    for (auto &child : obj.children()) ensure_drawables(*child, scene);
+    obj.for_each_descendant(
+        [&scene](scene_graph::Object &o) { scene.ensure_drawable(o); });
 }
 
 
@@ -162,7 +153,7 @@ static bool draw_object_node(scene_graph::Object &obj,
             // Prevent: dropping onto self, dropping onto own descendant,
             // or dropping onto current parent (no-op).
             if (source && source != &obj && source->parent() != &obj
-                && !is_ancestor_of(source, &obj)) {
+                && !obj.is_descendant_of(*source)) {
                 auto detached = source->detach();
                 if (detached) {
                     obj.add_child(std::move(detached));

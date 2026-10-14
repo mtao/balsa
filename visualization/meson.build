@@ -79,8 +79,11 @@ if get_option('imgui')
   endif
 endif
 
+# Object's signals are part of the public scene-graph API.
+sigslot_dep = dependency('sigslot', fallback: ['sigslot', 'sigslot_dep'])
+
 # Public deps: propagated to consumers via declare_dependency().
-visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
+visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep, sigslot_dep]
 # Private deps: used only for building the library (not propagated).
 visualization_private_deps = []
 
@@ -108,6 +111,7 @@ visualization_sources = [
   'src/scene_graph/BasicShading.cpp',
   'src/scene_graph/DrawableGroup.cpp',
   'src/scene_graph/ImageData.cpp',
+  'src/scene_graph/FeatureIndex.cpp',
   'src/vulkan/VulkanTexture.cpp',
   'src/vulkan/ImagePipelineManager.cpp',
   'src/vulkan/VulkanImageDrawable.cpp',

@@ -11,86 +11,38 @@ namespace balsa::scene_graph {
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
-Object::Object(std::string name)
-  : name(std::move(name)) {}
+Object::Object(std::string name) : name(std::move(name)) {}
 
-Object::~Object() = default;
-
-// ── Move operations ─────────────────────────────────────────────────
-
-Object::Object(Object &&other) noexcept
-  : name(std::move(other.name)),
-    visible(other.visible),
-    selectable(other.selectable),
-    _translation(other._translation),
-    _rotation(other._rotation),
-    _scale(other._scale),
-    _parent(other._parent),
-    _children(std::move(other._children)),
-    _features(std::move(other._features)) {
-
-    // Fix up children's parent pointers.
-    for (auto &child : _children) {
-        if (child) child->_parent = this;
-    }
-    // Fix up features' object pointers.
-    for (auto &f : _features) {
-        if (f) f->_object = this;
-    }
-    other._parent = nullptr;
-}
-
-Object &Object::operator=(Object &&other) noexcept {
-    if (this != &other) {
-        name = std::move(other.name);
-        visible = other.visible;
-        selectable = other.selectable;
-        _translation = other._translation;
-        _rotation = other._rotation;
-        _scale = other._scale;
-        _parent = other._parent;
-        _children = std::move(other._children);
-        _features = std::move(other._features);
-
-        for (auto &child : _children) {
-            if (child) child->_parent = this;
-        }
-        for (auto &f : _features) {
-            if (f) f->_object = this;
-        }
-        other._parent = nullptr;
-    }
-    return *this;
-}
+Object::~Object() { destroying.emit(*this); }
 
 // ── Euler angles ────────────────────────────────────────────────────
 
-Vec3f Object::rotation_euler() const {
+auto Object::rotation_euler() const -> Vec3f {
     const Vec3f rad = ::zipper::transform::euler_angles(_rotation);
     return Vec3f(::zipper::transform::degrees(1.0f) * rad);
 }
 
-void Object::set_rotation_euler(const Vec3f &degrees) {
+auto Object::set_rotation_euler(const Vec3f &degrees) -> void {
     const Vec3f radians(::zipper::transform::radians(1.0f) * degrees);
     _rotation = ::zipper::transform::from_euler_angles(radians);
 }
 
 // ── Convenience mutators ────────────────────────────────────────────
 
-void Object::translate(const Vec3f &delta) {
+auto Object::translate(const Vec3f &delta) -> void {
     _translation = (_translation + delta).eval();
 }
 
-void Object::rotate(const Quaternionf &q) {
+auto Object::rotate(const Quaternionf &q) -> void {
     // Post-multiply: new_rotation = q * old_rotation
     _rotation = (q * _rotation).eval();
 }
 
-void Object::set_uniform_scale(float s) {
+auto Object::set_uniform_scale(float s) -> void {
     _scale = ::zipper::expression::nullary::Constant<float, 3>(s);
 }
 
-void Object::reset_transform() {
+auto Object::reset_transform() -> void {
     _translation = ::zipper::expression::nullary::Constant<float, 3>(0.0f);
     _rotation = Quaternionf(1, 0, 0, 0);
     _scale = ::zipper::expression::nullary::Constant<float, 3>(1.0f);
@@ -98,7 +50,7 @@ void Object::reset_transform() {
 
 // ── Composed transforms ─────────────────────────────────────────────
 
-AffineTransformf Object::local_transform() const {
+auto Object::local_transform() const -> AffineTransformf {
     // Compose T * R * S using zipper's transform composition.
     Translation3f t(_translation);
     Rotation3f r(::zipper::transform::to_rotation_matrix(_rotation));
@@ -106,7 +58,7 @@ AffineTransformf Object::local_transform() const {
     return t * r * s;
 }
 
-void Object::set_from_transform(const AffineTransformf &xf) {
+auto Object::set_from_transform(const AffineTransformf &xf) -> void {
     auto [t, r, s] = ::zipper::transform::trs_decompose(xf);
 
     _translation = t.vector();
@@ -114,7 +66,7 @@ void Object::set_from_transform(const AffineTransformf &xf) {
     _rotation = ::zipper::transform::to_quaternion(r.matrix());
 }
 
-AffineTransformf Object::world_transform() const {
+auto Object::world_transform() const -> AffineTransformf {
     if (_parent) {
         return _parent->world_transform() * local_transform();
     }
@@ -123,56 +75,60 @@ AffineTransformf Object::world_transform() const {
 
 // ── Hierarchy ───────────────────────────────────────────────────────
 
-Object &Object::add_child(std::string child_name) {
-    auto child = std::make_unique<Object>(std::move(child_name));
-    child->_parent = this;
-    _children.push_back(std::move(child));
-    return *_children.back();
+auto Object::add_child(std::string child_name) -> Object & {
+    return add_child(std::make_unique<Object>(std::move(child_name)));
 }
 
-Object &Object::add_child(std::unique_ptr<Object> child) {
+auto Object::release_child(Object &child) -> std::unique_ptr<Object> {
+    auto it = std::ranges::find(_children, &child, &std::unique_ptr<Object>::get);
+    if (it == _children.end()) return nullptr;
+    child_removing.emit(*this, child);
+    std::unique_ptr<Object> owned = std::move(*it);
+    _children.erase(it);
+    owned->_parent = nullptr;
+    return owned;
+}
+
+auto Object::add_child(std::unique_ptr<Object> child) -> Object & {
     if (!child) {
         // Create an empty child rather than storing a null.
-        return add_child(std::string{});
+        child = std::make_unique<Object>();
     }
-    // Detach from previous parent if needed.
-    if (child->_parent) {
-        auto &siblings = child->_parent->_children;
-        auto it = std::ranges::find(siblings, child.get(), &std::unique_ptr<Object>::get);
-        if (it != siblings.end()) {
-            // Release ownership without destroying — we're taking it.
-            it->release();
-            siblings.erase(it);
-        }
+    // A child still listed under its previous parent is owned twice:
+    // drop that owner without destroying the object.
+    if (child->_parent != nullptr) {
+        static_cast<void>(child->_parent->release_child(*child).release());
     }
     child->_parent = this;
-    _children.push_back(std::move(child));
-    return *_children.back();
+    Object &added = *_children.emplace_back(std::move(child));
+    child_added.emit(*this, added);
+    return added;
 }
 
-std::unique_ptr<Object> Object::detach() {
-    if (!_parent) return nullptr;
-    if (permanent) return nullptr;// permanent objects cannot be detached
+auto Object::detach() -> std::unique_ptr<Object> {
+    if (_parent == nullptr || permanent) return nullptr;
+    return _parent->release_child(*this);
+}
 
-    auto &siblings = _parent->_children;
-    auto it = std::ranges::find(siblings, this, &std::unique_ptr<Object>::get);
-
-    if (it == siblings.end()) return nullptr;
-
-    std::unique_ptr<Object> self = std::move(*it);
-    siblings.erase(it);
-    _parent = nullptr;
-    return self;
+auto Object::is_descendant_of(const Object &ancestor) const -> bool {
+    bool found = false;
+    for_each_ancestor([&](const Object &a) {
+        found = &a == &ancestor;
+        return !found;
+    });
+    return found;
 }
 
 // ── Feature removal ─────────────────────────────────────────────────
 
-bool Object::remove_feature(AbstractFeature *feature) {
-    if (!feature) return false;
-    auto it = std::ranges::find(_features, feature, &std::unique_ptr<AbstractFeature>::get);
+auto Object::remove_feature(AbstractFeature *feature) -> bool {
+    if (feature == nullptr) return false;
+    auto it = std::ranges::find(
+        _features, feature, &std::unique_ptr<AbstractFeature>::get);
     if (it == _features.end()) return false;
+    feature_removing.emit(*this, *feature);
     _features.erase(it);
     return true;
 }
 
-}// namespace balsa::scene_graph
+} // namespace balsa::scene_graph

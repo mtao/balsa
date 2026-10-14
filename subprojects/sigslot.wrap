@@ -1,0 +1,7 @@
+[wrap-git]
+url = https://github.com/palacaze/sigslot.git
+revision = v1.2.3
+patch_directory = sigslot
+
+[provide]
+sigslot = sigslot_dep
