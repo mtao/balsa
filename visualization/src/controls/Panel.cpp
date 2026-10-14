@@ -3,14 +3,25 @@
 #include <algorithm>
 
 #include "balsa/scene_graph/Light.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 
 namespace balsa::visualization::controls {
 
-auto PanelContext::active_mesh_data() const -> scene_graph::MeshData * {
-    return active_object ? active_object->find_feature<scene_graph::MeshData>() : nullptr;
+auto PanelContext::active_geometry() const -> scene_graph::MeshGeometry * {
+    auto *instance = active_object
+                         ? active_object->find_feature<scene_graph::MeshInstance>()
+                         : nullptr;
+    return instance ? instance->geometry() : nullptr;
+}
+
+auto PanelContext::active_shading() const -> scene_graph::BasicShading * {
+    return active_object
+               ? active_object->find_feature<scene_graph::BasicShading>()
+               : nullptr;
 }
 
 auto PanelContext::headlight() const -> scene_graph::Light * {

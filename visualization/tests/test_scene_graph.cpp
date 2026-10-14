@@ -3,7 +3,9 @@
 
 #include <balsa/scene_graph/Camera.hpp>
 #include <balsa/scene_graph/ImageData.hpp>
-#include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/BasicShading.hpp>
+#include <balsa/scene_graph/MeshGeometry.hpp>
+#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/visualization/mesh_conversion.hpp>
 #include <balsa/scene_graph/Object.hpp>
@@ -25,10 +27,9 @@
 #include <memory>
 #include <string>
 
-// ── Helpers: fill MeshData with plain buffers ───────────────────────
+// ── Helpers: fill MeshGeometry with plain buffers ───────────────────
 
-// Two-triangle quad (vertices 0-3), optionally with normals.
-// Test-local mdspan shorthands (MeshData accepts any rank-2 mdspan).
+// Test-local mdspan shorthands (MeshGeometry accepts any rank-2 mdspan).
 using DynIdx = ::zipper::mdspan<const uint32_t, ::zipper::dextents<2>>;
 static auto TriangleIndices(const uint32_t *p, std::size_t n) -> DynIdx {
     return DynIdx(p, n, 3);
@@ -37,7 +38,8 @@ static auto EdgeIndices(const uint32_t *p, std::size_t n) -> DynIdx {
     return DynIdx(p, n, 2);
 }
 
-static auto fill_quad(balsa::scene_graph::MeshData &md,
+// Two-triangle quad (vertices 0-3), optionally with normals.
+static auto fill_quad(balsa::scene_graph::MeshGeometry &md,
                       bool with_normals = false) -> void {
     using balsa::scene_graph::AttributeDomain;
     const std::array<float, 12> pos = {
@@ -52,13 +54,39 @@ static auto fill_quad(balsa::scene_graph::MeshData &md,
     md.set_triangle_indices(TriangleIndices(tris.data(), tris.size() / 3));
 }
 
-static auto fill_single_tri(balsa::scene_graph::MeshData &md) -> void {
+static auto fill_single_tri(balsa::scene_graph::MeshGeometry &md) -> void {
     using balsa::scene_graph::AttributeDomain;
     const std::array<double, 9> pos = {0, 0, 0, 1, 0, 0, 0, 1, 0};
     md.add_attribute("vertex_positions", AttributeDomain::Vertex, 3, pos);
     const std::array<uint32_t, 3> tris = {0, 1, 2};
     md.set_triangle_indices(TriangleIndices(tris.data(), tris.size() / 3));
 }
+
+// Element-major values of an attribute stored as T (empty if not T).
+template <typename T>
+static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
+    -> std::vector<T> {
+    const auto v = a.view<T>();
+    if (!v) return {};
+    return {v->data_handle(), v->data_handle() + v->size()};
+}
+
+// Element-major contents of a K x count index view.
+template <typename View>
+static auto flat_indices(const View &v) -> std::vector<uint32_t> {
+    return {v.data_handle(), v.data_handle() + v.size()};
+}
+
+// An Object showing its own geometry with the built-in shading.
+struct MeshObject {
+    balsa::scene_graph::Object object{"mesh"};
+    balsa::scene_graph::MeshInstance &instance =
+        object.emplace_feature<balsa::scene_graph::MeshInstance>(
+            std::make_shared<balsa::scene_graph::MeshGeometry>());
+    balsa::scene_graph::MeshGeometry &geometry = *instance.geometry();
+    balsa::scene_graph::BasicShading &shading =
+        object.emplace_feature<balsa::scene_graph::BasicShading>();
+};
 
 TEST_CASE("Object creation and hierarchy", "[scene_graph]") {
     using namespace balsa::scene_graph;
@@ -95,7 +123,7 @@ TEST_CASE("Object features", "[scene_graph]") {
     CHECK(found == &cam);
 
     // Find a feature that doesn't exist returns nullptr.
-    MeshData *mesh = obj.find_feature<MeshData>();
+    MeshInstance *mesh = obj.find_feature<MeshInstance>();
     CHECK(mesh == nullptr);
 }
 
@@ -115,131 +143,178 @@ TEST_CASE("Object transform hierarchy", "[scene_graph]") {
     CHECK(child.parent() == &root);
 }
 
-TEST_CASE("MeshData geometry and version tracking", "[scene_graph]") {
+TEST_CASE("MeshGeometry and BasicShading version tracking", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
+    MeshObject m;
+    auto &geo = m.geometry;
+    auto &sh = m.shading;
 
     // Initially empty
-    CHECK(md.vertex_count() == 0);
-    CHECK(md.triangle_count() == 0);
-    CHECK(md.edge_count() == 0);
-    CHECK_FALSE(md.has_positions());
-    CHECK_FALSE(md.has_normals());
-    CHECK_FALSE(md.has_triangle_indices());
-    CHECK_FALSE(md.has_edge_indices());
-    CHECK_FALSE(md.has_scalar_field());
+    CHECK(sh.vertex_count() == 0);
+    CHECK(geo.triangle_count() == 0);
+    CHECK(geo.edge_count() == 0);
+    CHECK_FALSE(sh.has_positions());
+    CHECK_FALSE(sh.has_normals());
+    CHECK_FALSE(geo.has_triangle_indices());
+    CHECK_FALSE(geo.has_edge_indices());
+    CHECK_FALSE(sh.has_scalar_field());
 
-    uint64_t v0 = md.version();
+    const uint64_t g0 = geo.version();
+    const uint64_t s0 = sh.version();
 
-    // Set mesh with positions and normals.
-    fill_quad(md, /*with_normals=*/true);
+    // Geometry changes bump only the geometry version; the shading picks
+    // up the conventionally named attributes on its own.
+    fill_quad(geo, /*with_normals=*/true);
+    CHECK(geo.version() > g0);
+    CHECK(sh.version() == s0);
+    CHECK(sh.vertex_count() == 4);
+    CHECK(sh.has_positions());
+    CHECK(sh.has_normals());
+    CHECK(geo.has_triangle_indices());
+    CHECK(geo.triangle_count() == 2);
+    CHECK(geo.has_edge_indices());
 
-    CHECK(md.vertex_count() == 4);
-    CHECK(md.has_positions());
-    CHECK(md.has_normals());
-    CHECK(md.has_triangle_indices());
-    CHECK(md.triangle_count() == 2);
-    CHECK(md.has_edge_indices());
-    CHECK(md.version() > v0);
+    // Role changes bump only the shading version.
+    const uint64_t g1 = geo.version();
+    sh.clear_normal();
+    CHECK(sh.version() > s0);
+    CHECK(geo.version() == g1);
 }
 
-TEST_CASE("MeshData auto-derives edges from triangles", "[scene_graph]") {
+TEST_CASE("MeshGeometry auto-derives edges from triangles", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
+    MeshGeometry geo;
 
     // Two triangles sharing an edge:
     //   tri 0: (0, 1, 2)
     //   tri 1: (0, 2, 3)
     //
     // Expected unique edges: 0-1, 1-2, 0-2, 2-3, 0-3 = 5 edges
-    fill_quad(md);
+    fill_quad(geo);
 
-    CHECK(md.has_triangle_indices());
-    CHECK(md.triangle_count() == 2);
+    CHECK(geo.has_triangle_indices());
+    CHECK(geo.triangle_count() == 2);
 
     // Edges should be auto-derived from the triangles.
-    CHECK(md.has_edge_indices());
-    CHECK(md.edge_count() == 5);
+    CHECK(geo.has_edge_indices());
+    CHECK(geo.edge_count() == 5);
 
     // Verify edge indices are valid vertex references.
-    auto edges = md.edge_indices();
-    for (std::size_t i = 0; i < edges.size(); ++i) { CHECK(edges[i] < 4); }
+    auto edges = geo.edge_indices();
+    REQUIRE(edges.extent(1) == 5);
+    for (std::size_t e = 0; e < edges.extent(1); ++e) {
+        CHECK(edges[0, e] < edges[1, e]); // stored low, high
+        CHECK(edges[1, e] < 4);
+    }
 }
 
-TEST_CASE("MeshData topology from single triangle", "[scene_graph]") {
+TEST_CASE("MeshGeometry topology from single triangle", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
+    MeshGeometry geo;
+    fill_single_tri(geo);
 
-    fill_single_tri(md);
-
-    CHECK(md.triangle_count() == 1);
-    CHECK(md.edge_count() == 3); // A single triangle has 3 edges
+    CHECK(geo.triangle_count() == 1);
+    CHECK(geo.edge_count() == 3); // A single triangle has 3 edges
 }
 
-TEST_CASE("MeshData edge-only mesh has no triangles", "[scene_graph]") {
+TEST_CASE("MeshGeometry edge-only mesh has no triangles", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-
+    MeshObject m;
     const std::array<float, 9> pos = {0, 0, 0, 1, 0, 0, 2, 0, 0};
-    md.add_attribute("vertex_positions", AttributeDomain::Vertex, 3, pos);
+    m.geometry.add_attribute("vertex_positions", AttributeDomain::Vertex, 3, pos);
     const std::array<uint32_t, 4> edges = {0, 1, 1, 2};
-    md.set_edge_indices(EdgeIndices(edges.data(), edges.size() / 2));
+    m.geometry.set_edge_indices(EdgeIndices(edges.data(), edges.size() / 2));
 
     // Edge mesh: has edges but no triangles.
-    CHECK_FALSE(md.has_triangle_indices());
-    CHECK(md.has_edge_indices());
-    CHECK(md.edge_count() == 2);
-    CHECK(md.has_positions());
-    CHECK(md.vertex_count() == 3);
+    CHECK_FALSE(m.geometry.has_triangle_indices());
+    CHECK(m.geometry.has_edge_indices());
+    CHECK(m.geometry.edge_count() == 2);
+    CHECK(m.shading.has_positions());
+    CHECK(m.shading.vertex_count() == 3);
 }
 
-TEST_CASE("MeshData role assignment and clearing", "[scene_graph]") {
+TEST_CASE("BasicShading role assignment and clearing", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-    fill_quad(md, /*with_normals=*/true);
+    MeshObject m;
+    auto &sh = m.shading;
+    fill_quad(m.geometry, /*with_normals=*/true);
 
-    // add_attribute auto-assigns by convention name.
-    CHECK(md.has_positions());
-    CHECK(md.has_normals());
-    CHECK_FALSE(md.has_scalar_field());
+    // Conventionally named attributes are bound automatically.
+    CHECK(sh.has_positions());
+    CHECK(sh.has_normals());
+    CHECK_FALSE(sh.has_scalar_field());
 
-    uint64_t v1 = md.version();
+    uint64_t v1 = sh.version();
 
     // Clear positions.
-    md.clear_position();
-    CHECK_FALSE(md.has_positions());
-    CHECK(md.version() > v1);
+    sh.clear_position();
+    CHECK_FALSE(sh.has_positions());
+    CHECK(sh.version() > v1);
 
     // Clear normals.
-    uint64_t v2 = md.version();
-    md.clear_normal();
-    CHECK_FALSE(md.has_normals());
-    CHECK(md.version() > v2);
+    uint64_t v2 = sh.version();
+    sh.clear_normal();
+    CHECK_FALSE(sh.has_normals());
+    CHECK(sh.version() > v2);
+
+    // A cleared role stays cleared when the geometry changes.
+    fill_quad(m.geometry, /*with_normals=*/true);
+    CHECK_FALSE(sh.has_positions());
+    CHECK_FALSE(sh.has_normals());
 
     // Re-assign position by name.
-    uint64_t v3 = md.version();
-    CHECK(md.assign_position("vertex_positions"));
-    CHECK(md.has_positions());
-    CHECK(md.version() > v3);
+    uint64_t v3 = sh.version();
+    CHECK(sh.assign_position("vertex_positions"));
+    CHECK(sh.has_positions());
+    CHECK(sh.version() > v3);
 }
 
-TEST_CASE("MeshData attributes", "[scene_graph]") {
+TEST_CASE("BasicShading without geometry binds nothing", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-    fill_quad(md, /*with_normals=*/true);
+    BasicShading detached; // not attached to an Object
+    CHECK(detached.geometry() == nullptr);
+    CHECK_FALSE(detached.has_positions());
+    CHECK_FALSE(detached.assign_position("vertex_positions"));
 
-    const auto &discovered = md.attributes();
+    Object obj("shading only");
+    auto &sh = obj.emplace_feature<BasicShading>();
+    CHECK(sh.geometry() == nullptr);
+    CHECK_FALSE(sh.has_positions());
+
+    // An instance without geometry binds nothing either.
+    auto &instance = obj.emplace_feature<MeshInstance>();
+    CHECK(sh.geometry() == nullptr);
+    CHECK_FALSE(sh.has_positions());
+
+    // Showing geometry later is picked up.
+    auto geometry = std::make_shared<MeshGeometry>();
+    fill_quad(*geometry);
+    instance.set_geometry(geometry);
+    CHECK(sh.geometry() == geometry.get());
+    CHECK(sh.has_positions());
+
+    // Attributes of other geometry are rejected.
+    MeshGeometry other;
+    fill_quad(other);
+    CHECK_FALSE(sh.assign_position(other.find_attribute("vertex_positions")));
+}
+
+TEST_CASE("MeshGeometry attributes", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshGeometry geo;
+    fill_quad(geo, /*with_normals=*/true);
 
     // Should have at least vertex_positions and vertex_normals.
     bool found_pos = false;
     bool found_nrm = false;
-    for (const auto &da : discovered) {
+    for (const auto &da : geo.attributes()) {
         if (da->name == "vertex_positions") {
             found_pos = true;
             CHECK(da->domain == AttributeDomain::Vertex);
@@ -257,33 +332,81 @@ TEST_CASE("MeshData attributes", "[scene_graph]") {
     CHECK(found_nrm);
 }
 
-TEST_CASE("MeshData explicit edges override derived", "[scene_graph]") {
+TEST_CASE("MeshGeometry stores topology as attributes", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-    fill_quad(md);
-    CHECK(md.edge_count() == 5);
+    MeshGeometry geo;
+    CHECK(geo.triangle_indices().extent(1) == 0);
+    CHECK(geo.edge_indices().extent(1) == 0);
+    fill_quad(geo);
+
+    // Triangles: Face-domain uint32 attribute, 3 x F; edges: Edge-domain
+    // 2 x E, derived from the triangles.
+    const auto faces = geo.find_attribute(MeshGeometry::face_vertices_name);
+    REQUIRE(faces);
+    CHECK(faces->domain == AttributeDomain::Face);
+    CHECK(faces->type() == AttributeType::UInt32);
+    CHECK(faces->component_count() == 3);
+    CHECK(faces->count() == 2);
+    const auto edges = geo.find_attribute(MeshGeometry::edge_vertices_name);
+    REQUIRE(edges);
+    CHECK(edges->domain == AttributeDomain::Edge);
+    CHECK(edges->component_count() == 2);
+    CHECK(edges->count() == geo.edge_count());
+
+    const auto tris = geo.triangle_indices();
+    CHECK(tris.static_extent(0) == 3);
+    CHECK(tris[2, 1] == 3u); // third corner of the second triangle
+    CHECK(tris.data_handle() == faces->view<uint32_t>()->data_handle());
+
+    // Reserved names can't be added or removed directly.
+    const std::array<float, 2> junk = {0, 0};
+    CHECK_FALSE(geo.add_attribute(".face_vertices", AttributeDomain::Face, 1, junk));
+    CHECK_FALSE(geo.add_attribute(".anything", AttributeDomain::Vertex, 1, junk));
+    CHECK_FALSE(geo.remove_attribute(MeshGeometry::face_vertices_name));
+    CHECK(geo.triangle_count() == 2);
+
+    // Face attributes line up with the face attribute's count.
+    const std::array<float, 2> area = {0.5f, 0.5f};
+    REQUIRE(geo.add_attribute("face_area", AttributeDomain::Face, 1, area));
+    CHECK(geo.find_attribute("face_area")->count() == geo.triangle_count());
+
+    // Topology is copied with the other attributes.
+    MeshGeometry copy;
+    copy.copy_from(geo);
+    CHECK(flat_indices(copy.triangle_indices())
+          == flat_indices(geo.triangle_indices()));
+    CHECK(copy.edge_count() == geo.edge_count());
+}
+
+TEST_CASE("MeshGeometry explicit edges override derived", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshGeometry geo;
+    fill_quad(geo);
+    CHECK(geo.edge_count() == 5);
 
     const std::array<uint32_t, 4> edges = {0, 1, 2, 3};
-    md.set_edge_indices(EdgeIndices(edges.data(), edges.size() / 2));
-    CHECK(md.edge_count() == 2);
+    geo.set_edge_indices(EdgeIndices(edges.data(), edges.size() / 2));
+    CHECK(geo.edge_count() == 2);
 
     // Re-setting triangles keeps the explicit edges.
     const std::array<uint32_t, 3> tri = {0, 1, 2};
-    md.set_triangle_indices(TriangleIndices(tri.data(), tri.size() / 3));
-    CHECK(md.edge_count() == 2);
+    geo.set_triangle_indices(TriangleIndices(tri.data(), tri.size() / 3));
+    CHECK(geo.edge_count() == 2);
 }
 
-TEST_CASE("MeshData scalar binding extracts components", "[scene_graph]") {
+TEST_CASE("BasicShading scalar binding extracts components", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-    fill_quad(md);
+    MeshObject m;
+    auto &sh = m.shading;
+    fill_quad(m.geometry);
     const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
-    md.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
+    m.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
 
-    REQUIRE(md.assign_scalar("uv", 0));
-    const auto &b = md.scalar_binding();
+    REQUIRE(sh.assign_scalar("uv", 0));
+    const auto &b = sh.scalar_binding();
     CHECK(b.component_count() == 1);
     REQUIRE(b.size() == 4);
     auto u = b.view<float, 1>();
@@ -291,67 +414,77 @@ TEST_CASE("MeshData scalar binding extracts components", "[scene_graph]") {
     CHECK((*u)[0, 0] == 3.0f);
     CHECK((*u)[0, 1] == 0.0f);
 
-    REQUIRE(md.assign_scalar("uv", -1)); // magnitude
-    auto mag = md.scalar_binding().view<float, 1>();
+    REQUIRE(sh.assign_scalar("uv", -1)); // magnitude
+    auto mag = sh.scalar_binding().view<float, 1>();
     REQUIRE(mag);
     CHECK((*mag)[0, 0] == Catch::Approx(5.0f));
-    CHECK(md.scalar_component() == -1);
+    CHECK(sh.scalar_component() == -1);
 
-    CHECK_FALSE(md.assign_scalar("uv", 2)); // out of range
-    CHECK_FALSE(md.has_scalar_field());
-    CHECK_FALSE(md.assign_scalar("missing"));
+    CHECK_FALSE(sh.assign_scalar("uv", 2)); // out of range
+    CHECK_FALSE(sh.has_scalar_field());
+    CHECK_FALSE(sh.assign_scalar("missing"));
 }
 
-TEST_CASE("MeshData rebinds when attributes change", "[scene_graph]") {
+TEST_CASE("BasicShading follows geometry changes", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-    fill_quad(md);
-    REQUIRE(md.has_positions());
+    MeshObject m;
+    auto &geo = m.geometry;
+    auto &sh = m.shading;
+    fill_quad(geo);
+    REQUIRE(sh.has_positions());
 
     // Adding more attributes may reallocate storage; binding must follow.
     for (int i = 0; i < 16; ++i) {
         const std::array<float, 4> s = {0, 1, 2, 3};
-        md.add_attribute("s" + std::to_string(i), AttributeDomain::Vertex, 1, s);
+        geo.add_attribute("s" + std::to_string(i), AttributeDomain::Vertex, 1, s);
     }
-    auto pos = md.find_attribute("vertex_positions");
+    auto pos = geo.find_attribute("vertex_positions");
     REQUIRE(pos);
-    CHECK(md.position_binding().attribute() == pos);
-    CHECK(md.position_binding().view<float>()->data_handle()
+    CHECK(sh.position_binding().attribute() == pos);
+    CHECK(sh.position_binding().view<float>()->data_handle()
           == pos->view<float>()->data_handle());
 
     // Replacing the bound attribute updates the binding.
     const std::array<float, 6> pos2 = {0, 0, 1, 1, 2, 2};
-    md.add_attribute("vertex_positions", AttributeDomain::Vertex, 2, pos2);
-    CHECK(md.vertex_count() == 3);
-    CHECK(md.position_binding().component_count() == 2);
+    geo.add_attribute("vertex_positions", AttributeDomain::Vertex, 2, pos2);
+    CHECK(sh.vertex_count() == 3);
+    CHECK(sh.position_binding().component_count() == 2);
 
     // Replacing in place keeps handle identity.
-    CHECK(md.position_binding().attribute() == pos);
+    CHECK(sh.position_binding().attribute() == pos);
+
+    // A magnitude binding is recomputed when its attribute is replaced.
+    REQUIRE(sh.assign_scalar("vertex_positions", -1));
+    CHECK((*sh.scalar_binding().view<float, 1>())[0, 2] == Catch::Approx(std::sqrt(8.0f)));
+    const std::array<float, 6> pos3 = {3, 4, 0, 0, 0, 0};
+    geo.add_attribute("vertex_positions", AttributeDomain::Vertex, 2, pos3);
+    CHECK((*sh.scalar_binding().view<float, 1>())[0, 0] == Catch::Approx(5.0f));
 
     // Removing it unbinds; a held handle stays readable but detached.
-    CHECK(md.remove_attribute("vertex_positions"));
-    CHECK_FALSE(md.has_positions());
+    CHECK(geo.remove_attribute("vertex_positions"));
+    CHECK_FALSE(sh.has_positions());
+    CHECK_FALSE(sh.has_scalar_field());
     CHECK(pos->count() == 3);
-    CHECK_FALSE(md.assign_position(pos));
+    CHECK_FALSE(sh.assign_position(pos));
 }
 
-TEST_CASE("MeshData face attributes are stored but not bindable", "[scene_graph]") {
+TEST_CASE("MeshGeometry face attributes are stored but not bindable", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
-    MeshData md;
-    fill_quad(md);
+    MeshObject m;
+    fill_quad(m.geometry);
     const std::array<float, 2> area = {0.5f, 0.5f};
-    md.add_attribute("face_area", AttributeDomain::Face, 1, area);
+    m.geometry.add_attribute("face_area", AttributeDomain::Face, 1, area);
 
-    auto a = md.find_attribute("face_area");
+    auto a = m.geometry.find_attribute("face_area");
     REQUIRE(a);
     CHECK(a->domain == AttributeDomain::Face);
     CHECK(a->count() == 2);
-    CHECK_FALSE(md.assign_scalar("face_area"));
+    CHECK_FALSE(m.shading.assign_scalar("face_area"));
 }
 
-TEST_CASE("to_mesh_data converts OBJ into MeshData", "[scene_graph]") {
+TEST_CASE("to_mesh_geometry converts OBJ into MeshGeometry", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
     auto path = std::filesystem::temp_directory_path() / "balsa_quad.obj";
@@ -362,15 +495,15 @@ TEST_CASE("to_mesh_data converts OBJ into MeshData", "[scene_graph]") {
     auto obj = balsa::geometry::triangle_mesh::read_objF(path);
     std::filesystem::remove(path);
 
-    MeshData md;
-    balsa::visualization::to_mesh_data(obj, md);
-    CHECK(md.vertex_count() == 4);
-    CHECK(md.triangle_count() == 2);
-    CHECK(md.edge_count() == 5);
-    CHECK_FALSE(md.has_normals());
+    MeshObject m;
+    balsa::visualization::to_mesh_geometry(obj, m.geometry);
+    CHECK(m.shading.vertex_count() == 4);
+    CHECK(m.geometry.triangle_count() == 2);
+    CHECK(m.geometry.edge_count() == 5);
+    CHECK_FALSE(m.shading.has_normals());
 }
 
-TEST_CASE("MeshData accepts indices in any orientation and layout",
+TEST_CASE("MeshGeometry accepts indices in any orientation and layout",
           "[scene_graph]") {
     using namespace balsa::scene_graph;
     namespace zs = ::zipper::storage;
@@ -381,20 +514,20 @@ TEST_CASE("MeshData accepts indices in any orientation and layout",
     // Two triangles (0,1,2), (0,2,3).
     const std::array<uint32_t, 6> expected = {0, 1, 2, 0, 2, 3};
 
-    auto check = [&](MeshData &md) {
-        CHECK(std::ranges::equal(md.triangle_indices(), expected));
+    auto check = [&](MeshGeometry &md) {
+        CHECK(std::ranges::equal(flat_indices(md.triangle_indices()), expected));
         CHECK(md.edge_count() == 5);
     };
 
     SECTION("N x 3 row-major") {
-        MeshData md;
+        MeshGeometry md;
         REQUIRE(md.set_triangle_indices(
             mdspan<const uint32_t, extents<dynamic_extent, 3>, zs::layout_right>(
                 expected.data(), 2)));
         check(md);
     }
     SECTION("3 x N column-major (same buffer)") {
-        MeshData md;
+        MeshGeometry md;
         REQUIRE(md.set_triangle_indices(
             mdspan<const uint32_t, extents<3, dynamic_extent>, zs::layout_left>(
                 expected.data(), 2)));
@@ -402,7 +535,7 @@ TEST_CASE("MeshData accepts indices in any orientation and layout",
     }
     SECTION("3 x N row-major (vertex-major buffer, transposed)") {
         const std::array<uint32_t, 6> buf = {0, 0, 1, 2, 2, 3};
-        MeshData md;
+        MeshGeometry md;
         REQUIRE(md.set_triangle_indices(
             mdspan<const uint32_t, extents<3, dynamic_extent>, zs::layout_right>(
                 buf.data(), 2)));
@@ -410,7 +543,7 @@ TEST_CASE("MeshData accepts indices in any orientation and layout",
     }
     SECTION("fully dynamic extents, int64 values") {
         const std::array<int64_t, 6> buf = {0, 1, 2, 0, 2, 3};
-        MeshData md;
+        MeshGeometry md;
         REQUIRE(md.set_triangle_indices(
             mdspan<const int64_t, ::zipper::dextents<2>>(buf.data(), 2, 3)));
         check(md);
@@ -420,42 +553,137 @@ TEST_CASE("MeshData accepts indices in any orientation and layout",
         const std::array<uint32_t, 8> table = {7, 0, 1, 2, 8, 0, 2, 3};
         using E = extents<dynamic_extent, 3>;
         zs::layout_stride::mapping<E> map(E(2), std::array<std::size_t, 2>{4, 1});
-        MeshData md;
+        MeshGeometry md;
         REQUIRE(md.set_triangle_indices(
             mdspan<const uint32_t, E, zs::layout_stride>(table.data() + 1, map)));
         check(md);
     }
+    SECTION("square 3 x 3: rows are triangles") {
+        const std::array<uint32_t, 9> buf = {0, 1, 2, 0, 2, 3, 1, 2, 3};
+        MeshGeometry md;
+        REQUIRE(md.set_triangle_indices(
+            mdspan<const uint32_t, extents<3, 3>, zs::layout_right>(buf.data())));
+        CHECK(std::ranges::equal(flat_indices(md.triangle_indices()), buf));
+    }
     SECTION("wrong shape is rejected") {
-        MeshData md;
+        MeshGeometry md;
         CHECK_FALSE(md.set_triangle_indices(
             mdspan<const uint32_t, ::zipper::dextents<2>>(expected.data(), 2, 2)));
         CHECK_FALSE(md.has_triangle_indices());
     }
     SECTION("edges, 2 x N column-major") {
         const std::array<uint32_t, 4> e = {0, 1, 2, 3};
-        MeshData md;
+        MeshGeometry md;
         REQUIRE(md.set_edge_indices(
             mdspan<const uint32_t, extents<2, dynamic_extent>, zs::layout_left>(
                 e.data(), 2)));
-        CHECK(std::ranges::equal(md.edge_indices(), e));
+        CHECK(std::ranges::equal(flat_indices(md.edge_indices()), e));
     }
 }
 
-TEST_CASE("MeshData as Object feature", "[scene_graph]") {
+TEST_CASE("MeshGeometry and BasicShading copy_from", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+    using balsa::visualization::vulkan::NormalSource;
+
+    MeshObject src;
+    fill_quad(src.geometry, /*with_normals=*/true);
+    const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
+    src.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
+    REQUIRE(src.shading.assign_scalar("uv", 1));
+    src.shading.clear_normal();
+    src.shading.render_state().normal_source = NormalSource::None;
+
+    MeshObject dst;
+    dst.geometry.copy_from(src.geometry);
+    dst.shading.copy_from(src.shading);
+
+    // Geometry: same contents, independent attribute instances.
+    CHECK(dst.geometry.triangle_count() == 2);
+    CHECK(dst.geometry.edge_count() == 5);
+    const auto src_uv = src.geometry.find_attribute("uv");
+    const auto dst_uv = dst.geometry.find_attribute("uv");
+    REQUIRE(dst_uv);
+    CHECK_FALSE(dst_uv == src_uv);
+    CHECK_FALSE(dst.geometry.owns(src_uv));
+    CHECK(flat_values<float>(*dst_uv) == flat_values<float>(*src_uv));
+
+    // Shading: roles re-targeted by name; cleared roles stay cleared.
+    CHECK(dst.shading.position_binding().attribute()
+          == dst.geometry.find_attribute("vertex_positions"));
+    CHECK(dst.shading.scalar_binding().attribute() == dst_uv);
+    CHECK(dst.shading.scalar_component() == 1);
+    CHECK((*dst.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+    CHECK_FALSE(dst.shading.has_normals());
+    CHECK(dst.shading.render_state().normal_source == NormalSource::None);
+
+    // Changing the copy leaves the source alone.
+    const std::array<float, 8> uv2 = {0, 9, 0, 9, 0, 9, 0, 9};
+    dst.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv2);
+    CHECK((*dst.shading.scalar_binding().view<float, 1>())[0, 0] == 9.0f);
+    CHECK((*src.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+}
+
+TEST_CASE("MeshInstance and BasicShading as Object features", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
     Object obj("mesh_obj");
-    auto &md = obj.emplace_feature<MeshData>();
+    auto geo = std::make_shared<MeshGeometry>();
+    auto &instance = obj.emplace_feature<MeshInstance>(geo);
+    auto &sh = obj.emplace_feature<BasicShading>();
 
-    // Verify it can be found via find_feature.
-    MeshData *found = obj.find_feature<MeshData>();
-    REQUIRE(found != nullptr);
-    CHECK(found == &md);
+    // Verify they can be found via find_feature.
+    CHECK(obj.find_feature<MeshInstance>() == &instance);
+    CHECK(obj.find_feature<BasicShading>() == &sh);
+    CHECK(sh.geometry() == geo.get());
 
-    // Set mesh and verify through the found pointer.
-    fill_single_tri(md);
-    CHECK(found->vertex_count() == 3);
-    CHECK(found->has_positions());
+    // Fill the geometry and verify through the shading.
+    fill_single_tri(*geo);
+    CHECK(sh.vertex_count() == 3);
+    CHECK(sh.has_positions());
+}
+
+TEST_CASE("Objects share geometry with their own shading", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    auto geo = std::make_shared<MeshGeometry>();
+    fill_quad(*geo);
+    const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
+    geo->add_attribute("uv", AttributeDomain::Vertex, 2, uv);
+
+    Object a("a");
+    Object b("b");
+    a.emplace_feature<MeshInstance>(geo);
+    b.emplace_feature<MeshInstance>(geo);
+    auto &sa = a.emplace_feature<BasicShading>();
+    auto &sb = b.emplace_feature<BasicShading>();
+
+    // Same attributes, bound independently.
+    REQUIRE(sa.assign_scalar("uv", 0));
+    REQUIRE(sb.assign_scalar("uv", 1));
+    CHECK(sa.scalar_binding().attribute() == sb.scalar_binding().attribute());
+    CHECK((*sa.scalar_binding().view<float, 1>())[0, 0] == 3.0f);
+    CHECK((*sb.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+
+    // A geometry change is seen through both objects.
+    const std::array<float, 8> uv2 = {7, 8, 0, 1, 1, 0, 0, 0};
+    geo->add_attribute("uv", AttributeDomain::Vertex, 2, uv2);
+    CHECK((*sa.scalar_binding().view<float, 1>())[0, 0] == 7.0f);
+    CHECK((*sb.scalar_binding().view<float, 1>())[0, 0] == 8.0f);
+
+    // The geometry outlives the objects showing it.
+    std::weak_ptr<MeshGeometry> weak = geo;
+    geo.reset();
+    CHECK_FALSE(weak.expired());
+
+    // Showing different geometry rebinds; roles bound by default follow
+    // the new geometry's vertex_positions, explicit ones without a match
+    // unbind.
+    auto other = std::make_shared<MeshGeometry>();
+    fill_single_tri(*other);
+    a.find_feature<MeshInstance>()->set_geometry(other);
+    CHECK(sa.vertex_count() == 3);
+    CHECK_FALSE(sa.has_scalar_field());
+    CHECK(sb.vertex_count() == 4);
 }
 
 TEST_CASE("Object detach", "[scene_graph]") {
@@ -1310,13 +1538,13 @@ TEST_CASE("Object rotate() post-multiplies quaternion", "[scene_graph][trs]") {
     CHECK(static_cast<float>(m(1, 0)) == Catch::Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("role_binding_view", "[scene_graph][mesh_data]") {
-    balsa::scene_graph::MeshData md;
+TEST_CASE("role_binding_view", "[scene_graph][mesh]") {
+    MeshObject m;
     const std::vector<float> xyz{0, 1, 2, 3, 4, 5};
-    md.add_attribute("vertex_positions",
-                     balsa::scene_graph::AttributeDomain::Vertex, 3,
-                     std::span<const float>(xyz));
-    const auto &b = md.position_binding();
+    m.geometry.add_attribute("vertex_positions",
+                             balsa::scene_graph::AttributeDomain::Vertex, 3,
+                             std::span<const float>(xyz));
+    const auto &b = m.shading.position_binding();
     auto p = b.view<float, 3>();
     REQUIRE(p.has_value());
     CHECK(p->extent(1) == 2);
@@ -1342,16 +1570,7 @@ TEST_CASE("role_binding_view", "[scene_graph][mesh_data]") {
     CHECK((*d)[2, 1] == 5.0f);
 }
 
-// Element-major values of an attribute stored as T (empty if not T).
-template <typename T>
-static auto flat_values(const balsa::scene_graph::MeshAttribute &a)
-    -> std::vector<T> {
-    const auto v = a.view<T>();
-    if (!v) return {};
-    return {v->data_handle(), v->data_handle() + v->size()};
-}
-
-TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
+TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh]") {
     namespace sgd = balsa::scene_graph::detail;
     using balsa::scene_graph::AttributeValue;
     STATIC_CHECK(std::is_same_v<sgd::attribute_storage_t<float>, float>);
@@ -1365,7 +1584,7 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
 
     namespace sg = balsa::scene_graph;
     using ::zipper::dextents;
-    sg::MeshData md;
+    sg::MeshGeometry md;
 
     // Row-major N x 3 memory viewed as 3 x N column-major: copied as-is.
     const std::vector<float> xyz{0, 1, 2, 3, 4, 5};
@@ -1437,13 +1656,15 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh_data]") {
     CHECK(flat_values<double>(*st) == std::vector<double>{0, 1, 2, 3, 4, 5});
 }
 
-TEST_CASE("role_binding_keeps_attribute_type", "[scene_graph][mesh_data]") {
+TEST_CASE("role_binding_keeps_attribute_type", "[scene_graph][mesh]") {
     namespace sg = balsa::scene_graph;
-    sg::MeshData md;
+    MeshObject mesh;
+    auto &geo = mesh.geometry;
+    auto &md = mesh.shading;
 
     // Whole-attribute bindings view the attribute itself.
     const std::vector<double> dpos{0.5, 1, 2, 3, 4, 5.25};
-    auto d = md.add_attribute("vertex_positions", sg::AttributeDomain::Vertex, 3, dpos);
+    auto d = geo.add_attribute("vertex_positions", sg::AttributeDomain::Vertex, 3, dpos);
     const auto &b = md.position_binding();
     REQUIRE(b.is_bound());
     CHECK(b.type() == sg::AttributeType::Float64);
@@ -1458,7 +1679,7 @@ TEST_CASE("role_binding_keeps_attribute_type", "[scene_graph][mesh_data]") {
 
     // A selected component is a strided view into the attribute.
     const std::vector<uint32_t> pairs{3, 4, 6, 8};
-    auto pr = md.add_attribute("pairs", sg::AttributeDomain::Vertex, 2, pairs);
+    auto pr = geo.add_attribute("pairs", sg::AttributeDomain::Vertex, 2, pairs);
     REQUIRE(md.assign_scalar("pairs", 1));
     const auto &s = md.scalar_binding();
     CHECK(s.type() == sg::AttributeType::UInt32);
@@ -1485,11 +1706,12 @@ TEST_CASE("role_binding_keeps_attribute_type", "[scene_graph][mesh_data]") {
     CHECK(sum == 0.5 + 3.0);
 }
 
-TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh_data]") {
+TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh]") {
     namespace sg = balsa::scene_graph;
-    sg::MeshData md;
+    MeshObject mesh;
+    auto &md = mesh.shading;
     const std::vector<float> v{3, 4, 0, 0, 2, 0};
-    md.add_attribute("v", sg::AttributeDomain::Vertex, 3, v);
+    mesh.geometry.add_attribute("v", sg::AttributeDomain::Vertex, 3, v);
     REQUIRE(md.assign_scalar("v", -1));
     auto m = md.scalar_binding().view<float, 1>();
     REQUIRE(m);
@@ -1501,15 +1723,15 @@ TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh_data]") {
 
 #include <balsa/visualization/normalize_mesh.hpp>
 TEST_CASE("normalize_to_unit_box_centers_mesh", "[scene_graph][normalize]") {
-    balsa::scene_graph::Object obj("m");
-    balsa::scene_graph::MeshData md;
+    MeshObject m;
     // Box from (10, 20, 30) to (14, 22, 31): center (12, 21, 30.5), range 4.
-    const std::vector<float> xyz{10, 20, 30, 14, 22, 31};
-    md.add_attribute("vertex_positions",
-                     balsa::scene_graph::AttributeDomain::Vertex, 3,
-                     std::span<const float>(xyz));
-    REQUIRE(balsa::visualization::normalize_to_unit_box(obj, md));
-    auto M = obj.local_transform().to_matrix();
+    // Stored as double: normalization works from any attribute type.
+    const std::vector<double> xyz{10, 20, 30, 14, 22, 31};
+    m.geometry.add_attribute("vertex_positions",
+                             balsa::scene_graph::AttributeDomain::Vertex, 3,
+                             std::span<const double>(xyz));
+    REQUIRE(balsa::visualization::normalize_to_unit_box(m.object, m.shading));
+    auto M = m.object.local_transform().to_matrix();
     auto apply = [&](float x, float y, float z, int r) {
         return M(r, 0) * x + M(r, 1) * y + M(r, 2) * z + M(r, 3);
     };
@@ -1535,11 +1757,12 @@ TEST_CASE("controls_builtin_panels", "[controls]") {
     CHECK(ctl::available_panels(empty, "object").empty());
     CHECK(ctl::available_panels(empty, "data").empty());
 
-    sg::Object obj("m");
-    auto &md = obj.emplace_feature<sg::MeshData>();
+    MeshObject mesh;
+    auto &obj = mesh.object;
+    auto &md = mesh.shading;
     const std::vector<float> xyz{0, 0, 0, 1, 0, 0, 0, 1, 0};
-    md.add_attribute("vertex_positions", sg::AttributeDomain::Vertex, 3,
-                     std::span<const float>(xyz));
+    mesh.geometry.add_attribute("vertex_positions", sg::AttributeDomain::Vertex,
+                                3, std::span<const float>(xyz));
     ctl::PanelContext ctx{nullptr, &obj};
 
     auto object_panels = ctl::available_panels(ctx, "object");

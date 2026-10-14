@@ -1,4 +1,4 @@
-// Panels capture raw Object/MeshData/Light pointers; rebuild layouts when
+// Panels capture raw Object/BasicShading/Light pointers; rebuild layouts when
 // the selection or features change.
 
 #include <format>
@@ -6,7 +6,9 @@
 #include <vector>
 
 #include "balsa/scene_graph/Light.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/colormap_list.hpp"
 #include "balsa/visualization/controls/Panel.hpp"
@@ -21,12 +23,12 @@ using vulkan::ShadingModel;
 
 namespace {
 
-auto has_active_mesh(const PanelContext &ctx) -> bool {
-    return ctx.active_mesh_data() != nullptr;
+auto has_active_shading(const PanelContext &ctx) -> bool {
+    return ctx.active_shading() != nullptr;
 }
 
-auto is_lit(const sg::MeshData &md) -> bool {
-    return md.render_state().normal_source != NormalSource::None;
+auto is_lit(const sg::BasicShading &shading) -> bool {
+    return shading.render_state().normal_source != NormalSource::None;
 }
 
 auto make_property(std::string label, auto widget) -> Property {
@@ -84,43 +86,59 @@ auto button_property(std::string label, std::function<void()> run) -> Property {
     return make_property(std::move(label), Button{ .on_click = std::move(run) });
 }
 
-// Role enums: item 0 is "(none)", item k is attributes()[k - 1].
+// Role choices: option 0 is "(none)", option k is the k-th user
+// attribute of the shading's geometry (reserved topology attributes are
+// not offered).
 
-auto attribute_names(const sg::MeshData &md) -> std::vector<std::string> {
+auto attribute_handles(const sg::BasicShading &shading)
+    -> std::vector<sg::MeshAttributeHandle> {
+    const auto *geometry = shading.geometry();
+    if (geometry == nullptr) return {};
+    return std::ranges::to<std::vector>(
+        geometry->attributes()
+        | std::views::filter([](const sg::MeshAttributeHandle &a) {
+              return !sg::MeshGeometry::is_reserved_name(a->name);
+          }));
+}
+
+auto attribute_names(const sg::BasicShading &shading)
+    -> std::vector<std::string> {
     std::vector<std::string> names{ "(none)" };
-    for (const auto &a : md.attributes()) names.push_back(a->name);
+    for (const auto &a : attribute_handles(shading)) names.push_back(a->name);
     return names;
 }
 
-auto bound_index(const sg::MeshData &md, const sg::RoleBinding &b) -> int {
+auto bound_index(const sg::BasicShading &shading, const sg::RoleBinding &b)
+    -> int {
     if (!b.is_bound()) return 0;
-    int i = 1;
-    for (const auto &a : md.attributes()) {
-        if (a == b.attribute()) return i;
-        ++i;
-    }
-    return 0;
+    const auto handles = attribute_handles(shading);
+    const auto it = std::ranges::find(handles, b.attribute());
+    return it == handles.end()
+               ? 0
+               : static_cast<int>(std::distance(handles.begin(), it)) + 1;
 }
 
 template <typename Assign, typename Clear>
-auto role_property(std::string label, sg::MeshData &md,
-               const sg::RoleBinding &(sg::MeshData::*binding)() const,
-               Assign assign, Clear clear) -> Property {
+auto role_property(std::string label, sg::BasicShading &shading,
+                   const sg::RoleBinding &(sg::BasicShading::*binding)() const,
+                   Assign assign, Clear clear) -> Property {
     return make_property(
         std::move(label),
         ChoiceInput{
-            .options = [&md] { return attribute_names(md); },
-            .get_index = [&md, binding] { return bound_index(md, (md.*binding)()); },
+            .options = [&shading] { return attribute_names(shading); },
+            .get_index =
+                [&shading, binding] {
+                    return bound_index(shading, (shading.*binding)());
+                },
             .set_index =
-                [&md, assign, clear](const int &i) {
+                [&shading, assign, clear](const int &i) {
+                    const auto handles = attribute_handles(shading);
                     if (i <= 0) {
-                        clear(md);
-                    } else if (auto attrs = md.attributes();
-                               static_cast<std::size_t>(i - 1)
-                               < std::ranges::size(attrs)) {
-                        assign(md, attrs[i - 1]);
+                        clear(shading);
+                    } else if (static_cast<std::size_t>(i - 1) < handles.size()) {
+                        assign(shading, handles[static_cast<std::size_t>(i - 1)]);
                     }
-                    md.render_state().constrain(md.has_normals());
+                    shading.render_state().constrain(shading.has_normals());
                 },
         });
 }
@@ -137,16 +155,29 @@ auto fill_object(sg::Object &object, Layout &layout) -> void {
     layout.add_property(bool_property("Visible", obj->visible));
 
     auto &info = layout.add_column("Mesh");
-    info.set_visible_when([obj] { return obj->find_feature<sg::MeshData>() != nullptr; });
-    auto count = [obj](std::string what, auto fn) {
-        return make_property(std::move(what), ReadOnlyText{ .get = [obj, fn] {
-                        auto *md = obj->find_feature<sg::MeshData>();
-                        return md ? std::to_string(fn(*md)) : std::string{};
+    auto geometry_of = [obj]() -> const sg::MeshGeometry * {
+        const auto *instance = obj->find_feature<sg::MeshInstance>();
+        return instance ? instance->geometry() : nullptr;
+    };
+    info.set_visible_when([geometry_of] { return geometry_of() != nullptr; });
+    auto count = [](std::string what, auto get) {
+        return make_property(std::move(what), ReadOnlyText{ .get = [get] {
+                        const auto n = get();
+                        return n ? std::to_string(*n) : std::string{};
                     } });
     };
-    info.add_property(count("Vertices", [](const sg::MeshData &m) { return m.vertex_count(); }));
-    info.add_property(count("Triangles", [](const sg::MeshData &m) { return m.triangle_count(); }));
-    info.add_property(count("Edges", [](const sg::MeshData &m) { return m.edge_count(); }));
+    info.add_property(count("Vertices", [obj] {
+        const auto *shading = obj->find_feature<sg::BasicShading>();
+        return shading ? std::optional(shading->vertex_count()) : std::nullopt;
+    }));
+    info.add_property(count("Triangles", [geometry_of] {
+        const auto *g = geometry_of();
+        return g ? std::optional(g->triangle_count()) : std::nullopt;
+    }));
+    info.add_property(count("Edges", [geometry_of] {
+        const auto *g = geometry_of();
+        return g ? std::optional(g->edge_count()) : std::nullopt;
+    }));
 }
 
 auto fill_transform(sg::Object &object, Layout &layout) -> void {
@@ -168,8 +199,8 @@ auto fill_transform(sg::Object &object, Layout &layout) -> void {
 
 // ── Data tab ────────────────────────────────────────────────────────
 
-auto fill_render_layers(sg::MeshData &mesh, Layout &layout) -> void {
-    auto &layers = mesh.render_state().layers;
+auto fill_render_layers(sg::BasicShading &shading, Layout &layout) -> void {
+    auto &layers = shading.render_state().layers;
 
     auto &solid = layout.add_row("Solid");
     solid.add_property(bool_property("Enabled", layers.solid.enabled));
@@ -190,49 +221,49 @@ auto fill_render_layers(sg::MeshData &mesh, Layout &layout) -> void {
     pts.add_property(std::move(size));
 }
 
-auto fill_shading(sg::MeshData &mesh, Layout &layout) -> void {
-    auto *md = &mesh;
-    auto &rs = md->render_state();
-    auto constrain = [md] { md->render_state().constrain(md->has_normals()); };
+auto fill_shading(sg::BasicShading &shading, Layout &layout) -> void {
+    auto *sh = &shading;
+    auto &rs = sh->render_state();
+    auto constrain = [sh] { sh->render_state().constrain(sh->has_normals()); };
     constrain(); // state may have been set before normals were known
 
     auto normals = choice_input<NormalSource>(
         { "From Attribute", "Computed (flat)", "None (unlit)" },
         rs.normal_source, constrain);
-    normals.option_enabled = [md](int i) {
+    normals.option_enabled = [sh](int i) {
         return i != static_cast<int>(NormalSource::FromAttribute)
-               || md->has_normals();
+               || sh->has_normals();
     };
     layout.add_property(make_property("Normals", std::move(normals)));
 
-    auto shading = choice_input<ShadingModel>({ "Flat", "Gouraud", "Phong" },
+    auto model = choice_input<ShadingModel>({ "Flat", "Gouraud", "Phong" },
                                             rs.shading, constrain);
-    shading.option_enabled = [md](int i) {
+    model.option_enabled = [sh](int i) {
         return i == static_cast<int>(ShadingModel::Flat)
-               || md->render_state().normal_source
+               || sh->render_state().normal_source
                       == NormalSource::FromAttribute;
     };
-    auto shading_property = make_property("Shading", std::move(shading));
-    shading_property.visible_when = [md] { return is_lit(*md); };
-    layout.add_property(std::move(shading_property));
+    auto model_property = make_property("Shading", std::move(model));
+    model_property.visible_when = [sh] { return is_lit(*sh); };
+    layout.add_property(std::move(model_property));
 
     auto two_sided = bool_property("Two-sided Lighting", rs.two_sided);
-    two_sided.visible_when = [md] { return is_lit(*md); };
+    two_sided.visible_when = [sh] { return is_lit(*sh); };
     layout.add_property(std::move(two_sided));
 
     layout.add_property(make_property("Face Culling",
                      choice_input<CullMode>({ "None", "Back", "Front" }, rs.cull_mode)));
 }
 
-auto fill_color(sg::MeshData &mesh, Layout &layout) -> void {
-    auto *md = &mesh;
-    auto &rs = md->render_state();
+auto fill_color(sg::BasicShading &shading, Layout &layout) -> void {
+    auto *sh = &shading;
+    auto &rs = sh->render_state();
 
     auto source = choice_input<ColorSource>(
         { "Uniform", "Per-Vertex", "Scalar Field" }, rs.color_source);
-    source.option_enabled = [md](int i) {
+    source.option_enabled = [sh](int i) {
         return i != static_cast<int>(ColorSource::ScalarField)
-               || md->has_scalar_field();
+               || sh->has_scalar_field();
     };
     layout.add_property(make_property("Source", std::move(source)));
 
@@ -277,30 +308,30 @@ auto fill_color(sg::MeshData &mesh, Layout &layout) -> void {
     }));
 }
 
-auto fill_attributes(sg::MeshData &mesh, Layout &layout) -> void {
-    auto *md = &mesh;
+auto fill_attributes(sg::BasicShading &shading, Layout &layout) -> void {
+    auto *sh = &shading;
     layout.add_property(role_property(
-        "Position", *md, &sg::MeshData::position_binding,
-        [](sg::MeshData &m, const sg::MeshAttributeHandle &a) { m.assign_position(a); },
-        [](sg::MeshData &m) { m.clear_position(); }));
+        "Position", *sh, &sg::BasicShading::position_binding,
+        [](sg::BasicShading &s, const sg::MeshAttributeHandle &a) { s.assign_position(a); },
+        [](sg::BasicShading &s) { s.clear_position(); }));
     layout.add_property(role_property(
-        "Normal", *md, &sg::MeshData::normal_binding,
-        [](sg::MeshData &m, const sg::MeshAttributeHandle &a) { m.assign_normal(a); },
-        [](sg::MeshData &m) { m.clear_normal(); }));
+        "Normal", *sh, &sg::BasicShading::normal_binding,
+        [](sg::BasicShading &s, const sg::MeshAttributeHandle &a) { s.assign_normal(a); },
+        [](sg::BasicShading &s) { s.clear_normal(); }));
     layout.add_property(role_property(
-        "Scalar", *md, &sg::MeshData::scalar_binding,
-        [](sg::MeshData &m, const sg::MeshAttributeHandle &a) {
-            m.assign_scalar(a, m.scalar_component());
+        "Scalar", *sh, &sg::BasicShading::scalar_binding,
+        [](sg::BasicShading &s, const sg::MeshAttributeHandle &a) {
+            s.assign_scalar(a, s.scalar_component());
         },
-        [](sg::MeshData &m) { m.clear_scalar(); }));
+        [](sg::BasicShading &s) { s.clear_scalar(); }));
 
     auto component = make_property(
         "Component",
         ChoiceInput{
             .options =
-                [md] {
+                [sh] {
                     std::vector<std::string> items{ "Magnitude" };
-                    const auto &b = md->scalar_binding();
+                    const auto &b = sh->scalar_binding();
                     const int n = b.is_bound() ? b.attribute()->component_count() : 0;
                     constexpr std::string_view axes = "XYZW";
                     for (int c = 0; c < n; ++c) {
@@ -310,11 +341,11 @@ auto fill_attributes(sg::MeshData &mesh, Layout &layout) -> void {
                     }
                     return items;
                 },
-            .get_index = [md] { return md->scalar_component() + 1; },
-            .set_index = [md](const int &i) { md->set_scalar_component(i - 1); },
+            .get_index = [sh] { return sh->scalar_component() + 1; },
+            .set_index = [sh](const int &i) { sh->set_scalar_component(i - 1); },
         });
-    component.visible_when = [md] {
-        const auto &b = md->scalar_binding();
+    component.visible_when = [sh] {
+        const auto &b = sh->scalar_binding();
         return b.is_bound() && b.attribute()->component_count() > 1;
     };
     layout.add_property(std::move(component));
@@ -322,8 +353,8 @@ auto fill_attributes(sg::MeshData &mesh, Layout &layout) -> void {
 
 // ── Material tab ────────────────────────────────────────────────────
 
-auto fill_material(sg::MeshData &mesh, Layout &layout) -> void {
-    auto &m = mesh.render_state().material;
+auto fill_material(sg::BasicShading &shading, Layout &layout) -> void {
+    auto &m = shading.render_state().material;
     layout.add_property(make_property("Ambient", float_input(m.ambient_strength, 0.0f, 1.0f, 0.01f, true)));
     layout.add_property(make_property("Diffuse", float_input(m.diffuse_strength, 0.0f, 2.0f, 0.01f, true)));
     layout.add_property(make_property("Specular", float_input(m.specular_strength, 0.0f, 2.0f, 0.01f, true)));
@@ -362,8 +393,8 @@ auto fill_lighting(sg::Light &headlight, Layout &layout) -> void {
 auto for_active_object(void (*fill)(sg::Object &, Layout &)) {
     return [fill](const PanelContext &c, Layout &l) { fill(*c.active_object, l); };
 }
-auto for_active_mesh(void (*fill)(sg::MeshData &, Layout &)) {
-    return [fill](const PanelContext &c, Layout &l) { fill(*c.active_mesh_data(), l); };
+auto for_active_shading(void (*fill)(sg::BasicShading &, Layout &)) {
+    return [fill](const PanelContext &c, Layout &l) { fill(*c.active_shading(), l); };
 }
 auto for_headlight(void (*fill)(sg::Light &, Layout &)) {
     return [fill](const PanelContext &c, Layout &l) { fill(*c.headlight(), l); };
@@ -372,9 +403,9 @@ auto for_headlight(void (*fill)(sg::Light &, Layout &)) {
 auto has_active_object(const PanelContext &c) -> bool {
     return c.active_object != nullptr;
 }
-auto has_lit_mesh(const PanelContext &c) -> bool {
-    auto *md = c.active_mesh_data();
-    return md && is_lit(*md);
+auto has_lit_shading(const PanelContext &c) -> bool {
+    const auto *shading = c.active_shading();
+    return shading && is_lit(*shading);
 }
 auto has_headlight(const PanelContext &c) -> bool {
     return c.headlight() != nullptr;
@@ -405,33 +436,33 @@ auto register_builtin_panels() -> void {
                          .tab_id = "data",
                          .sort_key = 0,
                          .label = "Render Layers",
-                         .is_available = has_active_mesh,
-                         .fill_layout = for_active_mesh(fill_render_layers) });
+                         .is_available = has_active_shading,
+                         .fill_layout = for_active_shading(fill_render_layers) });
         register_panel({ .id = "data.shading",
                          .tab_id = "data",
                          .sort_key = 10,
                          .label = "Shading & Rendering",
-                         .is_available = has_active_mesh,
-                         .fill_layout = for_active_mesh(fill_shading) });
+                         .is_available = has_active_shading,
+                         .fill_layout = for_active_shading(fill_shading) });
         register_panel({ .id = "data.color",
                          .tab_id = "data",
                          .sort_key = 20,
                          .label = "Color",
-                         .is_available = has_active_mesh,
-                         .fill_layout = for_active_mesh(fill_color) });
+                         .is_available = has_active_shading,
+                         .fill_layout = for_active_shading(fill_color) });
         register_panel({ .id = "data.attributes",
                          .tab_id = "data",
                          .sort_key = 30,
                          .label = "Attribute Bindings",
                          .expanded_by_default = false,
-                         .is_available = has_active_mesh,
-                         .fill_layout = for_active_mesh(fill_attributes) });
+                         .is_available = has_active_shading,
+                         .fill_layout = for_active_shading(fill_attributes) });
         register_panel({ .id = "material.response",
                          .tab_id = "material",
                          .sort_key = 0,
                          .label = "Material Response",
-                         .is_available = has_lit_mesh,
-                         .fill_layout = for_active_mesh(fill_material) });
+                         .is_available = has_lit_shading,
+                         .fill_layout = for_active_shading(fill_material) });
         register_panel({ .id = "scene.lighting",
                          .tab_id = "scene",
                          .sort_key = 0,

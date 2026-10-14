@@ -18,6 +18,8 @@ class AbstractFeature {
 
     Object &object() { return *_object; }
     const Object &object() const { return *_object; }
+    /// Whether the feature has been attached to an Object.
+    bool is_attached() const { return _object != nullptr; }
 
   protected:
     AbstractFeature() = default;

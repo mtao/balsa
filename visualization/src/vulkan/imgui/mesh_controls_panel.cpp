@@ -2,7 +2,8 @@
 #include "balsa/visualization/vulkan/imgui/controls.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/Light.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
@@ -19,7 +20,7 @@ namespace balsa::visualization::vulkan::imgui {
 
 static const char *icon_for_object(const scene_graph::Object &obj) {
     if (obj.find_feature<scene_graph::Camera>()) return "[C]";
-    if (obj.find_feature<scene_graph::MeshData>()) return "[M]";
+    if (obj.find_feature<scene_graph::MeshInstance>()) return "[M]";
     return "[O]"; // Empty / generic object
 }
 
@@ -36,7 +37,7 @@ static bool is_ancestor_of(const scene_graph::Object *candidate,
 // ── Deep duplicate ──────────────────────────────────────────────────
 
 static std::unique_ptr<scene_graph::Object>
-    deep_duplicate(const scene_graph::Object &src, MeshScene &scene) {
+    deep_duplicate(const scene_graph::Object &src) {
     auto copy = std::make_unique<scene_graph::Object>(src.name + " Copy");
     copy->visible = src.visible;
     copy->selectable = src.selectable;
@@ -44,21 +45,28 @@ static std::unique_ptr<scene_graph::Object>
     copy->set_rotation(src.rotation());
     copy->set_scale_factors(src.scale_factors());
 
-    // Duplicate MeshData feature if present
-    if (auto *md = src.find_feature<scene_graph::MeshData>()) {
-        auto &new_md = copy->emplace_feature<scene_graph::MeshData>();
-        new_md.render_state() = md->render_state();
-        // Copy geometry data via the public setters
-        // (positions, normals, etc. would need accessor APIs to fully
-        //  copy; for now the render state is the most important part)
+    // Duplicate mesh features if present.  The copy shows the same
+    // (shared) geometry, with its own copy of the shading.
+    if (auto *instance = src.find_feature<scene_graph::MeshInstance>()) {
+        copy->emplace_feature<scene_graph::MeshInstance>(
+            instance->shared_geometry());
+    }
+    if (auto *shading = src.find_feature<scene_graph::BasicShading>()) {
+        copy->emplace_feature<scene_graph::BasicShading>().copy_from(*shading);
     }
 
     // Recursively duplicate children
     for (auto &child : src.children()) {
-        copy->add_child(deep_duplicate(*child, scene));
+        copy->add_child(deep_duplicate(*child));
     }
 
     return copy;
+}
+
+// Give obj and its descendants the drawables their mesh features need.
+static void ensure_drawables(scene_graph::Object &obj, MeshScene &scene) {
+    scene.ensure_drawable(obj);
+    for (auto &child : obj.children()) ensure_drawables(*child, scene);
 }
 
 
@@ -214,7 +222,8 @@ static bool draw_object_node(scene_graph::Object &obj,
         if (!obj.permanent && ImGui::MenuItem("Duplicate")) {
             auto *parent = obj.parent();
             if (parent) {
-                parent->add_child(deep_duplicate(obj, scene));
+                ensure_drawables(parent->add_child(deep_duplicate(obj)),
+                                 scene);
                 changed = true;
             }
         }
@@ -228,7 +237,7 @@ static bool draw_object_node(scene_graph::Object &obj,
                 state.renaming_object = nullptr;
             }
             // Use remove_mesh for mesh objects so GPU resources are freed
-            auto *mesh = obj.find_feature<scene_graph::MeshData>();
+            auto *mesh = obj.find_feature<scene_graph::MeshInstance>();
             if (mesh) {
                 scene.remove_mesh(&obj);
             } else {
@@ -285,7 +294,7 @@ bool draw_scene_tree(MeshScene &scene, MeshPanelState &state) {
                 if (state.renaming_object == obj) {
                     state.renaming_object = nullptr;
                 }
-                auto *mesh = obj->find_feature<scene_graph::MeshData>();
+                auto *mesh = obj->find_feature<scene_graph::MeshInstance>();
                 if (mesh) {
                     scene.remove_mesh(obj);
                 } else {

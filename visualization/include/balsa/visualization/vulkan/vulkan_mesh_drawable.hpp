@@ -15,18 +15,20 @@ class MeshPipelineManager;
 
 // ── VulkanMeshDrawable ──────────────────────────────────────────────
 //
-// Scene-graph–aware bridge feature that connects a MeshData feature
-// (CPU-side mesh geometry) to the Vulkan rendering pipeline.
+// Scene-graph–aware bridge feature that draws the MeshGeometry an Object
+// shows (through its MeshInstance) with its BasicShading through the
+// Vulkan rendering pipeline.
 //
-// Lives as a feature on the same Object as a MeshData feature.  Owns
-// the GPU resources (MeshBuffers, UBO buffers, descriptor set) and
-// syncs from MeshData using version tracking.
+// Lives as a feature on the same Object as the MeshInstance and
+// BasicShading features.  Owns the GPU resources (MeshBuffers, UBO
+// buffers, descriptor set) and re-uploads buffers when either feature's
+// version changes.
 //
 // The model matrix comes from Object::world_transform(), not from a
 // standalone glm::mat4 field (unlike the legacy MeshDrawable).
 //
 // Lifecycle:
-//   1. Attach to an Object that already has a MeshData feature
+//   1. Attach to an Object that has a MeshInstance and BasicShading
 //   2. Call init(film, pipeline_manager) once Vulkan is ready
 //   3. Each frame: draw(camera, film) — syncs data if dirty, updates
 //      UBOs, and issues draw commands
@@ -61,8 +63,8 @@ class VulkanMeshDrawable : public VulkanDrawable {
 
     // ── VulkanDrawable interface ────────────────────────────────────
 
-    // Draw this mesh with the given camera.  Syncs from MeshData if
-    // dirty, updates UBOs with the camera's view/projection and the
+    // Draw this mesh with the given camera.  Re-uploads buffers if the
+    // geometry or shading changed, updates UBOs with the camera's view/projection and the
     // Object's world transform, then issues Vulkan draw commands.
     void draw(const scene_graph::Camera &cam, Film &film) override;
 
@@ -78,9 +80,9 @@ class VulkanMeshDrawable : public VulkanDrawable {
     }
 
   private:
-    // Sync GPU buffers from the sibling MeshData feature if its
-    // version has changed since our last sync.
-    void sync_from_mesh_data(Film &film);
+    // Re-upload GPU buffers from the shown MeshGeometry, through the
+    // BasicShading's role bindings, if either changed since the last sync.
+    void sync_buffers(Film &film);
 
     // Upload TransformUBO (model/view/projection/normal_matrix).
     // Called once per frame.  Uses film.current_frame() to select
@@ -124,7 +126,8 @@ class VulkanMeshDrawable : public VulkanDrawable {
     vk::DeviceSize _material_ubo_stride = 0;// aligned size per layer slot
 
     ResolvedLightState _scene_light_state;
-    uint64_t _synced_version = 0;
+    uint64_t _synced_geometry_version = 0;
+    uint64_t _synced_shading_version = 0;
     bool _initialized = false;
 };
 

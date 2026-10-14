@@ -1,7 +1,7 @@
 #include "balsa/visualization/normalize_mesh.hpp"
 
 #include <balsa/geometry/bounding_box.hpp>
-#include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/BasicShading.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <zipper/MatrixBase.hxx>
 #include <zipper/expression/nullary/Constant.hpp>
@@ -10,9 +10,9 @@
 namespace balsa::visualization {
 
 auto normalize_to_unit_box(scene_graph::Object &object,
-                           const scene_graph::MeshData &mesh_data) -> bool {
-    if (!mesh_data.has_positions()) { return false; }
-    const auto &positions = mesh_data.position_binding();
+                           const scene_graph::BasicShading &shading) -> bool {
+    if (!shading.has_positions()) { return false; }
+    const auto &positions = shading.position_binding();
     if (positions.component_count() != 3 || positions.size() == 0) {
         return false;
     }
