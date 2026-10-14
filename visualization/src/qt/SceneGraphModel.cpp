@@ -266,14 +266,7 @@ bool SceneGraphModel::dropMimeData(const QMimeData *data,
         if (obj->permanent) continue;
 
         // Prevent reparenting an ancestor under itself.
-        bool is_ancestor = false;
-        for (auto *p = new_parent; p; p = p->parent()) {
-            if (p == obj) {
-                is_ancestor = true;
-                break;
-            }
-        }
-        if (is_ancestor) continue;
+        if (new_parent->is_descendant_of(*obj)) continue;
 
         // Find old position for proper notification.
         auto *old_parent = obj->parent();

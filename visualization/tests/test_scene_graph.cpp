@@ -1825,3 +1825,219 @@ TEST_CASE("controls_builtin_panels", "[controls]") {
     });
     CHECK(seen == 3);
 }
+
+// ── Scene graph: traversal, signals, FeatureIndex ───────────────────
+
+#include <balsa/scene_graph/FeatureIndex.hpp>
+
+namespace {
+template <typename S, typename... Args>
+concept can_emit = requires(S &s, Args &&...args) {
+    s.emit(std::forward<Args>(args)...);
+};
+
+struct TagA : balsa::scene_graph::AbstractFeature {};
+struct TagB : balsa::scene_graph::AbstractFeature {};
+
+// root
+// ├── a
+// │   ├── a1
+// │   └── a2
+// └── b
+//     └── b1
+struct Tree {
+    balsa::scene_graph::Object root{"root"};
+    balsa::scene_graph::Object &a = root.add_child("a");
+    balsa::scene_graph::Object &a1 = a.add_child("a1");
+    balsa::scene_graph::Object &a2 = a.add_child("a2");
+    balsa::scene_graph::Object &b = root.add_child("b");
+    balsa::scene_graph::Object &b1 = b.add_child("b1");
+};
+} // namespace
+
+TEST_CASE("Object is neither copyable nor movable", "[scene_graph]") {
+    using balsa::scene_graph::Object;
+    STATIC_CHECK_FALSE(std::is_copy_constructible_v<Object>);
+    STATIC_CHECK_FALSE(std::is_move_constructible_v<Object>);
+    STATIC_CHECK_FALSE(std::is_move_assignable_v<Object>);
+}
+
+TEST_CASE("Object traversal", "[scene_graph][traversal]") {
+    using balsa::scene_graph::Object;
+    Tree t;
+
+    std::vector<std::string> order;
+    t.root.for_each_descendant([&](Object &o) { order.push_back(o.name); });
+    CHECK(order == std::vector<std::string>{"a", "a1", "a2", "b", "b1"});
+
+    // Returning false skips a subtree.
+    order.clear();
+    std::as_const(t.root).for_each_descendant([&](const Object &o) {
+        order.push_back(o.name);
+        return o.name != "a";
+    });
+    CHECK(order == std::vector<std::string>{"a", "b", "b1"});
+
+    // Ancestors run upwards; returning false stops.
+    order.clear();
+    t.a2.for_each_ancestor([&](Object &o) { order.push_back(o.name); });
+    CHECK(order == std::vector<std::string>{"a", "root"});
+    order.clear();
+    t.a2.for_each_ancestor([&](const Object &o) {
+        order.push_back(o.name);
+        return false;
+    });
+    CHECK(order == std::vector<std::string>{"a"});
+
+    // find_descendant is pre-order and excludes the start Object.
+    CHECK(t.root.find_descendant([](const Object &o) {
+        return o.name.ends_with("1");
+    }) == &t.a1);
+    CHECK(t.root.find_descendant([](const Object &o) { return o.name == "root"; })
+          == nullptr);
+    const Object &croot = t.root;
+    CHECK(croot.find_descendant([](const Object &o) { return o.name == "b1"; })
+          == &t.b1);
+
+    CHECK(t.b1.is_descendant_of(t.root));
+    CHECK(t.b1.is_descendant_of(t.b));
+    CHECK_FALSE(t.b1.is_descendant_of(t.a));
+    CHECK_FALSE(t.root.is_descendant_of(t.root));
+}
+
+TEST_CASE("Object signals", "[scene_graph][signals]") {
+    using namespace balsa::scene_graph;
+
+    // Only Object can emit.
+    STATIC_CHECK_FALSE(can_emit<Signal<Object, Object &>, Object &>);
+
+    Tree t;
+    std::vector<std::string> events;
+    auto record = [&](std::string what) {
+        return [&events, what](Object &, auto &other) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(other)>, Object>) {
+                events.push_back(what + " " + other.name);
+            } else {
+                events.push_back(what);
+            }
+        };
+    };
+    for (Object *o : {&t.root, &t.a, &t.b}) {
+        o->feature_added.connect(record("feature_added"));
+        o->feature_removing.connect(record("feature_removing"));
+        o->child_added.connect(record("child_added"));
+        o->child_removing.connect(record("child_removing"));
+    }
+
+    auto &tag = t.a.emplace_feature<TagA>();
+    CHECK(t.a.remove_feature(&tag));
+    CHECK_FALSE(t.a.remove_feature(&tag));
+    t.root.add_child("c");
+    auto detached = t.b1.detach();
+    // Re-parenting: removed from the old parent, then added to the new.
+    t.b.add_child(std::move(detached));
+    t.a.add_child(t.b1.detach());
+    CHECK(events
+          == std::vector<std::string>{"feature_added",
+                                      "feature_removing",
+                                      "child_added c",
+                                      "child_removing b1",
+                                      "child_added b1",
+                                      "child_removing b1",
+                                      "child_added b1"});
+    CHECK(t.b1.parent() == &t.a);
+
+    // Destruction is announced; the destroyed Object's own features and
+    // children go with it without per-item signals.
+    std::vector<std::string> destroyed;
+    {
+        Object temp("temp");
+        temp.emplace_feature<TagA>();
+        auto &child = temp.add_child("child");
+        temp.destroying.connect([&](Object &o) { destroyed.push_back(o.name); });
+        child.destroying.connect([&](Object &o) { destroyed.push_back(o.name); });
+        temp.feature_removing.connect([&](Object &, AbstractFeature &) {
+            destroyed.push_back("feature_removing");
+        });
+    }
+    CHECK(destroyed == std::vector<std::string>{"temp", "child"});
+}
+
+TEST_CASE("FeatureIndex follows the tracked tree", "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+    Tree t;
+    t.a.emplace_feature<TagA>();
+    t.b1.emplace_feature<TagA>();
+    t.b1.emplace_feature<TagB>();
+
+    FeatureIndex index;
+    index.track(t.root);
+    index.track(t.root); // tracking again changes nothing
+    CHECK(index.is_tracked(t.b1));
+    CHECK(index.count<TagA>() == 2);
+    CHECK(index.count<TagB>() == 1);
+    CHECK(index.count<AbstractFeature>() == 0); // exact types only
+
+    // Features added and removed later.
+    auto &second = t.a.emplace_feature<TagA>(); // a: two TagA, listed once
+    CHECK(index.count<TagA>() == 2);
+    CHECK(t.a.remove_feature(&second));
+    CHECK(index.count<TagA>() == 2); // a still has one
+    t.a.remove_feature(t.a.find_feature<TagA>());
+    CHECK(index.count<TagA>() == 1);
+    CHECK(index.objects_with<TagA>()[0] == &t.b1);
+
+    // New children are tracked, detached ones untracked.
+    auto &c = t.b.add_child("c");
+    c.emplace_feature<TagB>();
+    CHECK(index.count<TagB>() == 2);
+    auto detached = t.b.detach(); // b, b1 and c leave
+    CHECK_FALSE(index.is_tracked(t.b1));
+    CHECK(index.count<TagA>() == 0);
+    CHECK(index.count<TagB>() == 0);
+    detached->emplace_feature<TagB>(); // not tracked: no effect
+    CHECK(index.count<TagB>() == 0);
+
+    // Re-attaching tracks again.
+    t.root.add_child(std::move(detached));
+    CHECK(index.count<TagB>() == 3);
+
+    // Removing a tracked subtree (detach, then destroy) removes all of it.
+    auto &doomed = t.a.add_child("doomed");
+    doomed.emplace_feature<TagA>();
+    doomed.add_child("grandchild").emplace_feature<TagA>();
+    CHECK(index.count<TagA>() == 3);
+    { auto gone = doomed.detach(); }
+    CHECK(index.count<TagA>() == 1);
+
+    index.untrack(t.root);
+    CHECK_FALSE(index.is_tracked(t.root));
+    CHECK(index.count<TagA>() == 0);
+}
+
+TEST_CASE("FeatureIndex and Object lifetimes are independent",
+          "[scene_graph][feature_index]") {
+    using namespace balsa::scene_graph;
+
+    // Index destroyed first: Objects keep working.
+    Object root("root");
+    {
+        FeatureIndex index;
+        index.track(root);
+    }
+    root.emplace_feature<TagA>();
+    root.add_child("child");
+    CHECK(root.feature_added.slot_count() == 0);
+
+    // Tracked Objects destroyed first (while still tracked): the index
+    // forgets them.
+    FeatureIndex index;
+    {
+        Object temp("temp");
+        temp.emplace_feature<TagA>();
+        temp.add_child("child").emplace_feature<TagA>();
+        index.track(temp);
+        CHECK(index.count<TagA>() == 2);
+    }
+    CHECK(index.count<TagA>() == 0);
+}

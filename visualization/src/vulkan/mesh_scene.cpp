@@ -267,18 +267,20 @@ void MeshScene::update_aspect(float aspect) {
 
 // Helper: recursively search the scene graph for the first enabled
 // Light feature.  Returns {Light*, Object*} or {nullptr, nullptr}.
+// The first enabled light in root's subtree (root first, then pre-order).
 static std::pair<const scene_graph::Light *, const scene_graph::Object *>
-  find_first_light(const scene_graph::Object &obj) {
-    if (auto *light = obj.find_feature<scene_graph::Light>()) {
-        if (light->enabled) {
-            return { light, &obj };
-        }
-    }
-    for (auto &child : obj.children()) {
-        auto result = find_first_light(*child);
-        if (result.first) return result;
-    }
-    return { nullptr, nullptr };
+  find_first_light(const scene_graph::Object &root) {
+    auto enabled_light = [](const scene_graph::Object &o) {
+        const auto *light = o.find_feature<scene_graph::Light>();
+        return light != nullptr && light->enabled ? light : nullptr;
+    };
+    const scene_graph::Object *lit =
+        enabled_light(root) ? &root
+                            : root.find_descendant([&](const auto &o) {
+                                  return enabled_light(o) != nullptr;
+                              });
+    if (lit == nullptr) return { nullptr, nullptr };
+    return { enabled_light(*lit), lit };
 }
 
 ResolvedLightState MeshScene::resolve_scene_lights() const {
