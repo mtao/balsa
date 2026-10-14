@@ -52,12 +52,13 @@ class MeshGeometry {
     }
 
     MeshGeometry();
-    // Copying would share attribute instances; use copy_from for a deep
+    // Copying would share attribute instances; use clone() for a deep
     // copy.
     MeshGeometry(const MeshGeometry &) = delete;
     auto operator=(const MeshGeometry &) -> MeshGeometry & = delete;
-    MeshGeometry(MeshGeometry &&) = default;
-    auto operator=(MeshGeometry &&) -> MeshGeometry & = default;
+    MeshGeometry(MeshGeometry &&) noexcept = default;
+    // Replacing the contents is a change: version() moves past both.
+    auto operator=(MeshGeometry &&other) noexcept -> MeshGeometry &;
 
     // ── Attributes ──────────────────────────────────────────────────
     //
@@ -148,10 +149,10 @@ class MeshGeometry {
 
     // Remove all attributes and topology.
     auto clear() -> void;
-    // Replace the contents with a deep copy of other's.  The copied
-    // attributes are new instances: handles into other do not refer to
-    // them, and changing one geometry does not affect the other.
-    auto copy_from(const MeshGeometry &other) -> void;
+    // A deep copy.  Its attributes are new instances: handles into this
+    // geometry do not refer to them, and changing one geometry does not
+    // affect the other.
+    [[nodiscard]] auto clone() const -> MeshGeometry;
 
     // ── Dirty tracking ──────────────────────────────────────────────
 

@@ -8,6 +8,10 @@
 #include "balsa/visualization/vulkan/mesh_buffers.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
+namespace balsa::scene_graph {
+class MeshGeometry;
+} // namespace balsa::scene_graph
+
 namespace balsa::visualization::vulkan {
 
 class Film;
@@ -126,6 +130,7 @@ class VulkanMeshDrawable : public VulkanDrawable {
     vk::DeviceSize _material_ubo_stride = 0;// aligned size per layer slot
 
     ResolvedLightState _scene_light_state;
+    const scene_graph::MeshGeometry *_synced_geometry = nullptr;
     uint64_t _synced_geometry_version = 0;
     uint64_t _synced_shading_version = 0;
     bool _initialized = false;

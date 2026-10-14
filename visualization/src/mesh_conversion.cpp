@@ -6,15 +6,15 @@
 
 namespace balsa::visualization {
 
-auto to_mesh_geometry(const geometry::triangle_mesh::OBJMesh<float, 3> &obj,
-                      scene_graph::MeshGeometry &geometry) -> void {
+auto to_mesh_geometry(const geometry::triangle_mesh::OBJMesh<float, 3> &obj)
+    -> scene_graph::MeshGeometry {
     using scene_graph::AttributeDomain;
     const auto &P = obj.position;
     const auto &N = obj.normal;
 
     // Vertices and triangles are column-per-element matrices, which is
     // exactly the (components, elements) shape MeshGeometry expects.
-    geometry.clear();
+    scene_graph::MeshGeometry geometry;
     geometry.add_attribute("vertex_positions",
                             AttributeDomain::Vertex,
                             P.vertices.expression().as_mdspan());
@@ -30,6 +30,7 @@ auto to_mesh_geometry(const geometry::triangle_mesh::OBJMesh<float, 3> &obj,
     }
 
     geometry.set_triangle_indices(P.triangles.expression().as_mdspan());
+    return geometry;
 }
 
 } // namespace balsa::visualization

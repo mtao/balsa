@@ -55,9 +55,9 @@ struct Panel {
     /// Whether the panel applies to the context (e.g. a mesh is selected).
     std::function<bool(const PanelContext &)> is_available =
         [](const PanelContext &) -> bool { return true; };
-    /// Adds the panel's properties to the layout; only called when
+    /// The panel's properties for the context; only called when
     /// is_available() passes.
-    std::function<void(const PanelContext &, Layout &)> fill_layout;
+    std::function<Layout(const PanelContext &)> build_layout;
 };
 
 /// Register (or replace, matched by id) a panel.

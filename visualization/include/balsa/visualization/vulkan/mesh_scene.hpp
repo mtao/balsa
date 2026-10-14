@@ -67,13 +67,18 @@ class MeshScene : public SceneBase {
     // ── Mesh management (scene graph API) ───────────────────────────
 
     // Add a mesh to the scene.  Creates a child Object under the root
-    // with a MeshInstance (showing a new, empty MeshGeometry), BasicShading
-    // and VulkanMeshDrawable.  Returns the Object so the caller can fill
-    // the geometry (or show another one) and set shading and transforms.
+    // with a MeshInstance showing `geometry` (a new, empty one if null),
+    // BasicShading and VulkanMeshDrawable.  Returns the Object, owned by
+    // the scene, so the caller can set shading and transforms.
     //
     // If the scene is already initialized, the VulkanMeshDrawable is
     // immediately init'd with the Film.
-    scene_graph::Object &add_mesh(const std::string &name = "Mesh");
+    scene_graph::Object &
+        add_mesh(const std::string &name = "Mesh",
+                 std::shared_ptr<scene_graph::MeshGeometry> geometry = nullptr);
+    // Same, taking ownership of a geometry value.
+    scene_graph::Object &add_mesh(const std::string &name,
+                                  scene_graph::MeshGeometry geometry);
 
     // Remove a mesh Object from the scene by pointer.  Releases its
     // VulkanMeshDrawable GPU resources and removes it from the scene
