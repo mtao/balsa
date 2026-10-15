@@ -153,9 +153,7 @@ auto draw_controls(const ctl::PanelContext &ctx) -> bool {
                 panel->expanded_by_default ? ImGuiTreeNodeFlags_DefaultOpen : 0;
             if (ImGui::CollapsingHeader(panel->label.c_str(), flags)) {
                 // Immediate mode: build the layout every frame.
-                ctl::Layout layout;
-                panel->fill_layout(ctx, layout);
-                changed |= draw_layout(layout);
+                changed |= draw_layout(panel->build_layout(ctx));
             }
             ImGui::PopID();
         }

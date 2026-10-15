@@ -157,8 +157,8 @@ void ControlsWidget::rebuild() {
 }
 
 auto ControlsWidget::build_panel(const ctl::Panel &panel) -> QWidget * {
-    auto &layout = *m_layouts.emplace_back(std::make_unique<ctl::Layout>());
-    panel.fill_layout(m_context, layout);
+    auto &layout = *m_layouts.emplace_back(
+        std::make_unique<ctl::Layout>(panel.build_layout(m_context)));
 
     auto *box = new QFrame;
     box->setFrameShape(QFrame::StyledPanel);

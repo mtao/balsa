@@ -145,7 +145,8 @@ auto role_property(std::string label, sg::BasicShading &shading,
 
 // ── Object tab ──────────────────────────────────────────────────────
 
-auto fill_object(sg::Object &object, Layout &layout) -> void {
+auto object_layout(sg::Object &object) -> Layout {
+    Layout layout;
     auto *obj = &object;
     layout.add_property(make_property("Name",
                      TextInput{ .get = [obj] { return obj->name; },
@@ -178,9 +179,11 @@ auto fill_object(sg::Object &object, Layout &layout) -> void {
         const auto *g = geometry_of();
         return g ? std::optional(g->edge_count()) : std::nullopt;
     }));
+    return layout;
 }
 
-auto fill_transform(sg::Object &object, Layout &layout) -> void {
+auto transform_layout(sg::Object &object) -> Layout {
+    Layout layout;
     auto *obj = &object;
     layout.add_property(vec3_property(
         "Translation", [obj] { return obj->translation(); },
@@ -195,11 +198,13 @@ auto fill_transform(sg::Object &object, Layout &layout) -> void {
         "Scale", [obj] { return obj->scale_factors(); },
         [obj](const sg::Vec3f &v) { obj->set_scale_factors(v); }));
     layout.add_property(button_property("Reset Transform", [obj] { obj->reset_transform(); }));
+    return layout;
 }
 
 // ── Data tab ────────────────────────────────────────────────────────
 
-auto fill_render_layers(sg::BasicShading &shading, Layout &layout) -> void {
+auto render_layers_layout(sg::BasicShading &shading) -> Layout {
+    Layout layout;
     auto &layers = shading.render_state().layers;
 
     auto &solid = layout.add_row("Solid");
@@ -219,9 +224,11 @@ auto fill_render_layers(sg::BasicShading &shading, Layout &layout) -> void {
     auto size = make_property("Size", float_input(layers.points.size, 0.1f, 20.0f, 0.1f, true));
     size.enabled_when = [&layers] { return layers.points.enabled; };
     pts.add_property(std::move(size));
+    return layout;
 }
 
-auto fill_shading(sg::BasicShading &shading, Layout &layout) -> void {
+auto shading_layout(sg::BasicShading &shading) -> Layout {
+    Layout layout;
     auto *sh = &shading;
     auto &rs = sh->render_state();
     auto constrain = [sh] { sh->render_state().constrain(sh->has_normals()); };
@@ -253,9 +260,11 @@ auto fill_shading(sg::BasicShading &shading, Layout &layout) -> void {
 
     layout.add_property(make_property("Face Culling",
                      choice_input<CullMode>({ "None", "Back", "Front" }, rs.cull_mode)));
+    return layout;
 }
 
-auto fill_color(sg::BasicShading &shading, Layout &layout) -> void {
+auto color_layout(sg::BasicShading &shading) -> Layout {
+    Layout layout;
     auto *sh = &shading;
     auto &rs = sh->render_state();
 
@@ -306,9 +315,11 @@ auto fill_color(sg::BasicShading &shading, Layout &layout) -> void {
         rs.scalar_min = 0.0f;
         rs.scalar_max = 1.0f;
     }));
+    return layout;
 }
 
-auto fill_attributes(sg::BasicShading &shading, Layout &layout) -> void {
+auto attributes_layout(sg::BasicShading &shading) -> Layout {
+    Layout layout;
     auto *sh = &shading;
     layout.add_property(role_property(
         "Position", *sh, &sg::BasicShading::position_binding,
@@ -349,21 +360,25 @@ auto fill_attributes(sg::BasicShading &shading, Layout &layout) -> void {
         return b.is_bound() && b.attribute()->component_count() > 1;
     };
     layout.add_property(std::move(component));
+    return layout;
 }
 
 // ── Material tab ────────────────────────────────────────────────────
 
-auto fill_material(sg::BasicShading &shading, Layout &layout) -> void {
+auto material_layout(sg::BasicShading &shading) -> Layout {
+    Layout layout;
     auto &m = shading.render_state().material;
     layout.add_property(make_property("Ambient", float_input(m.ambient_strength, 0.0f, 1.0f, 0.01f, true)));
     layout.add_property(make_property("Diffuse", float_input(m.diffuse_strength, 0.0f, 2.0f, 0.01f, true)));
     layout.add_property(make_property("Specular", float_input(m.specular_strength, 0.0f, 2.0f, 0.01f, true)));
     layout.add_property(make_property("Shininess", float_input(m.shininess, 1.0f, 256.0f, 1.0f, true)));
+    return layout;
 }
 
 // ── Scene tab ───────────────────────────────────────────────────────
 
-auto fill_lighting(sg::Light &headlight, Layout &layout) -> void {
+auto lighting_layout(sg::Light &headlight) -> Layout {
+    Layout layout;
     auto *light = &headlight;
     layout.add_property(bool_property("Enabled", light->enabled));
 
@@ -386,18 +401,19 @@ auto fill_lighting(sg::Light &headlight, Layout &layout) -> void {
                             light->color = sg::Vec3f(c.head<3>());
                         },
                     .show_alpha = false }));
+    return layout;
 }
 
-// Adapt a fill function taking the required state by reference; the
+// Adapt a layout builder taking the required state by reference; the
 // panel's is_available() guarantees that state exists.
-auto for_active_object(void (*fill)(sg::Object &, Layout &)) {
-    return [fill](const PanelContext &c, Layout &l) { fill(*c.active_object, l); };
+auto for_active_object(Layout (*build)(sg::Object &)) {
+    return [build](const PanelContext &c) { return build(*c.active_object); };
 }
-auto for_active_shading(void (*fill)(sg::BasicShading &, Layout &)) {
-    return [fill](const PanelContext &c, Layout &l) { fill(*c.active_shading(), l); };
+auto for_active_shading(Layout (*build)(sg::BasicShading &)) {
+    return [build](const PanelContext &c) { return build(*c.active_shading()); };
 }
-auto for_headlight(void (*fill)(sg::Light &, Layout &)) {
-    return [fill](const PanelContext &c, Layout &l) { fill(*c.headlight(), l); };
+auto for_headlight(Layout (*build)(sg::Light &)) {
+    return [build](const PanelContext &c) { return build(*c.headlight()); };
 }
 
 auto has_active_object(const PanelContext &c) -> bool {
@@ -425,50 +441,50 @@ auto register_builtin_panels() -> void {
                          .sort_key = 0,
                          .label = "Object",
                          .is_available = has_active_object,
-                         .fill_layout = for_active_object(fill_object) });
+                         .build_layout = for_active_object(object_layout) });
         register_panel({ .id = "object.transform",
                          .tab_id = "object",
                          .sort_key = 10,
                          .label = "Transform",
                          .is_available = has_active_object,
-                         .fill_layout = for_active_object(fill_transform) });
+                         .build_layout = for_active_object(transform_layout) });
         register_panel({ .id = "data.render_layers",
                          .tab_id = "data",
                          .sort_key = 0,
                          .label = "Render Layers",
                          .is_available = has_active_shading,
-                         .fill_layout = for_active_shading(fill_render_layers) });
+                         .build_layout = for_active_shading(render_layers_layout) });
         register_panel({ .id = "data.shading",
                          .tab_id = "data",
                          .sort_key = 10,
                          .label = "Shading & Rendering",
                          .is_available = has_active_shading,
-                         .fill_layout = for_active_shading(fill_shading) });
+                         .build_layout = for_active_shading(shading_layout) });
         register_panel({ .id = "data.color",
                          .tab_id = "data",
                          .sort_key = 20,
                          .label = "Color",
                          .is_available = has_active_shading,
-                         .fill_layout = for_active_shading(fill_color) });
+                         .build_layout = for_active_shading(color_layout) });
         register_panel({ .id = "data.attributes",
                          .tab_id = "data",
                          .sort_key = 30,
                          .label = "Attribute Bindings",
                          .expanded_by_default = false,
                          .is_available = has_active_shading,
-                         .fill_layout = for_active_shading(fill_attributes) });
+                         .build_layout = for_active_shading(attributes_layout) });
         register_panel({ .id = "material.response",
                          .tab_id = "material",
                          .sort_key = 0,
                          .label = "Material Response",
                          .is_available = has_lit_shading,
-                         .fill_layout = for_active_shading(fill_material) });
+                         .build_layout = for_active_shading(material_layout) });
         register_panel({ .id = "scene.lighting",
                          .tab_id = "scene",
                          .sort_key = 0,
                          .label = "Lighting",
                          .is_available = has_headlight,
-                         .fill_layout = for_headlight(fill_lighting) });
+                         .build_layout = for_headlight(lighting_layout) });
         return true;
     }();
     (void)once;

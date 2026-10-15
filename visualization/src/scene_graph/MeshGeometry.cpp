@@ -11,6 +11,14 @@ namespace balsa::scene_graph {
 
 MeshGeometry::MeshGeometry() = default;
 
+auto MeshGeometry::operator=(MeshGeometry &&other) noexcept -> MeshGeometry & {
+    if (&other == this) return *this;
+    _attributes = std::move(other._attributes);
+    _explicit_edges = other._explicit_edges;
+    _version = std::max(_version, other._version) + 1;
+    return *this;
+}
+
 auto MeshGeometry::add_user_attribute(MeshAttribute attr) -> MeshAttributeHandle {
     // Edge/face attributes should have one value per edge/face.
     const auto expected = [&]() -> std::optional<std::size_t> {
@@ -105,15 +113,14 @@ auto MeshGeometry::clear() -> void {
     ++_version;
 }
 
-auto MeshGeometry::copy_from(const MeshGeometry &other) -> void {
-    if (&other == this) return;
-    _attributes.clear();
-    _attributes.reserve(other._attributes.size());
-    for (const auto &a : other._attributes) {
-        _attributes.push_back(std::make_shared<MeshAttribute>(*a));
+auto MeshGeometry::clone() const -> MeshGeometry {
+    MeshGeometry copy;
+    copy._attributes.reserve(_attributes.size());
+    for (const auto &a : _attributes) {
+        copy._attributes.push_back(std::make_shared<MeshAttribute>(*a));
     }
-    _explicit_edges = other._explicit_edges;
-    ++_version;
+    copy._explicit_edges = _explicit_edges;
+    return copy;
 }
 
 } // namespace balsa::scene_graph

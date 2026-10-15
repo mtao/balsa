@@ -112,6 +112,7 @@ void VulkanMeshDrawable::release() {
     }
     _descriptor_sets.clear();
 
+    _synced_geometry = nullptr;
     _synced_geometry_version = 0;
     _synced_shading_version = 0;
     _initialized = false;
@@ -141,7 +142,8 @@ void VulkanMeshDrawable::sync_buffers(Film &film) {
     const auto *shading = object().find_feature<scene_graph::BasicShading>();
     const auto *geometry = shading ? shading->geometry() : nullptr;
     if (!geometry || !shading) return;
-    if (geometry->version() == _synced_geometry_version
+    if (geometry == _synced_geometry
+        && geometry->version() == _synced_geometry_version
         && shading->version() == _synced_shading_version) {
         return;
     }
@@ -192,6 +194,7 @@ void VulkanMeshDrawable::sync_buffers(Film &film) {
             static_cast<uint32_t>(edges.extent(1)));
     }
 
+    _synced_geometry = geometry;
     _synced_geometry_version = geometry->version();
     _synced_shading_version = shading->version();
 }

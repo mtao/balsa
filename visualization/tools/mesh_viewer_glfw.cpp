@@ -211,12 +211,12 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
             return;
         }
 
-        // Add a mesh Object to the scene graph and fill its MeshGeometry.
-        auto &mesh_obj = _scene->add_mesh(path.filename().string());
-        auto *geometry =
+        // Add a mesh Object to the scene graph showing the loaded geometry.
+        auto &mesh_obj = _scene->add_mesh(path.filename().string(),
+                                          viz::to_mesh_geometry(obj));
+        const auto *geometry =
             mesh_obj.find_feature<sg::MeshInstance>()->geometry();
         auto *shading = mesh_obj.find_feature<sg::BasicShading>();
-        viz::to_mesh_geometry(obj, *geometry);
 
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.
@@ -226,7 +226,9 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
         // transform to center and normalize the mesh.  The source data
         // stays pristine — normalization is applied via the Object's
         // local transform.
-        viz::normalize_to_unit_box(mesh_obj, *shading);
+        if (auto xf = viz::unit_box_transform(*shading)) {
+            mesh_obj.set_from_transform(*xf);
+        }
         _scene->panel_state().selected_object = &mesh_obj;
 
         // If the mesh has edges but no triangles, default to wireframe.
