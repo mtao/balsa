@@ -6,7 +6,9 @@
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/DrawableGroup.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
+#include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/visualization/vulkan/scene_base.hpp"
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
@@ -28,8 +30,8 @@ class VulkanMeshDrawable;
 //
 // Lifecycle:
 //   1. Construct MeshScene
-//   2. Add meshes via add_mesh() — creates Object + MeshData +
-//      VulkanMeshDrawable in the scene graph
+//   2. Add meshes via add_mesh() — creates an Object with a MeshInstance
+//      (showing a new MeshGeometry), BasicShading and VulkanMeshDrawable
 //   3. Call initialize(film) — creates pipeline manager, inits all
 //      VulkanMeshDrawables
 //   4. Each frame: Window calls begin_render_pass → draw → end_render_pass
@@ -65,12 +67,18 @@ class MeshScene : public SceneBase {
     // ── Mesh management (scene graph API) ───────────────────────────
 
     // Add a mesh to the scene.  Creates a child Object under the root
-    // with MeshData and VulkanMeshDrawable features.  Returns the
-    // Object so the caller can populate its MeshData and set transforms.
+    // with a MeshInstance showing `geometry` (a new, empty one if null),
+    // BasicShading and VulkanMeshDrawable.  Returns the Object, owned by
+    // the scene, so the caller can set shading and transforms.
     //
     // If the scene is already initialized, the VulkanMeshDrawable is
     // immediately init'd with the Film.
-    scene_graph::Object &add_mesh(const std::string &name = "Mesh");
+    scene_graph::Object &
+        add_mesh(const std::string &name = "Mesh",
+                 std::shared_ptr<scene_graph::MeshGeometry> geometry = nullptr);
+    // Same, taking ownership of a geometry value.
+    scene_graph::Object &add_mesh(const std::string &name,
+                                  scene_graph::MeshGeometry geometry);
 
     // Remove a mesh Object from the scene by pointer.  Releases its
     // VulkanMeshDrawable GPU resources and removes it from the scene
@@ -80,7 +88,8 @@ class MeshScene : public SceneBase {
     // Number of mesh Objects in the scene.
     std::size_t mesh_count() const;
 
-    // Access mesh Objects by index (children of root that have MeshData).
+    // Access mesh Objects by index (children of root that have a
+    // MeshInstance).
     // Returns nullptr if index is out of range.
     scene_graph::Object *mesh_object(std::size_t index);
     const scene_graph::Object *mesh_object(std::size_t index) const;
@@ -134,9 +143,10 @@ class MeshScene : public SceneBase {
     // ── Drawable helpers ───────────────────────────────────────────
 
     // Ensure an Object has a VulkanMeshDrawable.  If the Object has a
-    // MeshData feature but no VulkanMeshDrawable, one is emplaced and
-    // initialized (if the scene is already initialized).  No-op if the
-    // Object already has a VulkanMeshDrawable or has no MeshData.
+    // MeshInstance but no VulkanMeshDrawable, one is emplaced (with a
+    // BasicShading if missing) and initialized (if the scene is already
+    // initialized).  No-op if the Object already has a VulkanMeshDrawable
+    // or has no MeshInstance.
     void ensure_drawable(scene_graph::Object &obj);
 
     // ── Pipeline manager access (for advanced use) ──────────────────

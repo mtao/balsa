@@ -92,6 +92,8 @@ visualization_sources = [
   'src/vulkan/mesh_buffers.cpp',
   'src/vulkan/mesh_pipeline.cpp',
   'src/vulkan/mesh_scene.cpp',
+  'src/controls/Panel.cpp',
+  'src/controls/builtin_panels.cpp',
   'src/vulkan/vulkan_mesh_drawable.cpp',
   'src/shaders/abstract_shader.cpp',
   'src/shaders/shader_library.cpp',
@@ -101,7 +103,9 @@ visualization_sources = [
   'src/vulkan/window.cpp',
   'src/scene_graph/Object.cpp',
   'src/scene_graph/Camera.cpp',
-  'src/scene_graph/MeshData.cpp',
+  'src/scene_graph/MeshGeometry.cpp',
+  'src/scene_graph/RoleBinding.cpp',
+  'src/scene_graph/BasicShading.cpp',
   'src/scene_graph/DrawableGroup.cpp',
   'src/scene_graph/ImageData.cpp',
   'src/vulkan/VulkanTexture.cpp',
@@ -118,14 +122,14 @@ if get_option('qt')
   visualization_qt_sources = [
     'src/qt/vulkan/film.cpp',
     'src/qt/vulkan/window.cpp',
-    'src/qt/mesh_controls_widget.cpp',
+    'src/qt/ControlsWidget.cpp',
     'src/qt/vertical_tab_widget.cpp',
     'src/qt/SceneGraphModel.cpp',
     'src/qt/SceneGraphWidget.cpp',
     ]
 
   visualization_moc_headers = [
-    'include/balsa/visualization/qt/mesh_controls_widget.hpp',
+    'include/balsa/visualization/qt/ControlsWidget.hpp',
     'include/balsa/visualization/qt/vertical_tab_widget.hpp',
     'include/balsa/visualization/qt/SceneGraphModel.hpp',
     'include/balsa/visualization/qt/SceneGraphWidget.hpp',
@@ -153,6 +157,7 @@ if get_option('imgui')
   visualization_public_deps += imgui_dep
   visualization_sources += 'src/vulkan/imgui_integration.cpp'
   visualization_sources += 'src/vulkan/imgui/mesh_controls_panel.cpp'
+  visualization_sources += 'src/vulkan/imgui/controls.cpp'
   visualization_sources += 'src/vulkan/imgui/image_controls_panel.cpp'
   visualization_sources += imgui_backend_sources
 endif

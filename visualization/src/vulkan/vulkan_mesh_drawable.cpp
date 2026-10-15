@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
@@ -7,7 +8,36 @@
 
 #include <spdlog/spdlog.h>
 
+#include <zipper/MatrixBase.hxx>
+
+#include <vector>
+
 namespace balsa::visualization::vulkan {
+
+namespace {
+    // Bound values as element-major floats, as the vertex buffers expect.
+    // Contiguous float bindings are returned in place; anything else is
+    // converted into staging.
+    auto float_values(const scene_graph::RoleBinding &binding,
+                      std::vector<float> &staging) -> std::span<const float> {
+        return binding.visit([&](const auto &values) -> std::span<const float> {
+            using T = std::remove_const_t<
+                typename std::decay_t<decltype(values)>::element_type>;
+            const std::size_t n = values.extent(0) * values.extent(1);
+            if constexpr (std::is_same_v<T, float>) {
+                if (values.is_exhaustive()) return { values.data_handle(), n };
+            }
+            staging.resize(n);
+            ::zipper::MatrixBase out(
+                ::zipper::mdspan<float,
+                                 ::zipper::dextents<2>,
+                                 ::zipper::storage::col_major>(
+                    staging.data(), values.extent(0), values.extent(1)));
+            out = ::zipper::MatrixBase(values).template cast<float>();
+            return staging;
+        });
+    }
+} // namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
@@ -82,7 +112,9 @@ void VulkanMeshDrawable::release() {
     }
     _descriptor_sets.clear();
 
-    _synced_version = 0;
+    _synced_geometry = nullptr;
+    _synced_geometry_version = 0;
+    _synced_shading_version = 0;
     _initialized = false;
 }
 
@@ -92,8 +124,8 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
     if (!_initialized) return;
     if (!object().visible) return;
 
-    // Sync GPU buffers from MeshData if dirty.
-    sync_from_mesh_data(film);
+    // Re-upload GPU buffers if the geometry or its shading changed.
+    sync_buffers(film);
 
     if (!_buffers.has_positions()) return;
 
@@ -106,56 +138,65 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 
 // ── Private: sync ───────────────────────────────────────────────────
 
-void VulkanMeshDrawable::sync_from_mesh_data(Film &film) {
-    auto *mesh_data = object().find_feature<scene_graph::MeshData>();
-    if (!mesh_data) return;
-    if (mesh_data->version() == _synced_version) return;
+void VulkanMeshDrawable::sync_buffers(Film &film) {
+    const auto *shading = object().find_feature<scene_graph::BasicShading>();
+    const auto *geometry = shading ? shading->geometry() : nullptr;
+    if (!geometry || !shading) return;
+    if (geometry == _synced_geometry
+        && geometry->version() == _synced_geometry_version
+        && shading->version() == _synced_shading_version) {
+        return;
+    }
 
-    // Upload positions from the role binding's GPU-ready data.
-    const auto &pos = mesh_data->position_binding();
+    std::vector<float> staging;
+
+    // Upload positions.
+    const auto &pos = shading->position_binding();
     if (pos.is_bound()) {
-        const void *data = pos.raw_data();
-        std::size_t byte_size =
-            pos.size() * pos.component_count() * sizeof(float);
+        const auto data = float_values(pos, staging);
         _buffers.upload_positions(film,
-                                  data,
-                                  byte_size,
+                                  data.data(),
+                                  data.size_bytes(),
                                   static_cast<uint32_t>(pos.size()),
                                   pos.component_count());
     }
 
     // Upload normals.
-    const auto &nrm = mesh_data->normal_binding();
+    const auto &nrm = shading->normal_binding();
     if (nrm.is_bound()) {
-        const void *data = nrm.raw_data();
-        std::size_t byte_size =
-            nrm.size() * nrm.component_count() * sizeof(float);
-        _buffers.upload_normals(film, data, byte_size, nrm.component_count());
+        const auto data = float_values(nrm, staging);
+        _buffers.upload_normals(
+            film, data.data(), data.size_bytes(), nrm.component_count());
     }
 
     // Upload scalar field.
-    const auto &scl = mesh_data->scalar_binding();
+    const auto &scl = shading->scalar_binding();
     if (scl.is_bound()) {
-        const auto *fdata = static_cast<const float *>(scl.raw_data());
-        _buffers.upload_scalars(film,
-                                std::span<const float>(fdata, scl.size()));
+        _buffers.upload_scalars(film, float_values(scl, staging));
     }
 
     // Upload triangle indices.
-    if (mesh_data->has_triangle_indices()) {
-        auto tri_idx = mesh_data->triangle_indices();
+    if (geometry->has_triangle_indices()) {
+        // Column per triangle, so the buffer is element-major.
+        const auto triangles = geometry->triangle_indices();
         _buffers.upload_triangle_indices(
-            film, tri_idx, static_cast<uint32_t>(tri_idx.size() / 3));
+            film,
+            std::span(triangles.data_handle(), triangles.size()),
+            static_cast<uint32_t>(triangles.extent(1)));
     }
 
     // Upload edge indices.
-    if (mesh_data->has_edge_indices()) {
-        auto edge_idx = mesh_data->edge_indices();
+    if (geometry->has_edge_indices()) {
+        const auto edges = geometry->edge_indices();
         _buffers.upload_edge_indices(
-            film, edge_idx, static_cast<uint32_t>(edge_idx.size() / 2));
+            film,
+            std::span(edges.data_handle(), edges.size()),
+            static_cast<uint32_t>(edges.extent(1)));
     }
 
-    _synced_version = mesh_data->version();
+    _synced_geometry = geometry;
+    _synced_geometry_version = geometry->version();
+    _synced_shading_version = shading->version();
 }
 
 // ── Private: transform UBO ──────────────────────────────────────────
@@ -268,8 +309,9 @@ void VulkanMeshDrawable::bind_descriptor_set_for_layer(Film &film,
 // ── Private: multi-layer draw commands ──────────────────────────────
 
 void VulkanMeshDrawable::record_draw_commands(Film &film) {
-    auto *mesh_data = object().find_feature<scene_graph::MeshData>();
-    const auto &rs = mesh_data ? mesh_data->render_state() : MeshRenderState{};
+    const auto *shading = object().find_feature<scene_graph::BasicShading>();
+    const MeshRenderState rs =
+        shading ? shading->render_state() : MeshRenderState{};
     const auto &layers = rs.layers;
 
     auto cb = film.current_command_buffer();

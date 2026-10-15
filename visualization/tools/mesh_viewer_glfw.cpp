@@ -26,7 +26,8 @@
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
-#include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/BasicShading.hpp>
+#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/visualization/glfw/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
@@ -87,6 +88,10 @@ class MeshViewerScene : public vk_viz::MeshScene {
 
   private:
     vk_viz::ImGuiIntegration _imgui;
+  public:
+    vk_viz::imgui::MeshPanelState &panel_state() { return _panel_state; }
+
+  private:
     vk_viz::imgui::MeshPanelState _panel_state;
     OpenFileCallback _open_file_cb;
 
@@ -111,9 +116,6 @@ class MeshViewerScene : public vk_viz::MeshScene {
                     "Scene Graph", nullptr, &_panel_state.show_scene_panel);
                 ImGui::MenuItem(
                     "Properties", nullptr, &_panel_state.show_property_panel);
-                ImGui::MenuItem("Scene Lighting",
-                                nullptr,
-                                &_panel_state.show_lighting_panel);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -209,33 +211,38 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
             return;
         }
 
-        // Add a mesh Object to the scene graph and fill its MeshData.
-        auto &mesh_obj = _scene->add_mesh(path.filename().string());
-        auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
-        viz::to_mesh_data(obj, *mesh_data);
+        // Add a mesh Object to the scene graph showing the loaded geometry.
+        auto &mesh_obj = _scene->add_mesh(path.filename().string(),
+                                          viz::to_mesh_geometry(obj));
+        const auto *geometry =
+            mesh_obj.find_feature<sg::MeshInstance>()->geometry();
+        auto *shading = mesh_obj.find_feature<sg::BasicShading>();
 
         // Apply constraints: auto-selects shading/normal_source based
         // on whether the mesh actually has normal data.
-        mesh_data->render_state().constrain(mesh_data->has_normals());
+        shading->render_state().constrain(shading->has_normals());
 
         // Compute bounding box from the position binding and set Object
         // transform to center and normalize the mesh.  The source data
         // stays pristine — normalization is applied via the Object's
         // local transform.
-        viz::normalize_to_unit_box(mesh_obj, *mesh_data);
+        if (auto xf = viz::unit_box_transform(*shading)) {
+            mesh_obj.set_from_transform(*xf);
+        }
+        _scene->panel_state().selected_object = &mesh_obj;
 
         // If the mesh has edges but no triangles, default to wireframe.
-        if (!mesh_data->has_triangle_indices()
-            && mesh_data->has_edge_indices()) {
-            mesh_data->render_state().layers.solid.enabled = false;
-            mesh_data->render_state().layers.wireframe.enabled = true;
+        if (!geometry->has_triangle_indices()
+            && geometry->has_edge_indices()) {
+            shading->render_state().layers.solid.enabled = false;
+            shading->render_state().layers.wireframe.enabled = true;
         }
 
         spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
                      mesh_obj.name,
-                     mesh_data->vertex_count(),
-                     mesh_data->triangle_count(),
-                     mesh_data->edge_count());
+                     shading->vertex_count(),
+                     geometry->triangle_count(),
+                     geometry->edge_count());
     }
 
   protected:

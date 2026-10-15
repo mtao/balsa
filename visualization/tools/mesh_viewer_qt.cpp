@@ -37,10 +37,11 @@
 // that transitively include TBB (via zipper <execution>), then restore it.
 #undef emit
 
-#include <balsa/scene_graph/MeshData.hpp>
+#include <balsa/scene_graph/BasicShading.hpp>
+#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/visualization/qt/SceneGraphWidget.hpp>
-#include <balsa/visualization/qt/mesh_controls_widget.hpp>
+#include <balsa/visualization/qt/ControlsWidget.hpp>
 #include <balsa/visualization/qt/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
@@ -64,7 +65,7 @@ namespace {
 
     // ── MeshViewerMainWindow ────────────────────────────────────────────
     //
-    // QMainWindow that embeds a Qt Vulkan window and a MeshControlsWidget
+    // QMainWindow that embeds a Qt Vulkan window and a ControlsWidget
     // dock.  Holds the scene shared_ptr until it's transferred to the
     // Vulkan window.
 
@@ -115,11 +116,11 @@ namespace {
                                             | Qt::RightDockWidgetArea);
             addDockWidget(Qt::RightDockWidgetArea, _outliner_dock);
 
-            // ── Create the mesh properties dock ──────────────────────────
-            _controls = new viz::qt::MeshControlsWidget();
+            // ── Create the properties dock ──────────────────────────
+            _controls = new viz::qt::ControlsWidget();
             _controls->set_scene(_scene.get());
 
-            _controls_dock = new QDockWidget("Mesh Properties", this);
+            _controls_dock = new QDockWidget("Properties", this);
             _controls_dock->setWidget(_controls);
             _controls_dock->setAllowedAreas(Qt::LeftDockWidgetArea
                                             | Qt::RightDockWidgetArea);
@@ -133,11 +134,11 @@ namespace {
             connect(_outliner,
                     &viz::qt::SceneGraphWidget::object_selected,
                     _controls,
-                    &viz::qt::MeshControlsWidget::set_selected_object);
+                    &viz::qt::ControlsWidget::set_selected_object);
 
             // Re-render when controls or outliner change
             connect(_controls,
-                    &viz::qt::MeshControlsWidget::scene_changed,
+                    &viz::qt::ControlsWidget::scene_changed,
                     _vk_window,
                     [this] -> void { _vk_window->requestUpdate(); });
             connect(_outliner,
@@ -187,7 +188,7 @@ namespace {
         viz::qt::vulkan::Window *_vk_window = nullptr;
         std::shared_ptr<vk_viz::MeshScene> _scene;
         std::shared_ptr<vk_viz::OrbitCameraController> _camera;
-        viz::qt::MeshControlsWidget *_controls = nullptr;
+        viz::qt::ControlsWidget *_controls = nullptr;
         viz::qt::SceneGraphWidget *_outliner = nullptr;
         QDockWidget *_outliner_dock = nullptr;
         QDockWidget *_controls_dock = nullptr;
@@ -226,7 +227,7 @@ namespace {
             // Scene Lighting is part of the Mesh Properties dock, so we
             // just ensure the properties dock is visible when the user
             // wants lighting controls.  (The Scene Lighting group is
-            // always present inside MeshControlsWidget.)
+            // always present inside ControlsWidget.)
         }
 
         void load_mesh(const std::filesystem::path &path) {
@@ -244,34 +245,38 @@ namespace {
                 return;
             }
 
-            // Add a mesh Object to the scene graph and fill its MeshData.
-            auto &mesh_obj = _scene->add_mesh(path.filename().string());
-            auto *mesh_data = mesh_obj.find_feature<sg::MeshData>();
-            viz::to_mesh_data(obj, *mesh_data);
+            // Add a mesh Object to the scene graph showing the loaded geometry.
+            auto &mesh_obj = _scene->add_mesh(path.filename().string(),
+                                              viz::to_mesh_geometry(obj));
+            const auto *geometry =
+                mesh_obj.find_feature<sg::MeshInstance>()->geometry();
+            auto *shading = mesh_obj.find_feature<sg::BasicShading>();
 
             // Apply constraints: auto-selects shading/normal_source based
             // on whether the mesh actually has normal data.
-            mesh_data->render_state().constrain(mesh_data->has_normals());
+            shading->render_state().constrain(shading->has_normals());
 
             // Compute bounding box from the position binding and set Object
             // transform to center and normalize the mesh.  The source data
             // stays pristine -- normalization is applied via the Object's
             // local transform.
-            viz::normalize_to_unit_box(mesh_obj, *mesh_data);
+            if (auto xf = viz::unit_box_transform(*shading)) {
+                mesh_obj.set_from_transform(*xf);
+            }
 
             // If the mesh has edges but no triangles, default to wireframe
             // so that edge-only meshes are visible immediately.
-            if (!mesh_data->has_triangle_indices()
-                && mesh_data->has_edge_indices()) {
-                mesh_data->render_state().layers.solid.enabled = false;
-                mesh_data->render_state().layers.wireframe.enabled = true;
+            if (!geometry->has_triangle_indices()
+                && geometry->has_edge_indices()) {
+                shading->render_state().layers.solid.enabled = false;
+                shading->render_state().layers.wireframe.enabled = true;
             }
 
             spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
                          mesh_obj.name,
-                         mesh_data->vertex_count(),
-                         mesh_data->triangle_count(),
-                         mesh_data->edge_count());
+                         shading->vertex_count(),
+                         geometry->triangle_count(),
+                         geometry->edge_count());
 
             // Refresh the outliner and select the new mesh (this also
             // updates the properties panel via the object_selected signal).

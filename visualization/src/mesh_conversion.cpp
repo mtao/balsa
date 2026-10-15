@@ -1,59 +1,36 @@
 #include "balsa/visualization/mesh_conversion.hpp"
 
-#include "balsa/scene_graph/MeshData.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
 
-#include <cstdint>
-#include <span>
-#include <vector>
+#include <algorithm>
 
 namespace balsa::visualization {
 
-namespace {
-
-    // Flatten a column-vector matrix (D rows x N cols) into an
-    // element-major buffer: x0 y0 z0 x1 y1 z1 ...
-    template <typename T, typename Matrix>
-    auto flatten_columns(const Matrix &M) -> std::vector<T> {
-        std::vector<T> out;
-        out.reserve(M.rows() * M.cols());
-        for (std::size_t j = 0; j < M.cols(); ++j) {
-            for (std::size_t i = 0; i < M.rows(); ++i) {
-                out.push_back(static_cast<T>(M(i, j)));
-            }
-        }
-        return out;
-    }
-
-} // namespace
-
-auto to_mesh_data(const geometry::triangle_mesh::OBJMesh<float, 3> &obj,
-                  scene_graph::MeshData &mesh_data) -> void {
+auto to_mesh_geometry(const geometry::triangle_mesh::OBJMesh<float, 3> &obj)
+    -> scene_graph::MeshGeometry {
     using scene_graph::AttributeDomain;
     const auto &P = obj.position;
     const auto &N = obj.normal;
 
-    mesh_data.clear();
-    mesh_data.add_attribute(
-        "vertex_positions",
-        AttributeDomain::Vertex,
-        3,
-        std::span<const float>(flatten_columns<float>(P.vertices)));
+    // Vertices and triangles are column-per-element matrices, which is
+    // exactly the (components, elements) shape MeshGeometry expects.
+    scene_graph::MeshGeometry geometry;
+    geometry.add_attribute("vertex_positions",
+                            AttributeDomain::Vertex,
+                            P.vertices.expression().as_mdspan());
 
     // OBJ allows independent normal indices, which do not map
     // per-vertex; only use normals indexed like the positions.
-    auto tris = flatten_columns<uint32_t>(P.triangles);
     if (N.vertices.cols() == P.vertices.cols()
-        && flatten_columns<uint32_t>(N.triangles) == tris) {
-        mesh_data.add_attribute(
-            "vertex_normals",
-            AttributeDomain::Vertex,
-            3,
-            std::span<const float>(flatten_columns<float>(N.vertices)));
+        && std::ranges::equal(N.triangles.expression().as_std_span(),
+                              P.triangles.expression().as_std_span())) {
+        geometry.add_attribute("vertex_normals",
+                                AttributeDomain::Vertex,
+                                N.vertices.expression().as_mdspan());
     }
 
-    mesh_data.set_triangle_indices(
-        ::zipper::mdspan<const uint32_t, ::zipper::dextents<2>>(
-            tris.data(), tris.size() / 3, 3));
+    geometry.set_triangle_indices(P.triangles.expression().as_mdspan());
+    return geometry;
 }
 
 } // namespace balsa::visualization

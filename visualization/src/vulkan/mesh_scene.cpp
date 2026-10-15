@@ -93,9 +93,13 @@ void MeshScene::release_vulkan_resources() {
 
 // ── Mesh management ──────────────────────────────────────────────────
 
-scene_graph::Object &MeshScene::add_mesh(const std::string &name) {
+scene_graph::Object &
+    MeshScene::add_mesh(const std::string &name,
+                        std::shared_ptr<scene_graph::MeshGeometry> geometry) {
+    if (!geometry) geometry = std::make_shared<scene_graph::MeshGeometry>();
     auto &obj = _scene_root.add_child(name);
-    obj.emplace_feature<scene_graph::MeshData>();
+    obj.emplace_feature<scene_graph::MeshInstance>(std::move(geometry));
+    obj.emplace_feature<scene_graph::BasicShading>();
     auto &vmd = obj.emplace_feature<VulkanMeshDrawable>(
       _drawable_group, _pipeline_manager);
 
@@ -107,10 +111,19 @@ scene_graph::Object &MeshScene::add_mesh(const std::string &name) {
     return obj;
 }
 
+scene_graph::Object &MeshScene::add_mesh(const std::string &name,
+                                         scene_graph::MeshGeometry geometry) {
+    return add_mesh(
+        name, std::make_shared<scene_graph::MeshGeometry>(std::move(geometry)));
+}
+
 void MeshScene::ensure_drawable(scene_graph::Object &obj) {
-    // If the Object has a MeshData but no VulkanMeshDrawable, add one.
-    if (!obj.find_feature<scene_graph::MeshData>()) return;
+    // If the Object shows a mesh but has no VulkanMeshDrawable, add one.
+    if (!obj.find_feature<scene_graph::MeshInstance>()) return;
     if (obj.find_feature<VulkanMeshDrawable>()) return;
+    if (!obj.find_feature<scene_graph::BasicShading>()) {
+        obj.emplace_feature<scene_graph::BasicShading>();
+    }
 
     auto &vmd = obj.emplace_feature<VulkanMeshDrawable>(
       _drawable_group, _pipeline_manager);
@@ -156,7 +169,7 @@ bool MeshScene::remove_mesh(const scene_graph::Object *obj) {
 std::size_t MeshScene::mesh_count() const {
     std::size_t count = 0;
     for (auto &child : _scene_root.children()) {
-        if (child->find_feature<scene_graph::MeshData>()) {
+        if (child->find_feature<scene_graph::MeshInstance>()) {
             ++count;
         }
     }
@@ -166,7 +179,7 @@ std::size_t MeshScene::mesh_count() const {
 scene_graph::Object *MeshScene::mesh_object(std::size_t index) {
     std::size_t count = 0;
     for (auto &child : _scene_root.children()) {
-        if (child->find_feature<scene_graph::MeshData>()) {
+        if (child->find_feature<scene_graph::MeshInstance>()) {
             if (count == index) return child.get();
             ++count;
         }
@@ -177,7 +190,7 @@ scene_graph::Object *MeshScene::mesh_object(std::size_t index) {
 const scene_graph::Object *MeshScene::mesh_object(std::size_t index) const {
     std::size_t count = 0;
     for (auto &child : _scene_root.children()) {
-        if (child->find_feature<scene_graph::MeshData>()) {
+        if (child->find_feature<scene_graph::MeshInstance>()) {
             if (count == index) return child.get();
             ++count;
         }
