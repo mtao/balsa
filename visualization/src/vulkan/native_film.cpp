@@ -11,13 +11,13 @@
 namespace {
 
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-  debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                VkDebugUtilsMessageTypeFlagsEXT messageType,
-                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+static VKAPI_ATTR vk::Bool32 VKAPI_CALL
+  debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                vk::DebugUtilsMessageTypeFlagsEXT typeFlags,
+                const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
                 void * /*pUserData*/) {
     spdlog::level::level_enum slevel = spdlog::level::debug;
-    switch (static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity)) {
+    switch (messageSeverity) {
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
         slevel = spdlog::level::debug;
         break;
@@ -38,7 +38,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL
         logger = spdlog::default_logger();
     }
 
-    auto typeFlags = static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(messageType);
     std::string_view type;
     if (typeFlags & vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation) {
         type = "Validation";
