@@ -13,9 +13,10 @@ namespace balsa::visualization::shaders {
 // Uber-shader for mesh rendering.
 //
 // Compiles mesh.vert and mesh.frag with #define permutations driven by
-// a MeshRenderState and a primitive topology.  For the
-// COLOR_SCALAR_FIELD path, the selected colormap GLSL function is
-// prepended to the fragment source.
+// a MeshRenderState, a colormap and a primitive topology.  A non-empty
+// colormap selects the COLOR_SCALAR_FIELD path and its GLSL function
+// (from the colormap_shaders subproject) is prepended to the fragment
+// source; otherwise the mesh is drawn in its uniform colour.
 //
 // This is a header-only template (like FlatShader) so that the
 // embedding-dimension define is preserved.
@@ -23,10 +24,11 @@ template<scene_graph::concepts::embedding_traits ET>
 class MeshShader : public Shader<ET> {
   public:
     MeshShader(const vulkan::MeshRenderState &state,
+               std::string colormap = {},
                vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList,
                bool wireframe_overlay = false,
                const ShaderLibrary &library = builtin_shader_library())
-      : _state(&state), _topology(topology), _wireframe_overlay(wireframe_overlay),
+      : _state(&state), _colormap(std::move(colormap)), _topology(topology), _wireframe_overlay(wireframe_overlay),
         _library(library) {}
 
     void add_compile_options(shaderc::CompileOptions &opts) const override;
@@ -35,6 +37,7 @@ class MeshShader : public Shader<ET> {
 
   private:
     const vulkan::MeshRenderState *_state;
+    std::string _colormap;
     vk::PrimitiveTopology _topology;
     bool _wireframe_overlay;
     ShaderLibrary _library;
@@ -59,22 +62,14 @@ void MeshShader<ET>::add_compile_options(shaderc::CompileOptions &opts) const {
         break;
     }
 
-    // Color source
-    switch (_state->color_source) {
-    case vulkan::ColorSource::Uniform:
-        opts.AddMacroDefinition("COLOR_UNIFORM");
-        break;
-    case vulkan::ColorSource::PerVertex:
-        opts.AddMacroDefinition("COLOR_PER_VERTEX");
-        break;
-    case vulkan::ColorSource::ScalarField:
-        opts.AddMacroDefinition("COLOR_SCALAR_FIELD");
-        break;
-    }
+    // Colour: by the scalar through a colormap, or uniform.
+    opts.AddMacroDefinition(_colormap.empty() ? "COLOR_UNIFORM" : "COLOR_SCALAR_FIELD");
 
     // Normal source
     if (_state->normal_source == vulkan::NormalSource::FromAttribute) {
         opts.AddMacroDefinition("HAS_NORMALS");
+    } else if (_state->normal_source == vulkan::NormalSource::None) {
+        opts.AddMacroDefinition("SHADING_UNLIT");
     }
 
     // Topology-based defines — wireframe and point passes bypass lighting
@@ -106,10 +101,10 @@ std::vector<uint32_t> MeshShader<ET>::frag_spirv() const {
     const auto source = _library.find("mesh/fragment");
     std::string frag_source{source ? std::string_view{*source} : std::string_view{}};
 
-    if (_state->color_source == vulkan::ColorSource::ScalarField) {
+    if (!_colormap.empty()) {
         // The colormap shaders have NO #version directive — they are pure
         // function definitions exporting `vec4 colormap(float x)`.
-        const auto colormap_source = colormap_shader_source(_state->colormap_name);
+        const auto colormap_source = colormap_shader_source(_colormap);
         if (!colormap_source) {
             return {};
         }

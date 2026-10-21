@@ -9,8 +9,9 @@
 //   SHADING_PHONG        — smooth per-fragment lighting using interpolated normals
 //   SHADING_GOURAUD      — lighting computed per-vertex, lit color interpolated
 //   COLOR_UNIFORM        — single uniform color
-//   COLOR_PER_VERTEX     — per-vertex RGBA attribute
-//   COLOR_SCALAR_FIELD   — per-vertex scalar (colormap in fragment shader)
+//   COLOR_SCALAR_FIELD   — per-vertex raw attribute (1–4 components) reduced
+//                          to a scalar by u_scalar_select (colormap in
+//                          fragment shader)
 //
 // Normal handling:
 //   When HAS_NORMALS is defined, per-vertex normals are transformed
@@ -33,12 +34,8 @@ layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 #endif
 
-#if defined(COLOR_PER_VERTEX)
-layout(location = 2) in vec4 inColor;
-#endif
-
 #if defined(COLOR_SCALAR_FIELD)
-layout(location = 3) in float inScalar;
+layout(location = 3) in vec4 inScalar;   // unused components read as (0,0,0,1)
 #endif
 
 // --- Uniform buffer objects ---
@@ -57,6 +54,7 @@ layout(binding = 1) uniform Material {
     vec4 u_specular_params;     // xyz = specular_color, w = shininess
     vec4 u_scalar_params;       // x = scalar_min, y = scalar_max, z = point_size, w = two_sided
     vec4 u_layer_color;         // rgba — per-layer color (wireframe, point, or solid override)
+    vec4 u_scalar_select;       // x = mode (0 component, 1 p-norm), y = component or p, z = component count
 };
 
 // --- Outputs to fragment shader ---
@@ -77,6 +75,23 @@ layout(location = 2) out vec4 v_color;
 layout(location = 3) out float v_scalar;
 #endif
 
+#if defined(COLOR_SCALAR_FIELD)
+// One scalar from the raw attribute: a component, or the p-norm over the
+// attribute's components (missing components must not contribute).
+float reduce_scalar(vec4 v) {
+    int n = int(u_scalar_select.z);
+    if (u_scalar_select.x < 0.5) {
+        int c = int(u_scalar_select.y);
+        return c < n ? v[c] : 0.0;
+    }
+    float p = max(u_scalar_select.y, 1.0);
+    float sum = 0.0;
+    for (int i = 0; i < n; ++i) {
+        sum += pow(abs(v[i]), p);
+    }
+    return pow(sum, 1.0 / p);
+}
+#endif
 
 void main() {
     vec4 world_pos = model * vec4(inPosition, 1.0);
@@ -90,10 +105,8 @@ void main() {
 #endif
 
     // Base colour / scalar pass-through
-#if defined(COLOR_PER_VERTEX)
-    v_color = inColor;
-#elif defined(COLOR_SCALAR_FIELD)
-    v_scalar = inScalar;
+#if defined(COLOR_SCALAR_FIELD)
+    v_scalar = reduce_scalar(inScalar);
     v_color = vec4(1.0);   // placeholder; colormap applied in fragment
 #else
     // COLOR_UNIFORM (default)

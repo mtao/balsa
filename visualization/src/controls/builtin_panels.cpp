@@ -10,13 +10,11 @@
 #include "balsa/scene_graph/MeshGeometry.hpp"
 #include "balsa/scene_graph/MeshInstance.hpp"
 #include "balsa/scene_graph/Object.hpp"
-#include "balsa/visualization/colormap_list.hpp"
 #include "balsa/visualization/controls/Panel.hpp"
 
 namespace balsa::visualization::controls {
 
 namespace sg = scene_graph;
-using vulkan::ColorSource;
 using vulkan::CullMode;
 using vulkan::NormalSource;
 using vulkan::ShadingModel;
@@ -27,8 +25,20 @@ auto has_active_shading(const PanelContext &ctx) -> bool {
     return ctx.active_shading() != nullptr;
 }
 
+auto surface_renderer(const sg::MeshRenderLayer *layer) -> sg::PhongSurfaceRenderer * {
+    return layer ? dynamic_cast<sg::PhongSurfaceRenderer *>(layer->renderer.get())
+                 : nullptr;
+}
+
 auto is_lit(const sg::BasicShading &shading) -> bool {
-    return shading.render_state().normal_source != NormalSource::None;
+    const auto *renderer = surface_renderer(shading.find_layer("balsa.phong_surface"));
+    return renderer && renderer->state.normal_source != NormalSource::None;
+}
+
+// Whether role of layer resolves to an attribute of the shading's geometry.
+auto has_role(const sg::BasicShading &shading, const sg::MeshRenderLayer &layer,
+              std::string_view role) -> bool {
+    return shading.layer_attribute(layer, role).valid();
 }
 
 auto make_property(std::string label, auto widget) -> Property {
@@ -86,9 +96,9 @@ auto button_property(std::string label, std::function<void()> run) -> Property {
     return make_property(std::move(label), Button{ .on_click = std::move(run) });
 }
 
-// Role choices: option 0 is "(none)", option k is the k-th user
-// attribute of the shading's geometry (reserved topology attributes are
-// not offered).
+// Role choices: option 0 is the renderer's default, option 1 "(none)",
+// option k + 2 the k-th user attribute of the shading's geometry
+// (reserved topology attributes are not offered).
 
 auto attribute_handles(const sg::BasicShading &shading)
     -> std::vector<sg::MeshAttributeHandle> {
@@ -101,46 +111,67 @@ auto attribute_handles(const sg::BasicShading &shading)
           }));
 }
 
-auto attribute_names(const sg::BasicShading &shading)
-    -> std::vector<std::string> {
-    std::vector<std::string> names{ "(none)" };
-    for (const auto &a : attribute_handles(shading)) names.push_back(a->name);
-    return names;
-}
-
-auto bound_index(const sg::BasicShading &shading, const sg::RoleBinding &b)
-    -> int {
-    if (!b.is_bound()) return 0;
-    const auto handles = attribute_handles(shading);
-    const auto it = std::ranges::find(handles, b.attribute());
-    return it == handles.end()
-               ? 0
-               : static_cast<int>(std::distance(handles.begin(), it)) + 1;
-}
-
-template <typename Assign, typename Clear>
-auto role_property(std::string label, sg::BasicShading &shading,
-                   const sg::RoleBinding &(sg::BasicShading::*binding)() const,
-                   Assign assign, Clear clear) -> Property {
-    return make_property(
-        std::move(label),
+auto role_property(sg::BasicShading &shading, sg::MeshLayerId layer_id,
+                   const sg::MeshRoleRequirement &requirement) -> Property {
+    auto *sh = &shading;
+    const std::string role = requirement.id;
+    const std::string default_label =
+        requirement.default_attribute.empty()
+            ? std::string("(default: none)")
+            : std::format("(default: {})", requirement.default_attribute);
+    auto property = make_property(
+        role,
         ChoiceInput{
-            .options = [&shading] { return attribute_names(shading); },
+            .options =
+                [sh, default_label] {
+                    std::vector<std::string> names{default_label, "(none)"};
+                    for (const auto &a : attribute_handles(*sh)) names.push_back(a->name);
+                    return names;
+                },
             .get_index =
-                [&shading, binding] {
-                    return bound_index(shading, (shading.*binding)());
+                [sh, layer_id, role] {
+                    const auto *layer = sh->find_layer(layer_id);
+                    const auto *binding = layer ? layer->binding(role) : nullptr;
+                    if (binding == nullptr) return 0;
+                    if (!binding->attribute) return 1;
+                    const auto handles = attribute_handles(*sh);
+                    const auto it = std::ranges::find(handles, binding->attribute->name,
+                                                      [](const auto &a) { return a->name; });
+                    return it == handles.end()
+                               ? 1
+                               : static_cast<int>(std::distance(handles.begin(), it)) + 2;
                 },
             .set_index =
-                [&shading, assign, clear](const int &i) {
-                    const auto handles = attribute_handles(shading);
+                [sh, layer_id, role](const int &i) {
+                    const auto handles = attribute_handles(*sh);
                     if (i <= 0) {
-                        clear(shading);
-                    } else if (static_cast<std::size_t>(i - 1) < handles.size()) {
-                        assign(shading, handles[static_cast<std::size_t>(i - 1)]);
+                        sh->reset_layer_role(layer_id, role);
+                    } else if (i == 1) {
+                        sh->clear_layer_role(layer_id, role);
+                    } else if (static_cast<std::size_t>(i - 2) < handles.size()) {
+                        sh->assign_layer_role(layer_id, role,
+                                              handles[static_cast<std::size_t>(i - 2)]);
                     }
-                    shading.render_state().constrain(shading.has_normals());
+                    auto *layer = sh->find_layer(layer_id);
+                    if (auto *renderer = surface_renderer(layer)) {
+                        renderer->state.constrain(has_role(*sh, *layer, sg::normal_role));
+                    }
+                },
+            .option_enabled =
+                [sh, requirement](int i) {
+                    if (i < 2) return true;
+                    const auto handles = attribute_handles(*sh);
+                    const auto k = static_cast<std::size_t>(i - 2);
+                    return k < handles.size() && requirement.accepts(*handles[k]);
                 },
         });
+    property.tooltip = std::format("{} attribute, {}-{} components",
+                                   requirement.domain == sg::AttributeDomain::Vertex ? "vertex"
+                                   : requirement.domain == sg::AttributeDomain::Edge ? "edge"
+                                                                                     : "face",
+                                   requirement.min_components,
+                                   requirement.max_components);
+    return property;
 }
 
 // ── Object tab ──────────────────────────────────────────────────────
@@ -167,9 +198,15 @@ auto object_layout(sg::Object &object) -> Layout {
                         return n ? std::to_string(*n) : std::string{};
                     } });
     };
-    info.add_property(count("Vertices", [obj] {
+    info.add_property(count("Vertices", [obj]() -> std::optional<std::size_t> {
         const auto *shading = obj->find_feature<sg::BasicShading>();
-        return shading ? std::optional(shading->vertex_count()) : std::nullopt;
+        if (shading == nullptr) return std::nullopt;
+        for (const auto &layer : shading->render_layers()) {
+            if (auto p = shading->layer_attribute(layer, sg::position_role)) {
+                return p->count();
+            }
+        }
+        return std::nullopt;
     }));
     info.add_property(count("Triangles", [geometry_of] {
         const auto *g = geometry_of();
@@ -205,50 +242,49 @@ auto transform_layout(sg::Object &object) -> Layout {
 
 auto render_layers_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
-    auto &layers = shading.render_state().layers;
-
-    auto &solid = layout.add_row("Solid");
-    solid.add_property(bool_property("Enabled", layers.solid.enabled));
-    solid.add_property(color_property("Color", layers.solid.color));
-
-    auto &wire = layout.add_row("Wireframe");
-    wire.add_property(bool_property("Enabled", layers.wireframe.enabled));
-    wire.add_property(color_property("Color", layers.wireframe.color));
-    auto width = make_property("Width", float_input(layers.wireframe.width, 0.5f, 5.0f, 0.1f, true));
-    width.enabled_when = [&layers] { return layers.wireframe.enabled; };
-    wire.add_property(std::move(width));
-
-    auto &pts = layout.add_row("Points");
-    pts.add_property(bool_property("Enabled", layers.points.enabled));
-    pts.add_property(color_property("Color", layers.points.color));
-    auto size = make_property("Size", float_input(layers.points.size, 0.1f, 20.0f, 0.1f, true));
-    size.enabled_when = [&layers] { return layers.points.enabled; };
-    pts.add_property(std::move(size));
+    for (auto &layer : shading.render_layers()) {
+        if (!layer.renderer) continue;
+        auto renderer_layout =
+            layer.renderer->build_controls(sg::MeshLayerContext(shading, layer.id));
+        renderer_layout.add_property(bool_property("Enabled", layer.enabled));
+        auto &bindings = renderer_layout.add_column("Bindings");
+        for (const auto &requirement : layer.renderer->required_roles()) {
+            bindings.add_property(role_property(shading, layer.id, requirement));
+        }
+        layout.add_layout(std::move(renderer_layout));
+    }
     return layout;
 }
 
 auto shading_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
     auto *sh = &shading;
-    auto &rs = sh->render_state();
-    auto constrain = [sh] { sh->render_state().constrain(sh->has_normals()); };
+    auto *layer = sh->find_layer("balsa.phong_surface");
+    auto *renderer = surface_renderer(layer);
+    if (!renderer) return layout;
+    auto &rs = renderer->state;
+    const sg::MeshLayerId layer_id = layer->id;
+    auto has_normals = [sh, layer_id] {
+        const auto *l = sh->find_layer(layer_id);
+        return l && has_role(*sh, *l, sg::normal_role);
+    };
+    auto constrain = [renderer, has_normals] { renderer->state.constrain(has_normals()); };
     constrain(); // state may have been set before normals were known
 
     auto normals = choice_input<NormalSource>(
         { "From Attribute", "Computed (flat)", "None (unlit)" },
         rs.normal_source, constrain);
-    normals.option_enabled = [sh](int i) {
-        return i != static_cast<int>(NormalSource::FromAttribute)
-               || sh->has_normals();
+    normals.option_enabled = [has_normals](int i) {
+        return i != static_cast<int>(NormalSource::FromAttribute) || has_normals();
     };
     layout.add_property(make_property("Normals", std::move(normals)));
 
     auto model = choice_input<ShadingModel>({ "Flat", "Gouraud", "Phong" },
                                             rs.shading, constrain);
-    model.option_enabled = [sh](int i) {
+    model.option_enabled = [renderer](int i) {
         return i == static_cast<int>(ShadingModel::Flat)
-               || sh->render_state().normal_source
-                      == NormalSource::FromAttribute;
+               || renderer->state.normal_source
+                       == NormalSource::FromAttribute;
     };
     auto model_property = make_property("Shading", std::move(model));
     model_property.visible_when = [sh] { return is_lit(*sh); };
@@ -263,111 +299,13 @@ auto shading_layout(sg::BasicShading &shading) -> Layout {
     return layout;
 }
 
-auto color_layout(sg::BasicShading &shading) -> Layout {
-    Layout layout;
-    auto *sh = &shading;
-    auto &rs = sh->render_state();
-
-    auto source = choice_input<ColorSource>(
-        { "Uniform", "Per-Vertex", "Scalar Field" }, rs.color_source);
-    source.option_enabled = [sh](int i) {
-        return i != static_cast<int>(ColorSource::ScalarField)
-               || sh->has_scalar_field();
-    };
-    layout.add_property(make_property("Source", std::move(source)));
-
-    auto uniform = color_property("Color", rs.uniform_color);
-    uniform.visible_when = [&rs] { return rs.color_source == ColorSource::Uniform; };
-    layout.add_property(std::move(uniform));
-
-    auto &scalar = layout.add_column("Scalar Field");
-    scalar.set_visible_when(
-        [&rs] { return rs.color_source == ColorSource::ScalarField; });
-
-    scalar.add_property(make_property(
-        "Colormap",
-        ChoiceInput{
-            .options =
-                [] {
-                    const auto names = shaders::colormap_names();
-                    return std::vector<std::string>(names.begin(), names.end());
-                },
-            .get_index = [&rs] { return find_colormap_index(rs.colormap_name); },
-            .set_index =
-                [&rs](const int &i) {
-                    const auto names = shaders::colormap_names();
-                    if (i >= 0 && static_cast<std::size_t>(i) < names.size()) {
-                        rs.colormap_name =
-                            std::string(names[static_cast<std::size_t>(i)]);
-                    }
-                },
-        }));
-    scalar.add_property(make_property("Colormap Name",
-                     TextInput{ .get = [&rs] { return rs.colormap_name; },
-                                  .set = [&rs](const std::string &s) {
-                                      rs.colormap_name = s;
-                                  } }));
-
-    auto &range = scalar.add_row("Range");
-    range.add_property(make_property("Min", float_input(rs.scalar_min, -1e6f, 1e6f, 0.1f)));
-    range.add_property(make_property("Max", float_input(rs.scalar_max, -1e6f, 1e6f, 0.1f)));
-    range.add_property(button_property("Reset", [&rs] {
-        rs.scalar_min = 0.0f;
-        rs.scalar_max = 1.0f;
-    }));
-    return layout;
-}
-
-auto attributes_layout(sg::BasicShading &shading) -> Layout {
-    Layout layout;
-    auto *sh = &shading;
-    layout.add_property(role_property(
-        "Position", *sh, &sg::BasicShading::position_binding,
-        [](sg::BasicShading &s, const sg::MeshAttributeHandle &a) { s.assign_position(a); },
-        [](sg::BasicShading &s) { s.clear_position(); }));
-    layout.add_property(role_property(
-        "Normal", *sh, &sg::BasicShading::normal_binding,
-        [](sg::BasicShading &s, const sg::MeshAttributeHandle &a) { s.assign_normal(a); },
-        [](sg::BasicShading &s) { s.clear_normal(); }));
-    layout.add_property(role_property(
-        "Scalar", *sh, &sg::BasicShading::scalar_binding,
-        [](sg::BasicShading &s, const sg::MeshAttributeHandle &a) {
-            s.assign_scalar(a, s.scalar_component());
-        },
-        [](sg::BasicShading &s) { s.clear_scalar(); }));
-
-    auto component = make_property(
-        "Component",
-        ChoiceInput{
-            .options =
-                [sh] {
-                    std::vector<std::string> items{ "Magnitude" };
-                    const auto &b = sh->scalar_binding();
-                    const int n = b.is_bound() ? b.attribute()->component_count() : 0;
-                    constexpr std::string_view axes = "XYZW";
-                    for (int c = 0; c < n; ++c) {
-                        items.emplace_back(
-                            c < 4 ? std::string(1, axes[static_cast<std::size_t>(c)])
-                                  : std::format("[{}]", c));
-                    }
-                    return items;
-                },
-            .get_index = [sh] { return sh->scalar_component() + 1; },
-            .set_index = [sh](const int &i) { sh->set_scalar_component(i - 1); },
-        });
-    component.visible_when = [sh] {
-        const auto &b = sh->scalar_binding();
-        return b.is_bound() && b.attribute()->component_count() > 1;
-    };
-    layout.add_property(std::move(component));
-    return layout;
-}
-
 // ── Material tab ────────────────────────────────────────────────────
 
 auto material_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
-    auto &m = shading.render_state().material;
+    auto *renderer = surface_renderer(shading.find_layer("balsa.phong_surface"));
+    if (!renderer) return layout;
+    auto &m = renderer->state.material;
     layout.add_property(make_property("Ambient", float_input(m.ambient_strength, 0.0f, 1.0f, 0.01f, true)));
     layout.add_property(make_property("Diffuse", float_input(m.diffuse_strength, 0.0f, 2.0f, 0.01f, true)));
     layout.add_property(make_property("Specular", float_input(m.specular_strength, 0.0f, 2.0f, 0.01f, true)));
@@ -460,19 +398,6 @@ auto register_builtin_panels() -> void {
                          .label = "Shading & Rendering",
                          .is_available = has_active_shading,
                          .build_layout = for_active_shading(shading_layout) });
-        register_panel({ .id = "data.color",
-                         .tab_id = "data",
-                         .sort_key = 20,
-                         .label = "Color",
-                         .is_available = has_active_shading,
-                         .build_layout = for_active_shading(color_layout) });
-        register_panel({ .id = "data.attributes",
-                         .tab_id = "data",
-                         .sort_key = 30,
-                         .label = "Attribute Bindings",
-                         .expanded_by_default = false,
-                         .is_available = has_active_shading,
-                         .build_layout = for_active_shading(attributes_layout) });
         register_panel({ .id = "material.response",
                          .tab_id = "material",
                          .sort_key = 0,

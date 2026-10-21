@@ -8,6 +8,8 @@
 #include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/geometry/triangle_mesh/read_obj.hpp>
 #include <balsa/visualization/mesh_conversion.hpp>
+#include <balsa/visualization/vulkan/mesh_scene.hpp>
+#include <balsa/scene_graph/MeshRenderer.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/scene_graph/types.hpp>
 #include <balsa/visualization/image_io.hpp>
@@ -36,6 +38,24 @@ static auto TriangleIndices(const uint32_t *p, std::size_t n) -> DynIdx {
 }
 static auto EdgeIndices(const uint32_t *p, std::size_t n) -> DynIdx {
     return DynIdx(p, n, 2);
+}
+
+// The default surface layer of a shading, and what its roles resolve to.
+static auto surface_id(const balsa::scene_graph::BasicShading &sh)
+    -> balsa::scene_graph::MeshLayerId {
+    return sh.find_layer("balsa.phong_surface")->id;
+}
+
+static auto bound(const balsa::scene_graph::BasicShading &sh, std::string_view role)
+    -> balsa::scene_graph::MeshAttributeHandle {
+    const auto *layer = sh.find_layer("balsa.phong_surface");
+    return layer ? sh.layer_attribute(*layer, role)
+                 : balsa::scene_graph::MeshAttributeHandle{};
+}
+
+static auto vertex_count(const balsa::scene_graph::BasicShading &sh) -> std::size_t {
+    const auto positions = bound(sh, balsa::scene_graph::position_role);
+    return positions ? positions->count() : 0;
 }
 
 // Two-triangle quad (vertices 0-3), optionally with normals.
@@ -158,14 +178,14 @@ TEST_CASE("MeshGeometry and BasicShading version tracking", "[scene_graph]") {
     auto &sh = m.shading;
 
     // Initially empty
-    CHECK(sh.vertex_count() == 0);
+    CHECK(vertex_count(sh) == 0);
     CHECK(geo.triangle_count() == 0);
     CHECK(geo.edge_count() == 0);
-    CHECK_FALSE(sh.has_positions());
-    CHECK_FALSE(sh.has_normals());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::position_role).valid());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::normal_role).valid());
     CHECK_FALSE(geo.has_triangle_indices());
     CHECK_FALSE(geo.has_edge_indices());
-    CHECK_FALSE(sh.has_scalar_field());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::scalar_role).valid());
 
     const uint64_t g0 = geo.version();
     const uint64_t s0 = sh.version();
@@ -175,9 +195,9 @@ TEST_CASE("MeshGeometry and BasicShading version tracking", "[scene_graph]") {
     geo = make_quad(/*with_normals=*/true);
     CHECK(geo.version() > g0);
     CHECK(sh.version() == s0);
-    CHECK(sh.vertex_count() == 4);
-    CHECK(sh.has_positions());
-    CHECK(sh.has_normals());
+    CHECK(vertex_count(sh) == 4);
+    CHECK(bound(sh, balsa::scene_graph::position_role).valid());
+    CHECK(bound(sh, balsa::scene_graph::normal_role).valid());
     CHECK(geo.has_triangle_indices());
     CHECK(geo.triangle_count() == 2);
     CHECK(geo.has_edge_indices());
@@ -187,12 +207,12 @@ TEST_CASE("MeshGeometry and BasicShading version tracking", "[scene_graph]") {
     const uint64_t before = geo.version();
     geo = MeshGeometry{};
     CHECK(geo.version() > before);
-    CHECK_FALSE(sh.has_positions());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::position_role).valid());
     geo = make_quad(/*with_normals=*/true);
 
     // Role changes bump only the shading version.
     const uint64_t g1 = geo.version();
-    sh.clear_normal();
+    sh.clear_layer_role(surface_id(sh), balsa::scene_graph::normal_role);
     CHECK(sh.version() > s0);
     CHECK(geo.version() == g1);
 }
@@ -247,8 +267,8 @@ TEST_CASE("MeshGeometry edge-only mesh has no triangles", "[scene_graph]") {
     CHECK_FALSE(m.geometry.has_triangle_indices());
     CHECK(m.geometry.has_edge_indices());
     CHECK(m.geometry.edge_count() == 2);
-    CHECK(m.shading.has_positions());
-    CHECK(m.shading.vertex_count() == 3);
+    CHECK(bound(m.shading, balsa::scene_graph::position_role).valid());
+    CHECK(vertex_count(m.shading) == 3);
 }
 
 TEST_CASE("BasicShading role assignment and clearing", "[scene_graph]") {
@@ -259,32 +279,32 @@ TEST_CASE("BasicShading role assignment and clearing", "[scene_graph]") {
     m.geometry = make_quad(/*with_normals=*/true);
 
     // Conventionally named attributes are bound automatically.
-    CHECK(sh.has_positions());
-    CHECK(sh.has_normals());
-    CHECK_FALSE(sh.has_scalar_field());
+    CHECK(bound(sh, balsa::scene_graph::position_role).valid());
+    CHECK(bound(sh, balsa::scene_graph::normal_role).valid());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::scalar_role).valid());
 
     uint64_t v1 = sh.version();
 
     // Clear positions.
-    sh.clear_position();
-    CHECK_FALSE(sh.has_positions());
+    sh.clear_layer_role(surface_id(sh), balsa::scene_graph::position_role);
+    CHECK_FALSE(bound(sh, balsa::scene_graph::position_role).valid());
     CHECK(sh.version() > v1);
 
     // Clear normals.
     uint64_t v2 = sh.version();
-    sh.clear_normal();
-    CHECK_FALSE(sh.has_normals());
+    sh.clear_layer_role(surface_id(sh), balsa::scene_graph::normal_role);
+    CHECK_FALSE(bound(sh, balsa::scene_graph::normal_role).valid());
     CHECK(sh.version() > v2);
 
     // A cleared role stays cleared when the geometry changes.
     m.geometry = make_quad(/*with_normals=*/true);
-    CHECK_FALSE(sh.has_positions());
-    CHECK_FALSE(sh.has_normals());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::position_role).valid());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::normal_role).valid());
 
     // Re-assign position by name.
     uint64_t v3 = sh.version();
-    CHECK(sh.assign_position("vertex_positions"));
-    CHECK(sh.has_positions());
+    CHECK(sh.assign_layer_role(surface_id(sh), balsa::scene_graph::position_role, "vertex_positions"));
+    CHECK(bound(sh, balsa::scene_graph::position_role).valid());
     CHECK(sh.version() > v3);
 }
 
@@ -293,29 +313,29 @@ TEST_CASE("BasicShading without geometry binds nothing", "[scene_graph]") {
 
     BasicShading detached; // not attached to an Object
     CHECK(detached.geometry() == nullptr);
-    CHECK_FALSE(detached.has_positions());
-    CHECK_FALSE(detached.assign_position("vertex_positions"));
+    CHECK_FALSE(bound(detached, balsa::scene_graph::position_role).valid());
+    CHECK_FALSE(detached.assign_layer_role(surface_id(detached), balsa::scene_graph::position_role, "vertex_positions"));
 
     Object obj("shading only");
     auto &sh = obj.emplace_feature<BasicShading>();
     CHECK(sh.geometry() == nullptr);
-    CHECK_FALSE(sh.has_positions());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::position_role).valid());
 
     // An instance without geometry binds nothing either.
     auto &instance = obj.emplace_feature<MeshInstance>();
     CHECK(sh.geometry() == nullptr);
-    CHECK_FALSE(sh.has_positions());
+    CHECK_FALSE(bound(sh, balsa::scene_graph::position_role).valid());
 
     // Showing geometry later is picked up.
     auto geometry = std::make_shared<MeshGeometry>();
     *geometry = make_quad();
     instance.set_geometry(geometry);
     CHECK(sh.geometry() == geometry.get());
-    CHECK(sh.has_positions());
+    CHECK(bound(sh, balsa::scene_graph::position_role).valid());
 
     // Attributes of other geometry are rejected.
     MeshGeometry other = make_quad();
-    CHECK_FALSE(sh.assign_position(other.find_attribute("vertex_positions")));
+    CHECK_FALSE(sh.assign_layer_role(surface_id(sh), balsa::scene_graph::position_role, other.find_attribute("vertex_positions")));
 }
 
 TEST_CASE("MeshGeometry attributes", "[scene_graph]") {
@@ -406,33 +426,35 @@ TEST_CASE("MeshGeometry explicit edges override derived", "[scene_graph]") {
     CHECK(geo.edge_count() == 2);
 }
 
-TEST_CASE("BasicShading scalar binding extracts components", "[scene_graph]") {
+TEST_CASE("BasicShading binds raw scalar attributes", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
     MeshObject m;
     auto &sh = m.shading;
     m.geometry = make_quad();
     const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
-    m.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
+    const auto uv_attr = m.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
 
-    REQUIRE(sh.assign_scalar("uv", 0));
-    const auto &b = sh.scalar_binding();
-    CHECK(b.component_count() == 1);
-    REQUIRE(b.size() == 4);
-    auto u = b.view<float, 1>();
-    REQUIRE(u);
-    CHECK((*u)[0, 0] == 3.0f);
-    CHECK((*u)[0, 1] == 0.0f);
+    // No default: the scalar role is unbound until assigned.
+    CHECK_FALSE(bound(sh, scalar_role).valid());
 
-    REQUIRE(sh.assign_scalar("uv", -1)); // magnitude
-    auto mag = sh.scalar_binding().view<float, 1>();
-    REQUIRE(mag);
-    CHECK((*mag)[0, 0] == Catch::Approx(5.0f));
-    CHECK(sh.scalar_component() == -1);
+    // The binding is the raw attribute; reducing it to a scalar is the
+    // renderer's (shader's) job.
+    REQUIRE(sh.assign_layer_role(surface_id(sh), scalar_role, "uv"));
+    const auto b = bound(sh, scalar_role);
+    CHECK(b == uv_attr);
+    CHECK(b->component_count() == 2);
+    CHECK(flat_values<float>(*b) == std::vector<float>(uv.begin(), uv.end()));
 
-    CHECK_FALSE(sh.assign_scalar("uv", 2)); // out of range
-    CHECK_FALSE(sh.has_scalar_field());
-    CHECK_FALSE(sh.assign_scalar("missing"));
+    // Outside the renderer's 1-4 component range: rejected, binding kept.
+    const std::array<float, 20> wide{};
+    m.geometry.add_attribute("wide", AttributeDomain::Vertex, 5, wide);
+    CHECK_FALSE(sh.assign_layer_role(surface_id(sh), scalar_role, "wide"));
+    CHECK(bound(sh, scalar_role) == uv_attr);
+
+    CHECK_FALSE(sh.assign_layer_role(surface_id(sh), scalar_role, "missing"));
+    CHECK_FALSE(sh.assign_layer_role(surface_id(sh), "no.such.role", "uv"));
+    CHECK_FALSE(sh.assign_layer_role(MeshLayerId{999}, scalar_role, "uv"));
 }
 
 TEST_CASE("BasicShading follows geometry changes", "[scene_graph]") {
@@ -442,7 +464,7 @@ TEST_CASE("BasicShading follows geometry changes", "[scene_graph]") {
     auto &geo = m.geometry;
     auto &sh = m.shading;
     geo = make_quad();
-    REQUIRE(sh.has_positions());
+    REQUIRE(bound(sh, position_role).valid());
 
     // Adding more attributes may reallocate storage; binding must follow.
     for (int i = 0; i < 16; ++i) {
@@ -451,32 +473,33 @@ TEST_CASE("BasicShading follows geometry changes", "[scene_graph]") {
     }
     auto pos = geo.find_attribute("vertex_positions");
     REQUIRE(pos);
-    CHECK(sh.position_binding().attribute() == pos);
-    CHECK(sh.position_binding().view<float>()->data_handle()
-          == pos->view<float>()->data_handle());
+    CHECK(bound(sh, position_role) == pos);
 
-    // Replacing the bound attribute updates the binding.
+    // Replacing the bound attribute in place keeps handle identity.
     const std::array<float, 6> pos2 = {0, 0, 1, 1, 2, 2};
     geo.add_attribute("vertex_positions", AttributeDomain::Vertex, 2, pos2);
-    CHECK(sh.vertex_count() == 3);
-    CHECK(sh.position_binding().component_count() == 2);
+    CHECK(vertex_count(sh) == 3);
+    CHECK(bound(sh, position_role) == pos);
+    CHECK(bound(sh, position_role)->component_count() == 2);
 
-    // Replacing in place keeps handle identity.
-    CHECK(sh.position_binding().attribute() == pos);
+    // Explicit bindings see replaced values too.
+    REQUIRE(sh.assign_layer_role(surface_id(sh), scalar_role, "s3"));
+    const std::array<float, 3> s3 = {7, 8, 9};
+    geo.add_attribute("s3", AttributeDomain::Vertex, 1, s3);
+    CHECK(flat_values<float>(*bound(sh, scalar_role)) == std::vector<float>{7, 8, 9});
 
-    // A magnitude binding is recomputed when its attribute is replaced.
-    REQUIRE(sh.assign_scalar("vertex_positions", -1));
-    CHECK((*sh.scalar_binding().view<float, 1>())[0, 2] == Catch::Approx(std::sqrt(8.0f)));
-    const std::array<float, 6> pos3 = {3, 4, 0, 0, 0, 0};
-    geo.add_attribute("vertex_positions", AttributeDomain::Vertex, 2, pos3);
-    CHECK((*sh.scalar_binding().view<float, 1>())[0, 0] == Catch::Approx(5.0f));
-
-    // Removing it unbinds; a held handle stays readable but detached.
+    // Removing an attribute unbinds; a held handle stays readable but
+    // detached and cannot be bound.
     CHECK(geo.remove_attribute("vertex_positions"));
-    CHECK_FALSE(sh.has_positions());
-    CHECK_FALSE(sh.has_scalar_field());
+    CHECK(geo.remove_attribute("s3"));
+    CHECK_FALSE(bound(sh, position_role).valid());
+    CHECK_FALSE(bound(sh, scalar_role).valid());
     CHECK(pos->count() == 3);
-    CHECK_FALSE(sh.assign_position(pos));
+    CHECK_FALSE(sh.assign_layer_role(surface_id(sh), position_role, pos));
+
+    // A same-named attribute appearing later is picked up again.
+    geo.add_attribute("s3", AttributeDomain::Vertex, 1, s3);
+    CHECK(bound(sh, scalar_role).valid());
 }
 
 TEST_CASE("MeshGeometry face attributes are stored but not bindable", "[scene_graph]") {
@@ -490,7 +513,8 @@ TEST_CASE("MeshGeometry face attributes are stored but not bindable", "[scene_gr
     REQUIRE(a);
     CHECK(a->domain == AttributeDomain::Face);
     CHECK(a->count() == 2);
-    CHECK_FALSE(m.shading.assign_scalar("face_area"));
+    CHECK_FALSE(m.shading.assign_layer_role(surface_id(m.shading), scalar_role,
+                                            "face_area"));
 }
 
 TEST_CASE("to_mesh_geometry converts OBJ into MeshGeometry", "[scene_graph]") {
@@ -505,10 +529,10 @@ TEST_CASE("to_mesh_geometry converts OBJ into MeshGeometry", "[scene_graph]") {
     std::filesystem::remove(path);
 
     MeshObject m{balsa::visualization::to_mesh_geometry(obj)};
-    CHECK(m.shading.vertex_count() == 4);
+    CHECK(vertex_count(m.shading) == 4);
     CHECK(m.geometry.triangle_count() == 2);
     CHECK(m.geometry.edge_count() == 5);
-    CHECK_FALSE(m.shading.has_normals());
+    CHECK_FALSE(bound(m.shading, balsa::scene_graph::normal_role).valid());
 }
 
 TEST_CASE("MeshGeometry accepts indices in any orientation and layout",
@@ -596,9 +620,13 @@ TEST_CASE("MeshGeometry clone and BasicShading copy_from", "[scene_graph]") {
     MeshObject src{make_quad(/*with_normals=*/true)};
     const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
     src.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv);
-    REQUIRE(src.shading.assign_scalar("uv", 1));
-    src.shading.clear_normal();
-    src.shading.render_state().normal_source = NormalSource::None;
+    REQUIRE(src.shading.assign_layer_role(surface_id(src.shading), scalar_role, "uv"));
+    REQUIRE(src.shading.clear_layer_role(surface_id(src.shading), normal_role));
+    auto *src_surface = src.shading.find_layer("balsa.phong_surface");
+    REQUIRE(src_surface);
+    auto *src_renderer = dynamic_cast<PhongSurfaceRenderer *>(src_surface->renderer.get());
+    REQUIRE(src_renderer);
+    src_renderer->state.normal_source = NormalSource::None;
 
     MeshObject dst{src.geometry.clone()};
     dst.shading.copy_from(src.shading);
@@ -613,20 +641,25 @@ TEST_CASE("MeshGeometry clone and BasicShading copy_from", "[scene_graph]") {
     CHECK_FALSE(dst.geometry.owns(src_uv));
     CHECK(flat_values<float>(*dst_uv) == flat_values<float>(*src_uv));
 
-    // Shading: roles re-targeted by name; cleared roles stay cleared.
-    CHECK(dst.shading.position_binding().attribute()
+    // Shading: bindings re-targeted by name; cleared roles stay cleared.
+    CHECK(bound(dst.shading, position_role)
           == dst.geometry.find_attribute("vertex_positions"));
-    CHECK(dst.shading.scalar_binding().attribute() == dst_uv);
-    CHECK(dst.shading.scalar_component() == 1);
-    CHECK((*dst.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
-    CHECK_FALSE(dst.shading.has_normals());
-    CHECK(dst.shading.render_state().normal_source == NormalSource::None);
+    CHECK(bound(dst.shading, scalar_role) == dst_uv);
+    CHECK(dst.shading.find_layer("balsa.phong_surface")->binding(scalar_role)->attribute
+          == dst_uv);
+    CHECK_FALSE(bound(dst.shading, normal_role).valid());
+    const auto *dst_surface = dst.shading.find_layer("balsa.phong_surface");
+    REQUIRE(dst_surface);
+    const auto *dst_renderer =
+        dynamic_cast<const PhongSurfaceRenderer *>(dst_surface->renderer.get());
+    REQUIRE(dst_renderer);
+    CHECK(dst_renderer->state.normal_source == NormalSource::None);
 
     // Changing the copy leaves the source alone.
     const std::array<float, 8> uv2 = {0, 9, 0, 9, 0, 9, 0, 9};
     dst.geometry.add_attribute("uv", AttributeDomain::Vertex, 2, uv2);
-    CHECK((*dst.shading.scalar_binding().view<float, 1>())[0, 0] == 9.0f);
-    CHECK((*src.shading.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+    CHECK(flat_values<float>(*bound(dst.shading, scalar_role))[1] == 9.0f);
+    CHECK(flat_values<float>(*bound(src.shading, scalar_role))[1] == 4.0f);
 }
 
 TEST_CASE("MeshInstance and BasicShading as Object features", "[scene_graph]") {
@@ -644,8 +677,8 @@ TEST_CASE("MeshInstance and BasicShading as Object features", "[scene_graph]") {
 
     // Fill the geometry and verify through the shading.
     *geo = make_single_tri();
-    CHECK(sh.vertex_count() == 3);
-    CHECK(sh.has_positions());
+    CHECK(vertex_count(sh) == 3);
+    CHECK(bound(sh, balsa::scene_graph::position_role).valid());
 }
 
 TEST_CASE("Objects share geometry with their own shading", "[scene_graph]") {
@@ -664,17 +697,16 @@ TEST_CASE("Objects share geometry with their own shading", "[scene_graph]") {
     auto &sb = b.emplace_feature<BasicShading>();
 
     // Same attributes, bound independently.
-    REQUIRE(sa.assign_scalar("uv", 0));
-    REQUIRE(sb.assign_scalar("uv", 1));
-    CHECK(sa.scalar_binding().attribute() == sb.scalar_binding().attribute());
-    CHECK((*sa.scalar_binding().view<float, 1>())[0, 0] == 3.0f);
-    CHECK((*sb.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+    REQUIRE(sa.assign_layer_role(surface_id(sa), scalar_role, "uv"));
+    CHECK(bound(sa, scalar_role) == geo->find_attribute("uv"));
+    CHECK_FALSE(bound(sb, scalar_role).valid());
 
     // A geometry change is seen through both objects.
     const std::array<float, 8> uv2 = {7, 8, 0, 1, 1, 0, 0, 0};
     geo->add_attribute("uv", AttributeDomain::Vertex, 2, uv2);
-    CHECK((*sa.scalar_binding().view<float, 1>())[0, 0] == 7.0f);
-    CHECK((*sb.scalar_binding().view<float, 1>())[0, 0] == 8.0f);
+    CHECK(flat_values<float>(*bound(sa, scalar_role))[0] == 7.0f);
+    REQUIRE(sb.assign_layer_role(surface_id(sb), scalar_role, "uv"));
+    CHECK(bound(sb, scalar_role) == bound(sa, scalar_role));
 
     // The geometry outlives the objects showing it.
     std::weak_ptr<MeshGeometry> weak = geo;
@@ -687,9 +719,9 @@ TEST_CASE("Objects share geometry with their own shading", "[scene_graph]") {
     auto other = std::make_shared<MeshGeometry>();
     *other = make_single_tri();
     a.find_feature<MeshInstance>()->set_geometry(other);
-    CHECK(sa.vertex_count() == 3);
-    CHECK_FALSE(sa.has_scalar_field());
-    CHECK(sb.vertex_count() == 4);
+    CHECK(vertex_count(sa) == 3);
+    CHECK_FALSE(bound(sa, balsa::scene_graph::scalar_role).valid());
+    CHECK(vertex_count(sb) == 4);
 }
 
 TEST_CASE("Object detach", "[scene_graph]") {
@@ -1544,33 +1576,32 @@ TEST_CASE("Object rotate() post-multiplies quaternion", "[scene_graph][trs]") {
     CHECK(static_cast<float>(m(1, 0)) == Catch::Approx(0.0f).margin(1e-5f));
 }
 
-TEST_CASE("role_binding_view", "[scene_graph][mesh]") {
+TEST_CASE("mesh_attribute_view", "[scene_graph][mesh]") {
     MeshObject m;
     const std::vector<float> xyz{0, 1, 2, 3, 4, 5};
     m.geometry.add_attribute("vertex_positions",
                              balsa::scene_graph::AttributeDomain::Vertex, 3,
                              std::span<const float>(xyz));
-    const auto &b = m.shading.position_binding();
-    auto p = b.view<float, 3>();
+    const auto b = bound(m.shading, balsa::scene_graph::position_role);
+    REQUIRE(b);
+    auto p = b->view<float, 3>();
     REQUIRE(p.has_value());
     CHECK(p->extent(1) == 2);
     CHECK((*p)[1, 0] == 1.0f);
     CHECK((*p)[0, 1] == 3.0f);
 
     using sg_error = balsa::scene_graph::ViewError;
-    const auto wrong_count = b.view<float, 2>();
+    const auto wrong_count = b->view<float, 2>();
     REQUIRE_FALSE(wrong_count);
     CHECK(wrong_count.error().reason == sg_error::Reason::WrongComponentCount);
     CHECK(wrong_count.error().actual_components == 3);
-    const auto wrong_type = b.view<double>();
+    const auto wrong_type = b->view<double>();
     REQUIRE_FALSE(wrong_type);
     CHECK(wrong_type.error().reason == sg_error::Reason::WrongType);
     CHECK(wrong_type.error().actual_type
           == balsa::scene_graph::AttributeType::Float32);
-    CHECK(balsa::scene_graph::RoleBinding{}.view<float>().error().reason
-          == sg_error::Reason::Unbound);
 
-    auto d = b.view<float>();
+    auto d = b->view<float>();
     REQUIRE(d);
     CHECK(d->extent(0) == 3);
     CHECK((*d)[2, 1] == 5.0f);
@@ -1662,69 +1693,171 @@ TEST_CASE("mesh_attribute_from_mdspan", "[scene_graph][mesh]") {
     CHECK(flat_values<double>(*st) == std::vector<double>{0, 1, 2, 3, 4, 5});
 }
 
-TEST_CASE("role_binding_keeps_attribute_type", "[scene_graph][mesh]") {
+TEST_CASE("layer_bindings_keep_attribute_type", "[scene_graph][mesh]") {
     namespace sg = balsa::scene_graph;
     MeshObject mesh;
     auto &geo = mesh.geometry;
     auto &md = mesh.shading;
 
-    // Whole-attribute bindings view the attribute itself.
+    // Bindings hand over the attribute itself, in its stored type.
     const std::vector<double> dpos{0.5, 1, 2, 3, 4, 5.25};
     auto d = geo.add_attribute("vertex_positions", sg::AttributeDomain::Vertex, 3, dpos);
-    const auto &b = md.position_binding();
-    REQUIRE(b.is_bound());
-    CHECK(b.type() == sg::AttributeType::Float64);
-    CHECK(b.component_count() == 3);
-    CHECK(b.size() == 2);
-    auto v = b.view<double, 3>();
+    const auto b = bound(md, sg::position_role);
+    REQUIRE(b == d);
+    CHECK(b->type() == sg::AttributeType::Float64);
+    auto v = b->view<double, 3>();
     REQUIRE(v);
-    CHECK(v->data_handle() == d->view<double>()->data_handle());
-    CHECK((*v)[0, 0] == 0.5);
     CHECK((*v)[2, 1] == 5.25);
-    CHECK_FALSE(b.view<float>());
 
-    // A selected component is a strided view into the attribute.
     const std::vector<uint32_t> pairs{3, 4, 6, 8};
     auto pr = geo.add_attribute("pairs", sg::AttributeDomain::Vertex, 2, pairs);
-    REQUIRE(md.assign_scalar("pairs", 1));
-    const auto &s = md.scalar_binding();
-    CHECK(s.type() == sg::AttributeType::UInt32);
-    auto c = s.view<uint32_t, 1>();
-    REQUIRE(c);
-    CHECK(&(*c)[0, 0] == pr->view<uint32_t>()->data_handle() + 1);
-    CHECK((*c)[0, 1] == 8u);
-
-    // Magnitudes of non-float values are double.
-    REQUIRE(md.assign_scalar("pairs", -1));
-    CHECK(md.scalar_binding().type() == sg::AttributeType::Float64);
-    auto m = md.scalar_binding().view<double, 1>();
-    REQUIRE(m);
-    CHECK((*m)[0, 1] == Catch::Approx(10.0));
-
-    // visit() hands over the bound values in their own type.
-    const double sum = md.position_binding().visit([](const auto &values) {
-        double total = 0;
-        for (std::size_t i = 0; i < values.extent(1); ++i) {
-            total += static_cast<double>(values[0, i]);
-        }
-        return total;
-    });
-    CHECK(sum == 0.5 + 3.0);
+    REQUIRE(md.assign_layer_role(surface_id(md), sg::scalar_role, "pairs"));
+    CHECK(bound(md, sg::scalar_role) == pr);
+    CHECK(bound(md, sg::scalar_role)->type() == sg::AttributeType::UInt32);
 }
 
-TEST_CASE("scalar_binding_magnitude", "[scene_graph][mesh]") {
+#include <balsa/visualization/colormap_list.hpp>
+
+TEST_CASE("scalar_extents_match_shader_reduction", "[scene_graph][renderer]") {
     namespace sg = balsa::scene_graph;
-    MeshObject mesh;
-    auto &md = mesh.shading;
-    const std::vector<float> v{3, 4, 0, 0, 2, 0};
-    mesh.geometry.add_attribute("v", sg::AttributeDomain::Vertex, 3, v);
-    REQUIRE(md.assign_scalar("v", -1));
-    auto m = md.scalar_binding().view<float, 1>();
-    REQUIRE(m);
-    CHECK((*m)[0, 0] == Catch::Approx(5.0f));
-    CHECK((*m)[0, 1] == Catch::Approx(2.0f));
-    REQUIRE(md.set_scalar_component(1));
-    CHECK((*md.scalar_binding().view<float, 1>())[0, 0] == 4.0f);
+    using Kind = sg::ScalarReduction::Kind;
+    MeshObject m{make_quad()};
+    // Per vertex: (3, -4), (0, 1), (2, 0), (0, 0)
+    const std::array<float, 8> v = {3, -4, 0, 1, 2, 0, 0, 0};
+    const auto a = m.geometry.add_attribute("v", sg::AttributeDomain::Vertex, 2, v);
+    auto extents = [&](Kind kind, uint8_t value) {
+        return sg::scalar_extents(*a, {.kind = kind, .value = value});
+    };
+    CHECK(extents(Kind::Component, 0) == std::array{0.0f, 3.0f});
+    CHECK(extents(Kind::Component, 1) == std::array{-4.0f, 1.0f});
+    CHECK(extents(Kind::Component, 2) == std::array{0.0f, 0.0f}); // missing
+    CHECK(extents(Kind::Norm, 1) == std::array{0.0f, 7.0f});
+    CHECK(extents(Kind::Norm, 2) == std::array{0.0f, 5.0f});
+    const auto l3 = extents(Kind::Norm, 3);
+    REQUIRE(l3);
+    CHECK((*l3)[1] == Catch::Approx(std::cbrt(91.0f)));
+
+    // Any stored type.
+    const std::array<uint32_t, 4> u = {7, 2, 9, 4};
+    const auto ua = m.geometry.add_attribute("u", sg::AttributeDomain::Vertex, 1, u);
+    CHECK(sg::scalar_extents(*ua, {.kind = Kind::Component, .value = 0})
+          == std::array{2.0f, 9.0f});
+}
+
+TEST_CASE("phong_surface_scalar_colormap", "[scene_graph][renderer]") {
+    namespace sg = balsa::scene_graph;
+    namespace ctl = balsa::visualization::controls;
+    MeshObject m{make_quad()};
+    // Per vertex: (3, 4), (0, 1), (1, 0), (0, 0)
+    const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, 0};
+    m.geometry.add_attribute("uv", sg::AttributeDomain::Vertex, 2, uv);
+    auto *layer = m.shading.find_layer("balsa.phong_surface");
+    REQUIRE(layer);
+    auto &renderer = dynamic_cast<sg::PhongSurfaceRenderer &>(*layer->renderer);
+    const sg::MeshLayerContext context(m.shading, layer->id);
+
+    CHECK(renderer.draw_request().colormap == "MATLAB_jet");
+    CHECK(renderer.clone()->requirement(sg::scalar_role)->max_components == 4);
+
+    // Every setting is driven from the renderer's controls.
+    const ctl::Layout layout = renderer.build_controls(context);
+    auto find = [&](std::string_view label, auto visit) {
+        int seen = 0;
+        layout.for_each_property([&](const ctl::Property &p) {
+            if (p.label != label) return;
+            visit(p);
+            ++seen;
+        });
+        CHECK(seen == 1);
+    };
+    auto tooltip = [&](std::string_view label) {
+        std::string text;
+        find(label, [&](const ctl::Property &p) {
+            REQUIRE(p.live_tooltip);
+            text = p.live_tooltip();
+        });
+        return text;
+    };
+    auto range = [&] {
+        sg::MeshMaterial material;
+        renderer.write_material(material, context);
+        return std::array{material.scalar_min, material.scalar_max};
+    };
+
+    // Unbound scalar: uniform colour, no colormap settings.
+    find("Color", [&](const ctl::Property &p) { CHECK(p.visible_when()); });
+    CHECK(tooltip("Max") == "No scalar attribute bound");
+    const ctl::Layout *colormap_column = nullptr;
+    for (const auto &item : layout.items()) {
+        if (const auto *child = std::get_if<std::unique_ptr<ctl::Layout>>(&item);
+            child && (*child)->heading() == "Scalar Colormap") {
+            colormap_column = child->get();
+        }
+    }
+    REQUIRE(colormap_column);
+    CHECK_FALSE(colormap_column->visible_when()());
+
+    // Binding the scalar role is what colours by it; the range defaults to
+    // the data's L2-norm extents.
+    REQUIRE(m.shading.assign_layer_role(layer->id, sg::scalar_role, "uv"));
+    find("Color", [&](const ctl::Property &p) { CHECK_FALSE(p.visible_when()); });
+    CHECK(colormap_column->visible_when()());
+    CHECK(range() == std::array{0.0f, 5.0f});
+    CHECK(tooltip("Max") == "Data range: [0, 5]");
+    CHECK(tooltip("Min") == tooltip("Fit to Data"));
+    find("Max", [&](const ctl::Property &p) {
+        CHECK(std::get<ctl::FloatInput>(p.widget).get() == 5.0f);
+    });
+
+    // ...and follows the reduction and the data.
+    find("Scalar", [&](const ctl::Property &p) {
+        const auto &e = std::get<ctl::ChoiceInput>(p.widget);
+        CHECK(e.get_index() == 1); // Norm L2
+        e.set_index(4);            // Y
+    });
+    CHECK(range() == std::array{0.0f, 4.0f});
+    const std::array<float, 8> uv2 = {0, -2, 0, 6, 0, 0, 0, 0};
+    m.geometry.add_attribute("uv", sg::AttributeDomain::Vertex, 2, uv2);
+    CHECK(range() == std::array{-2.0f, 6.0f});
+    CHECK(tooltip("Max") == "Data range: [-2, 6]");
+
+    // Editing an end fixes the range; the data no longer moves it.
+    find("Max", [&](const ctl::Property &p) {
+        std::get<ctl::FloatInput>(p.widget).set(10.0f);
+    });
+    CHECK_FALSE(renderer.scalar_colormap.fit_to_data);
+    CHECK(range() == std::array{-2.0f, 10.0f});
+    m.geometry.add_attribute("uv", sg::AttributeDomain::Vertex, 2, uv);
+    CHECK(range() == std::array{-2.0f, 10.0f});
+    CHECK(tooltip("Max") == "Data range: [0, 4]"); // still shows the data
+
+    // Fitting again returns to the data's extents.
+    find("Fit to Data", [&](const ctl::Property &p) {
+        std::get<ctl::Button>(p.widget).on_click();
+    });
+    CHECK(renderer.scalar_colormap.fit_to_data);
+    CHECK(range() == std::array{0.0f, 4.0f});
+
+    // Colormaps come from the colormap_shaders subproject.
+    find("Colormap", [&](const ctl::Property &p) {
+        const auto &e = std::get<ctl::ChoiceInput>(p.widget);
+        const auto names = balsa::visualization::shaders::colormap_names();
+        CHECK(e.options().size() == names.size());
+        CHECK(e.options()[static_cast<std::size_t>(e.get_index())] == "MATLAB_jet");
+        const int parula = balsa::visualization::find_colormap_index("MATLAB_parula");
+        REQUIRE(parula >= 0);
+        e.set_index(parula);
+    });
+    CHECK(renderer.draw_request().colormap == "MATLAB_parula");
+
+    // Clones keep their own settings.
+    auto copy = renderer.clone();
+    renderer.scalar_colormap.colormap = "MATLAB_jet";
+    CHECK(copy->draw_request().colormap == "MATLAB_parula");
+
+    // Unbinding returns to the uniform colour.
+    REQUIRE(m.shading.clear_layer_role(layer->id, sg::scalar_role));
+    find("Color", [&](const ctl::Property &p) { CHECK(p.visible_when()); });
 }
 
 #include <balsa/visualization/normalize_mesh.hpp>
@@ -1736,7 +1869,8 @@ TEST_CASE("unit_box_transform_centers_mesh", "[scene_graph][normalize]") {
     m.geometry.add_attribute("vertex_positions",
                              balsa::scene_graph::AttributeDomain::Vertex, 3,
                              std::span<const double>(xyz));
-    const auto xf = balsa::visualization::unit_box_transform(m.shading);
+    const auto xf = balsa::visualization::unit_box_transform(
+        *m.geometry.find_attribute("vertex_positions"));
     REQUIRE(xf);
     auto M = xf->to_matrix();
     auto apply = [&](float x, float y, float z, int r) {
@@ -1756,7 +1890,7 @@ TEST_CASE("controls_builtin_panels", "[controls]") {
     using balsa::visualization::vulkan::NormalSource;
     ctl::register_builtin_panels();
     ctl::register_builtin_panels(); // idempotent
-    CHECK(ctl::registered_panels().size() == 8);
+    CHECK(ctl::registered_panels().size() == 6);
     REQUIRE(ctl::registered_tabs().size() == 4);
     CHECK(ctl::registered_tabs()[1]->id == "data");
 
@@ -1775,7 +1909,7 @@ TEST_CASE("controls_builtin_panels", "[controls]") {
     auto object_panels = ctl::available_panels(ctx, "object");
     REQUIRE(object_panels.size() == 2);
     CHECK(object_panels[0]->id == "object.object");
-    CHECK(ctl::available_panels(ctx, "data").size() == 4);
+    CHECK(ctl::available_panels(ctx, "data").size() == 2);
     CHECK(ctl::available_panels(ctx, "scene").empty()); // no scene
 
     // get/set round-trip through the Transform panel.
@@ -1794,7 +1928,12 @@ TEST_CASE("controls_builtin_panels", "[controls]") {
 
     // Material tab is only available while the mesh is lit.
     CHECK(ctl::available_panels(ctx, "material").size() == 1);
-    md.render_state().normal_source = NormalSource::None;
+    auto *surface = md.find_layer("balsa.phong_surface");
+    REQUIRE(surface);
+    auto *surface_renderer =
+        dynamic_cast<sg::PhongSurfaceRenderer *>(surface->renderer.get());
+    REQUIRE(surface_renderer);
+    surface_renderer->state.normal_source = NormalSource::None;
     CHECK(ctl::available_panels(ctx, "material").empty());
 
     // Shading combo: "From Attribute" disabled without normals; setting a
@@ -1806,22 +1945,119 @@ TEST_CASE("controls_builtin_panels", "[controls]") {
         if (!e || p.label != "Normals") return;
         CHECK_FALSE(e->option_enabled(0));
         e->set_index(0); // FromAttribute without normals -> downgraded
-        CHECK(md.render_state().normal_source == NormalSource::ComputedInShader);
+        CHECK(surface_renderer->state.normal_source
+              == NormalSource::ComputedInShader);
         ++seen;
     });
     CHECK(seen == 2);
 
-    // Attribute binding choice lists attributes and reflects the binding.
-    const ctl::Layout attrs =
-        ctl::available_panels(ctx, "data")[3]->build_layout(ctx);
-    attrs.for_each_property([&](const ctl::Property &p) {
+    // Each render layer offers a binding choice per renderer role: the
+    // default, "(none)", then the geometry's attributes.
+    const ctl::Layout layers =
+        ctl::available_panels(ctx, "data")[0]->build_layout(ctx);
+    int position_choices = 0;
+    layers.for_each_property([&](const ctl::Property &p) {
         const auto *e = std::get_if<ctl::ChoiceInput>(&p.widget);
-        if (!e || p.label != "Position") return;
-        CHECK(e->options().size() == 2);
-        CHECK(e->get_index() == 1);
+        if (!e || p.label != sg::position_role) return;
+        if (position_choices++ > 0) return; // surface layer only
+        CHECK(e->options()
+              == std::vector<std::string>{"(default: vertex_positions)", "(none)",
+                                          "vertex_positions"});
+        CHECK(e->get_index() == 0);
+        e->set_index(1);
+        CHECK_FALSE(bound(md, sg::position_role).valid());
+        e->set_index(2);
+        CHECK(e->get_index() == 2);
+        CHECK(bound(md, sg::position_role).valid());
         e->set_index(0);
-        CHECK_FALSE(md.has_positions());
-        ++seen;
+        CHECK(surface->binding(sg::position_role) == nullptr);
     });
-    CHECK(seen == 3);
+    CHECK(position_choices == 3); // one per default layer
+}
+
+TEST_CASE("mesh_scene_resolves_headlight_enabled_state", "[scene_graph][lighting]") {
+    balsa::visualization::vulkan::MeshScene scene;
+
+    const auto enabled = scene.resolve_scene_lights();
+    CHECK(enabled.enabled);
+    CHECK(enabled.light_color == balsa::scene_graph::Vec3f{1.0f, 1.0f, 1.0f});
+    CHECK(enabled.light_dir == balsa::scene_graph::Vec3f{0.0f, 0.0f, 1.0f});
+
+    scene.headlight().enabled = false;
+    CHECK_FALSE(scene.resolve_scene_lights().enabled);
+}
+
+TEST_CASE("mesh_renderer_registry_and_layer_copy", "[scene_graph][renderer]") {
+    namespace sg = balsa::scene_graph;
+
+    sg::register_builtin_mesh_renderers();
+    const auto definitions = sg::registered_mesh_renderers();
+    CHECK(std::ranges::any_of(definitions, [](const auto *definition) {
+        return definition->id == "balsa.phong_surface";
+    }));
+
+    auto layers = sg::make_default_mesh_render_layers();
+    REQUIRE(layers.size() == 3);
+    REQUIRE(layers[0].renderer);
+    CHECK(layers[0].renderer->id() == "balsa.phong_surface");
+
+    auto copy = layers;
+    REQUIRE(copy[0].renderer);
+    CHECK(copy[0].renderer.get() != layers[0].renderer.get());
+    CHECK(copy[0].renderer->id() == layers[0].renderer->id());
+
+    auto *surface = dynamic_cast<sg::PhongSurfaceRenderer *>(layers[0].renderer.get());
+    auto *copied_surface =
+        dynamic_cast<sg::PhongSurfaceRenderer *>(copy[0].renderer.get());
+    REQUIRE(surface);
+    REQUIRE(copied_surface);
+    surface->state.normal_source = balsa::visualization::vulkan::NormalSource::None;
+    CHECK(copied_surface->state.normal_source
+          != balsa::visualization::vulkan::NormalSource::None);
+}
+
+TEST_CASE("mesh_layer_raw_role_bindings", "[scene_graph][renderer]") {
+    using namespace balsa::scene_graph;
+
+    MeshObject source{make_quad(/*with_normals=*/true)};
+    auto *surface = source.shading.find_layer("balsa.phong_surface");
+    REQUIRE(surface);
+    const auto position = source.geometry.find_attribute("vertex_positions");
+    const auto normal = source.geometry.find_attribute("vertex_normals");
+    const auto uv = source.geometry.add_attribute(
+        "uv", AttributeDomain::Vertex, 2,
+        std::array<float, 8>{0, 0, 1, 0, 1, 1, 0, 1});
+    REQUIRE(position);
+    REQUIRE(normal);
+    REQUIRE(uv);
+
+    REQUIRE(source.shading.assign_layer_role(surface->id,
+                                             std::string(position_role), position));
+    REQUIRE(source.shading.assign_layer_role(surface->id,
+                                             std::string(normal_role), normal));
+    CHECK(surface->binding(position_role)->attribute == position);
+    CHECK(surface->binding(normal_role)->attribute == normal);
+    const auto wide = source.geometry.add_attribute(
+        "wide", AttributeDomain::Vertex, 5, std::array<float, 20>{});
+    CHECK_FALSE(source.shading.assign_layer_role(surface->id, position_role, wide));
+    CHECK(surface->binding(position_role)->attribute == position);
+
+    // clear: explicitly unbound (no default); reset: back to the default.
+    REQUIRE(source.shading.clear_layer_role(surface->id, normal_role));
+    CHECK_FALSE(source.shading.layer_attribute(*surface, normal_role).valid());
+    REQUIRE(source.shading.reset_layer_role(surface->id, normal_role));
+    CHECK(surface->binding(normal_role) == nullptr);
+    CHECK(source.shading.layer_attribute(*surface, normal_role) == normal);
+    REQUIRE(source.shading.assign_layer_role(surface->id, scalar_role, uv));
+
+    MeshObject copy{source.geometry.clone()};
+    copy.shading.copy_from(source.shading);
+    const auto *copied_surface = copy.shading.find_layer(surface->id);
+    REQUIRE(copied_surface);
+    REQUIRE(copied_surface->binding(position_role));
+    CHECK(copied_surface->binding(position_role)->attribute
+          == copy.geometry.find_attribute("vertex_positions"));
+    CHECK_FALSE(copied_surface->binding(position_role)->attribute == position);
+    CHECK(copy.shading.layer_attribute(*copied_surface, scalar_role)
+          == copy.geometry.find_attribute("uv"));
 }

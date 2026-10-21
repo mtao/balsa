@@ -76,6 +76,11 @@ class NativeFilm : public Film {
 
     void post_draw_hook() override;
 
+    // Backends call this after their native framebuffer changes size.  Do not
+    // wait for acquire/present to report an out-of-date swapchain: during live
+    // resizes that can leave rendering at the old extent for an extra frame.
+    void notify_framebuffer_resized();
+
     int concurrent_frame_count() const override { return static_cast<int>(_frame_count); }
     int current_frame() const override { return static_cast<int>(_current_frame_index); }
 

@@ -3,7 +3,9 @@
 #include "balsa/visualization/colormap_list.hpp"
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "balsa/visualization/shaders/embedded_sources.hpp"
+#include "balsa/visualization/shaders/mesh_shader.hpp"
 #include "balsa/visualization/shaders/shader_library.hpp"
+#include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
 #include <array>
 #include <string>
@@ -134,4 +136,39 @@ TEST_CASE("embedded_shaders_compile", "[visualization][shaders]") {
     fragment.insert(version_end + 1, "\n#define COLOR_SCALAR_FIELD\n#define SHADING_FLAT\n");
     CHECK_FALSE(compiler.compile_glsl(
       fragment, shaders::AbstractShader::ShaderType::Fragment).empty());
+}
+
+TEST_CASE("mesh_shader_reduces_scalar_attribute", "[visualization][shaders]") {
+    // The scalar-field path reads the raw (1-4 component) attribute and
+    // reduces it in the vertex shader.
+    balsa::visualization::vulkan::MeshRenderState state;
+    for (const auto shading : {balsa::visualization::vulkan::ShadingModel::Flat,
+                               balsa::visualization::vulkan::ShadingModel::Gouraud,
+                               balsa::visualization::vulkan::ShadingModel::Phong}) {
+        state.shading = shading;
+        shaders::MeshShader<balsa::scene_graph::embedding_traits3F> shader(state, "MATLAB_jet");
+        CHECK_FALSE(shader.vert_spirv().empty());
+        CHECK_FALSE(shader.frag_spirv().empty());
+    }
+
+    // Every colormap from the colormap_shaders subproject compiles.
+    state.shading = balsa::visualization::vulkan::ShadingModel::Flat;
+    for (const auto name : shaders::colormap_names()) {
+        shaders::MeshShader<balsa::scene_graph::embedding_traits3F> shader(
+          state, std::string(name));
+        INFO(name);
+        CHECK_FALSE(shader.frag_spirv().empty());
+    }
+    // An unknown colormap has no shader source.
+    shaders::MeshShader<balsa::scene_graph::embedding_traits3F> unknown(state, "missing");
+    CHECK(unknown.frag_spirv().empty());
+}
+
+TEST_CASE("mesh_shader_honors_unlit_normal_source", "[visualization][shaders]") {
+    balsa::visualization::vulkan::MeshRenderState state;
+    state.normal_source = balsa::visualization::vulkan::NormalSource::None;
+
+    shaders::MeshShader<balsa::scene_graph::embedding_traits3F> shader(state);
+    CHECK_FALSE(shader.vert_spirv().empty());
+    CHECK_FALSE(shader.frag_spirv().empty());
 }

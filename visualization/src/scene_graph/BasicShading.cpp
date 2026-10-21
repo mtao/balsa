@@ -8,7 +8,9 @@
 
 namespace balsa::scene_graph {
 
-BasicShading::BasicShading() = default;
+BasicShading::BasicShading() : _render_layers(make_default_mesh_render_layers()) {
+    for (auto &layer : _render_layers) layer.id = {_next_layer_id++};
+}
 
 auto BasicShading::geometry() const -> const MeshGeometry * {
     if (!is_attached()) return nullptr;
@@ -16,200 +18,130 @@ auto BasicShading::geometry() const -> const MeshGeometry * {
     return instance ? instance->geometry() : nullptr;
 }
 
-// ── Resolution ──────────────────────────────────────────────────────
+auto BasicShading::copy_from(const BasicShading &other) -> void {
+    if (&other == this) return;
+    _render_layers = other._render_layers;
+    _next_layer_id = other._next_layer_id;
+    // Re-target explicit bindings so they do not keep other's data alive.
+    // Unresolvable ones keep their attribute: layer_attribute() resolves
+    // by name, so they bind if a same-named attribute appears later.
+    if (const auto *g = geometry()) {
+        for (auto &layer : _render_layers) {
+            for (auto &[role, binding] : layer.bindings) {
+                if (!binding.attribute) continue;
+                if (auto a = g->find_attribute(binding.attribute->name)) {
+                    binding.attribute = std::move(a);
+                }
+            }
+        }
+    }
+    ++_version;
+}
 
-auto BasicShading::sync() const -> void {
+auto BasicShading::find_layer(MeshLayerId id) -> MeshRenderLayer * {
+    const auto it = std::ranges::find(_render_layers, id, &MeshRenderLayer::id);
+    return it == _render_layers.end() ? nullptr : &*it;
+}
+
+auto BasicShading::find_layer(MeshLayerId id) const -> const MeshRenderLayer * {
+    const auto it = std::ranges::find(_render_layers, id, &MeshRenderLayer::id);
+    return it == _render_layers.end() ? nullptr : &*it;
+}
+
+auto BasicShading::find_layer(std::string_view renderer_id) -> MeshRenderLayer * {
+    const auto it = std::ranges::find_if(_render_layers, [renderer_id](const auto &layer) {
+        return layer.renderer && layer.renderer->id() == renderer_id;
+    });
+    return it == _render_layers.end() ? nullptr : &*it;
+}
+
+auto BasicShading::find_layer(std::string_view renderer_id) const
+    -> const MeshRenderLayer * {
+    const auto it = std::ranges::find_if(_render_layers, [renderer_id](const auto &layer) {
+        return layer.renderer && layer.renderer->id() == renderer_id;
+    });
+    return it == _render_layers.end() ? nullptr : &*it;
+}
+
+auto BasicShading::layer_attribute(const MeshRenderLayer &layer,
+                                   std::string_view role) const
+    -> MeshAttributeHandle {
     const auto *g = geometry();
-    const uint64_t v = g ? g->version() : 0;
-    if (g == _synced_geometry && v == _synced_geometry_version) return;
-    _synced_geometry = g;
-    _synced_geometry_version = v;
-    resolve(_position, Kind::Position);
-    resolve(_normal, Kind::Normal);
-    resolve(_scalar, Kind::Scalar);
+    if (g == nullptr || !layer.renderer) return {};
+    const auto *requirement = layer.renderer->requirement(role);
+    if (requirement == nullptr) return {};
+
+    MeshAttributeHandle attribute;
+    if (const auto *binding = layer.binding(role)) {
+        if (!binding->attribute) return {}; // explicitly unbound
+        attribute = g->owns(binding->attribute)
+                        ? binding->attribute
+                        : g->find_attribute(binding->attribute->name);
+    } else if (!requirement->default_attribute.empty()) {
+        attribute = g->find_attribute(requirement->default_attribute);
+    }
+    return attribute && requirement->accepts(*attribute) ? attribute
+                                                         : MeshAttributeHandle{};
 }
 
-auto BasicShading::default_attribute_name(Kind kind) -> std::string_view {
-    switch (kind) {
-    case Kind::Position: return "vertex_positions";
-    case Kind::Normal: return "vertex_normals";
-    case Kind::Scalar: return {};
-    }
-    return {};
-}
-
-auto BasicShading::compatible(Kind kind, const MeshAttribute &attr,
-                              int component, bool warn) -> bool {
-    if (attr.domain != AttributeDomain::Vertex) {
-        if (warn) {
-            spdlog::warn("BasicShading: attribute '{}' is not a vertex attribute",
-                         attr.name);
-        }
+auto BasicShading::set_binding(MeshLayerId layer_id, std::string_view role,
+                               std::optional<MeshRoleBinding> binding) -> bool {
+    auto *layer = find_layer(layer_id);
+    if (layer == nullptr || !layer->renderer
+        || layer->renderer->requirement(role) == nullptr) {
         return false;
     }
-    const uint8_t needed = kind == Kind::Normal ? 2 : 1;
-    if (attr.component_count() < needed) {
-        if (warn) {
-            spdlog::warn("BasicShading: attribute '{}' has {} components, "
-                         "needs >= {}",
-                         attr.name,
-                         attr.component_count(),
-                         needed);
-        }
-        return false;
+    if (binding) {
+        layer->bindings.insert_or_assign(std::string(role), std::move(*binding));
+    } else {
+        layer->bindings.erase(std::string(role));
     }
-    if (kind == Kind::Scalar && component >= attr.component_count()) {
-        if (warn) {
-            spdlog::warn("BasicShading: component {} out of range for '{}'",
-                         component,
-                         attr.name);
-        }
-        return false;
-    }
+    ++_version;
     return true;
 }
 
-auto BasicShading::resolve(Role &role, Kind kind) const -> void {
-    role.binding.clear();
-    const auto *g = _synced_geometry;
-    if (g == nullptr) return;
-    if (role.attribute && !g->owns(role.attribute)) role.attribute = {};
-    if (!role.attribute && !role.user_set) {
-        if (const auto name = default_attribute_name(kind); !name.empty()) {
-            role.attribute = g->find_attribute(name);
-        }
-    }
-    if (!role.attribute
-        || !compatible(kind, *role.attribute, role.component, /*warn=*/false)) {
-        return;
-    }
-
-    if (kind != Kind::Scalar) {
-        role.binding = RoleBinding::whole(role.attribute);
-    } else if (role.component >= 0) {
-        role.binding = RoleBinding::component(
-            role.attribute, static_cast<uint8_t>(role.component));
-    } else if (role.attribute->component_count() == 1) {
-        role.binding = RoleBinding::component(role.attribute, 0);
-    } else {
-        role.binding = RoleBinding::magnitude(role.attribute);
-    }
-}
-
-// ── Role assignment ─────────────────────────────────────────────────
-
-auto BasicShading::find(std::string_view name) const -> MeshAttributeHandle {
+auto BasicShading::assign_layer_role(MeshLayerId layer_id, std::string_view role,
+                                     const MeshAttributeHandle &attribute) -> bool {
     const auto *g = geometry();
-    return g ? g->find_attribute(name) : MeshAttributeHandle{};
-}
-
-auto BasicShading::assign(Role &role, Kind kind,
-                          const MeshAttributeHandle &attr, int component)
-    -> bool {
-    sync();
-    role.user_set = true;
-    role.component = component;
-    role.attribute = {};
-    const auto *g = _synced_geometry;
-    if (g != nullptr && g->owns(attr)
-        && compatible(kind, *attr, component, /*warn=*/true)) {
-        role.attribute = attr;
-    }
-    resolve(role, kind);
-    ++_version;
-    return role.binding.is_bound();
-}
-
-auto BasicShading::clear(Role &role) -> void {
-    role.user_set = true;
-    role.attribute = {};
-    role.component = -1;
-    role.binding.clear();
-    ++_version;
-}
-
-auto BasicShading::assign_position(std::string_view name) -> bool {
-    auto a = find(name);
-    if (!a) {
-        clear_position();
+    const auto *layer = find_layer(layer_id);
+    if (g == nullptr || layer == nullptr || !layer->renderer || !g->owns(attribute)) {
         return false;
     }
-    return assign_position(a);
-}
-
-auto BasicShading::assign_normal(std::string_view name) -> bool {
-    auto a = find(name);
-    if (!a) {
-        clear_normal();
+    const auto *requirement = layer->renderer->requirement(role);
+    if (requirement == nullptr) return false;
+    if (!requirement->accepts(*attribute)) {
+        spdlog::warn("BasicShading: attribute '{}' ({} components) cannot bind "
+                     "role '{}' of '{}'",
+                     attribute->name, attribute->component_count(), role,
+                     layer->renderer->id());
         return false;
     }
-    return assign_normal(a);
+    return set_binding(layer_id, role, MeshRoleBinding{attribute});
 }
 
-auto BasicShading::assign_scalar(std::string_view name, int component)
-    -> bool {
-    auto a = find(name);
-    if (!a) {
-        clear_scalar();
-        return false;
-    }
-    return assign_scalar(a, component);
+auto BasicShading::assign_layer_role(MeshLayerId layer_id, std::string_view role,
+                                     std::string_view attribute_name) -> bool {
+    const auto *g = geometry();
+    return g != nullptr
+           && assign_layer_role(layer_id, role, g->find_attribute(attribute_name));
 }
 
-auto BasicShading::assign_position(const MeshAttributeHandle &attr) -> bool {
-    return assign(_position, Kind::Position, attr, -1);
+auto BasicShading::clear_layer_role(MeshLayerId layer_id, std::string_view role) -> bool {
+    return set_binding(layer_id, role, MeshRoleBinding{});
 }
 
-auto BasicShading::assign_normal(const MeshAttributeHandle &attr) -> bool {
-    return assign(_normal, Kind::Normal, attr, -1);
+auto BasicShading::reset_layer_role(MeshLayerId layer_id, std::string_view role) -> bool {
+    return set_binding(layer_id, role, std::nullopt);
 }
 
-auto BasicShading::assign_scalar(const MeshAttributeHandle &attr,
-                                 int component) -> bool {
-    return assign(_scalar, Kind::Scalar, attr, component);
+auto MeshLayerContext::attribute(std::string_view role) const -> MeshAttributeHandle {
+    const auto *layer = m_shading ? m_shading->find_layer(m_layer) : nullptr;
+    return layer ? m_shading->layer_attribute(*layer, role) : MeshAttributeHandle{};
 }
 
-auto BasicShading::set_scalar_component(int component) -> bool {
-    sync();
-    auto a = _scalar.attribute; // copy: assign() resets the role
-    if (!a) return false;
-    return assign_scalar(a, component);
-}
-
-auto BasicShading::clear_position() -> void { clear(_position); }
-auto BasicShading::clear_normal() -> void { clear(_normal); }
-auto BasicShading::clear_scalar() -> void { clear(_scalar); }
-
-auto BasicShading::copy_from(const BasicShading &other) -> void {
-    if (&other == this) return;
-    other.sync();
-    sync();
-    auto copy_role = [this](Role &dst, const Role &src, Kind kind) {
-        dst.user_set = src.user_set;
-        dst.component = src.component;
-        dst.attribute =
-            src.user_set && src.attribute ? find(src.attribute->name)
-                                          : MeshAttributeHandle{};
-        resolve(dst, kind);
-    };
-    copy_role(_position, other._position, Kind::Position);
-    copy_role(_normal, other._normal, Kind::Normal);
-    copy_role(_scalar, other._scalar, Kind::Scalar);
-    _render_state = other._render_state;
-    ++_version;
-}
-
-auto BasicShading::position_binding() const -> const RoleBinding & {
-    sync();
-    return _position.binding;
-}
-auto BasicShading::normal_binding() const -> const RoleBinding & {
-    sync();
-    return _normal.binding;
-}
-auto BasicShading::scalar_binding() const -> const RoleBinding & {
-    sync();
-    return _scalar.binding;
+auto MeshLayerContext::geometry_version() const -> uint64_t {
+    const auto *geometry = m_shading ? m_shading->geometry() : nullptr;
+    return geometry ? geometry->version() : 0;
 }
 
 } // namespace balsa::scene_graph

@@ -13,8 +13,8 @@ namespace balsa::visualization::qt {
 // VerticalTabBar
 // ═══════════════════════════════════════════════════════════════════════
 
-static constexpr int k_tab_width = 70;
-static constexpr int k_tab_height = 64;
+static constexpr int k_tab_width = 34;
+static constexpr int k_tab_height = 88;
 static constexpr int k_icon_font_size = 20;
 static constexpr int k_label_font_size = 9;
 
@@ -84,26 +84,26 @@ void VerticalTabBar::paintEvent(QPaintEvent * /*event*/) {
                     : palette().color(QPalette::Disabled, QPalette::WindowText);
         p.setPen(text_color);
 
-        // Icon character (upper portion of the cell)
+        // Icon character at the top of the cell.
         QString icon_char = tabData(i).toString();
         if (!icon_char.isEmpty()) {
             QFont icon_font = p.font();
             icon_font.setPixelSize(k_icon_font_size);
             p.setFont(icon_font);
-            QRect icon_rect(
-                rect.left(), rect.top() + 6, rect.width(), rect.height() / 2);
+            QRect icon_rect(rect.left(), rect.top() + 5, rect.width(), 24);
             p.drawText(icon_rect, Qt::AlignHCenter | Qt::AlignTop, icon_char);
         }
 
-        // Label (lower portion)
+        // Rotated labels keep the sidebar width independent of label length.
         QFont label_font = p.font();
         label_font.setPixelSize(k_label_font_size);
         p.setFont(label_font);
-        QRect label_rect(rect.left(),
-                         rect.top() + rect.height() / 2,
-                         rect.width(),
-                         rect.height() / 2 - 4);
-        p.drawText(label_rect, Qt::AlignHCenter | Qt::AlignTop, tabText(i));
+        p.save();
+        p.translate(rect.left(), rect.bottom());
+        p.rotate(-90);
+        const QRect label_rect(0, 0, rect.height(), rect.width() - 4);
+        p.drawText(label_rect, Qt::AlignHCenter | Qt::AlignVCenter, tabText(i));
+        p.restore();
 
         // Subtle bottom separator
         p.setPen(palette().mid().color());
@@ -144,6 +144,9 @@ int VerticalTabWidget::addTab(QWidget *page,
     auto *scroll = new QScrollArea(_stack);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    // Page-specific controls must not change the dock's minimum width as the
+    // user switches tabs; the scroll area handles narrow viewports instead.
+    scroll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     scroll->setWidget(page);
     page->setParent(scroll);
 

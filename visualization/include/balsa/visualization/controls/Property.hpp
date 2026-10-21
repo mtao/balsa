@@ -80,6 +80,9 @@ struct Button {
 struct Property {
     std::string label{};
     std::string tooltip{};
+    /// Tooltip that depends on live state; when set, it replaces tooltip
+    /// and is re-evaluated on every refresh.
+    Getter<std::string> live_tooltip{};
     Predicate enabled_when = always_true; ///< greyed out when false
     Predicate visible_when = always_true; ///< hidden when false
     std::variant<BoolInput,

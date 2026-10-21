@@ -254,13 +254,23 @@ namespace {
 
             // Apply constraints: auto-selects shading/normal_source based
             // on whether the mesh actually has normal data.
-            shading->render_state().constrain(shading->has_normals());
+            auto *surface_layer = shading->find_layer("balsa.phong_surface");
+            const auto positions = surface_layer
+                ? shading->layer_attribute(*surface_layer, sg::position_role)
+                : sg::MeshAttributeHandle{};
+            if (auto *surface = surface_layer
+                    ? dynamic_cast<sg::PhongSurfaceRenderer *>(surface_layer->renderer.get())
+                    : nullptr) {
+                surface->state.constrain(
+                    shading->layer_attribute(*surface_layer, sg::normal_role).valid());
+            }
 
-            // Compute bounding box from the position binding and set Object
+            // Compute bounding box from the bound positions and set Object
             // transform to center and normalize the mesh.  The source data
             // stays pristine -- normalization is applied via the Object's
             // local transform.
-            if (auto xf = viz::unit_box_transform(*shading)) {
+            if (auto xf = positions ? viz::unit_box_transform(*positions)
+                                     : std::nullopt) {
                 mesh_obj.set_from_transform(*xf);
             }
 
@@ -268,13 +278,14 @@ namespace {
             // so that edge-only meshes are visible immediately.
             if (!geometry->has_triangle_indices()
                 && geometry->has_edge_indices()) {
-                shading->render_state().layers.solid.enabled = false;
-                shading->render_state().layers.wireframe.enabled = true;
+                if (surface_layer) {
+                    surface_layer->enabled = false;
+                }
             }
 
             spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
                          mesh_obj.name,
-                         shading->vertex_count(),
+                         positions ? positions->count() : std::size_t{0},
                          geometry->triangle_count(),
                          geometry->edge_count());
 

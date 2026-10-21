@@ -10,8 +10,8 @@ namespace balsa::visualization::qt {
 // ── VerticalTabBar ──────────────────────────────────────────────────
 //
 // A QTabBar subclass that draws tabs vertically along the left edge,
-// with horizontal text and an icon above each label (Blender/VS Code
-// style).  Each tab cell is ~70 px wide x ~64 px tall.
+// with rotated text and an icon above each label. Each tab cell has a
+// narrow, fixed width so page contents cannot alter sidebar spacing.
 
 class VerticalTabBar : public QTabBar {
     Q_OBJECT

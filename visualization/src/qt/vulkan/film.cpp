@@ -6,6 +6,10 @@
 namespace balsa::visualization::qt::vulkan {
 Film::Film(QVulkanWindow &window) : _window(window) {
     spdlog::info("First time calling myself on a window! {}", swapchain_image_count());
+    if (depth_stencil_format() == vk::Format::eUndefined) {
+        spdlog::error("QVulkanWindow created no depth/stencil attachment; "
+                      "mesh depth testing is disabled");
+    }
 }
 Film::~Film() {}
 

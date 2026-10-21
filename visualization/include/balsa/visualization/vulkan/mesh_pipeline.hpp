@@ -11,7 +11,7 @@
 namespace balsa::visualization::vulkan {
 
 class Film;
-class MeshBuffers;
+struct MeshVertexInputs;
 
 // ── MeshPipelineKey ──────────────────────────────────────────────────
 //
@@ -23,28 +23,21 @@ class MeshBuffers;
 struct MeshPipelineKey {
     // Shader permutation state
     ShadingModel shading = ShadingModel::Phong;
-    ColorSource color_source = ColorSource::Uniform;
     NormalSource normal_source = NormalSource::FromAttribute;
 
     // Primitive topology — one pipeline per topology (triangles, lines,
     // points).  Replaces the old RenderMode enum.
     vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
 
-    // Colormap name — only meaningful when color_source == ScalarField.
-    // Normalised to "" for other color sources so that keys compare equal
-    // regardless of what the user last typed in the colormap text field.
-    std::string colormap_name;
+    // Colormap applied to the scalar input; empty = uniform colour.
+    std::string colormap;
 
-    // Vertex attribute flags (determines vertex input layout)
-    bool has_normals = false;
-    bool has_colors = false;
-    bool has_scalars = false;
-
-    // Position/normal component counts (1–4).  Affects VkFormat in the
-    // vertex input layout.  Vulkan auto-fills missing components when
-    // the shader declares vec3 but the buffer provides fewer floats.
+    // Vertex input component counts (1–4; 0 = stream absent).  Determine
+    // the VkFormat of each input.  Vulkan auto-fills missing components
+    // when the shader reads more than the buffer provides.
     uint8_t position_components = 3;
-    uint8_t normal_components = 3;
+    uint8_t normal_components = 0;
+    uint8_t scalar_components = 0;
 
     // Rasterization state
     CullMode cull_mode = CullMode::None; // which faces to discard
@@ -69,12 +62,16 @@ struct MeshPipelineKeyHash {
 };
 
 // Build a MeshPipelineKey from the current render state, topology,
-// buffer contents, and film configuration.  When wireframe_overlay is
+// bound vertex inputs, and film configuration.  A non-empty colormap
+// colours by the scalar input.  Shader paths whose input is unbound fall
+// back (attribute normals -> computed, colormap -> uniform colour).
+// When wireframe_overlay is
 // true, the pipeline will emit gl_BaryCoordEXT-based wireframe edges
 // in the fragment shader.
 MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
+                                  std::string_view colormap,
                                   vk::PrimitiveTopology topology,
-                                  const MeshBuffers &buffers,
+                                  const MeshVertexInputs &inputs,
                                   Film &film,
                                   bool wireframe_overlay = false);
 
@@ -111,11 +108,12 @@ class MeshPipelineManager {
     // ── Pipeline access ─────────────────────────────────────────────
 
     // Get (or lazily create) the pipeline matching the given state,
-    // topology, and buffer configuration.  The Film is queried for
+    // topology, and bound vertex inputs.  The Film is queried for
     // render-pass / MSAA / depth-stencil info.
     vk::Pipeline get_or_create(const MeshRenderState &state,
+                               std::string_view colormap,
                                vk::PrimitiveTopology topology,
-                               const MeshBuffers &buffers,
+                               const MeshVertexInputs &inputs,
                                Film &film,
                                bool wireframe_overlay = false);
 

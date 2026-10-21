@@ -277,6 +277,7 @@ void ControlsWidget::build_layout(const ctl::Layout &layout, QWidget *parent,
             w->setVisible(visible);
             if (label) label->setVisible(visible);
             w->setEnabled(prop.enabled_when());
+            if (prop.live_tooltip) w->setToolTip(qstr(prop.live_tooltip()));
         });
     }
     if (hbox) hbox->addStretch(0);

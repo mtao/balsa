@@ -48,11 +48,10 @@ enum class AttributeType : uint8_t {
     UInt32,
 };
 
-/// Why a typed view of an attribute or binding could not be made, with
-/// what was actually there.
+/// Why a typed view of an attribute could not be made, with what was
+/// actually there.
 struct ViewError {
     enum class Reason : uint8_t {
-        Unbound,             ///< role binding has no attribute
         WrongType,           ///< values are stored as actual_type
         WrongComponentCount, ///< values have actual_components components
     };

@@ -81,6 +81,29 @@ void NativeFilm::initialize() {
     _surface_raii = make_surface();
     pick_physical_device();
     create_device();
+    if (_depth_stencil_format == vk::Format::eUndefined) {
+        // Native backends own their depth attachment, unlike QVulkanWindow.
+        // Select one before creating the render pass so mesh pipelines enable
+        // depth testing and writes.
+        constexpr std::array depth_formats{
+            vk::Format::eD32Sfloat,
+            vk::Format::eD32SfloatS8Uint,
+            vk::Format::eD24UnormS8Uint,
+        };
+        for (const auto format : depth_formats) {
+            const auto properties =
+                _physical_device_raii.getFormatProperties(format);
+            if (properties.optimalTilingFeatures
+                & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
+                _depth_stencil_format = format;
+                break;
+            }
+        }
+        if (_depth_stencil_format == vk::Format::eUndefined) {
+            throw std::runtime_error(
+                "No supported depth/stencil attachment format for Vulkan surface");
+        }
+    }
     create_swapchain();
     create_depth_stencil_resources();
     create_msaa_color_resources();
@@ -832,6 +855,10 @@ void NativeFilm::recreate_swapchain() {
     spdlog::debug("Swapchain recreation complete: {}x{}",
                   _swapchain_extent.width,
                   _swapchain_extent.height);
+}
+
+void NativeFilm::notify_framebuffer_resized() {
+    _swapchain_needs_recreation = true;
 }
 
 void NativeFilm::create_render_pass() {

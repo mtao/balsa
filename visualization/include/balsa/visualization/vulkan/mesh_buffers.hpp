@@ -2,9 +2,11 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+#include "balsa/scene_graph/MeshAttribute.hpp"
 #include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/vulkan/buffer.hpp"
 
@@ -35,12 +37,15 @@ struct MaterialUBO {
                                       // point_size, w = two_sided (>0.5)
     scene_graph::Vec4f
         layer_color; // rgba — per-layer color (solid/wireframe/point)
+    scene_graph::Vec4f scalar_select; // x = mode (0 component, 1 p-norm),
+                                      // y = component index or p,
+                                      // z = component count, w = pad
 };
-static_assert(sizeof(MaterialUBO) == 96, "MaterialUBO must be 96 bytes");
+static_assert(sizeof(MaterialUBO) == 112, "MaterialUBO must be 112 bytes");
 
-// Maximum number of render layers drawn per mesh per frame (solid,
-// wireframe, points).  Used to size the dynamic MaterialUBO buffer.
-inline constexpr uint32_t k_max_material_layers = 3;
+// Maximum number of independently configured renderer layers drawn per mesh
+// frame. The default preset uses three; applications may register more.
+inline constexpr uint32_t k_max_material_layers = 16;
 
 // Compute the aligned offset for dynamic UBO slots, respecting
 // minUniformBufferOffsetAlignment.  Returns the stride in bytes
@@ -51,24 +56,34 @@ inline vk::DeviceSize material_ubo_aligned_size(vk::DeviceSize min_alignment) {
     return (raw + min_alignment - 1) & ~(min_alignment - 1);
 }
 
+// ── AttributeBuffer / MeshVertexInputs ──────────────────────────────
+
+// A vertex attribute uploaded as tightly packed floats, 1–4 components
+// per vertex.  Vulkan fills components the shader reads but the format
+// lacks with (0, 0, 0, 1).
+struct AttributeBuffer {
+    VulkanBuffer buffer;
+    uint8_t components = 0;
+    uint32_t count = 0;
+};
+
+// The vertex streams one draw reads, each the attribute a layer bound to
+// the corresponding role (nullptr when unbound):
+//
+//   binding 0: positions (location 0)
+//   binding 1: normals   (location 1)
+//   binding 3: scalars   (location 3; reduced to one value in the shader)
+struct MeshVertexInputs {
+    const AttributeBuffer *positions = nullptr;
+    const AttributeBuffer *normals = nullptr;
+    const AttributeBuffer *scalars = nullptr;
+};
+
 // ── MeshBuffers ──────────────────────────────────────────────────────
 //
-// Owns GPU-side VulkanBuffers for mesh vertex attributes and index
-// buffers.  Each attribute is an optional separate VkBuffer (matching
-// the separate-binding vertex layout in mesh.vert).
-//
-//   binding 0: positions   (vec2/vec3, location 0)  — format-aware
-//   binding 1: normals     (vec2/vec3, location 1)  — format-aware
-//   binding 2: colors      (vec4,      location 2)
-//   binding 3: scalars     (float,     location 3)
-//
-// Positions and normals support variable component counts (1–4 float
-// components).  Vulkan auto-fills missing components in the vertex
-// shader: a R32G32_SFLOAT attribute read as vec3 yields (x, y, 0.0).
-//
-// Two index buffers:
-//   triangle_indices  (uint32, for solid/flat/phong draws)
-//   edge_indices      (uint32, for wireframe draws)
+// GPU buffers for one mesh: a cache of uploaded vertex attributes, keyed
+// by attribute identity so layers binding the same attribute share one
+// buffer, plus the triangle and edge index buffers.
 
 class MeshBuffers {
   public:
@@ -81,29 +96,18 @@ class MeshBuffers {
     MeshBuffers(MeshBuffers &&) = default;
     MeshBuffers &operator=(MeshBuffers &&) = default;
 
-    // ── Upload raw data ─────────────────────────────────────────────
+    // ── Vertex attributes ───────────────────────────────────────────
 
-    // Positions: raw float data with variable component count (1–4).
-    // byte_size = vertex_count * components * sizeof(float).
-    // Vulkan auto-fills missing components when the shader reads vec3.
-    void upload_positions(Film &film,
-                          const void *data,
-                          std::size_t byte_size,
-                          uint32_t vertex_count,
-                          uint8_t components);
+    // The uploaded buffer for attribute, uploading it (converted to
+    // float) on first use.  nullptr for an invalid handle, an empty
+    // attribute, or more than 4 components.
+    auto attribute(Film &film, const scene_graph::MeshAttributeHandle &attribute)
+        -> const AttributeBuffer *;
 
-    // Normals: raw float data with variable component count (1–4).
-    // byte_size = vertex_count * components * sizeof(float).
-    void upload_normals(Film &film,
-                        const void *data,
-                        std::size_t byte_size,
-                        uint8_t components);
+    // Drop all uploaded attributes, e.g. after their values changed.
+    void clear_attributes();
 
-    // Per-vertex colors: N vertices × 4 floats (tightly packed vec4[], RGBA).
-    void upload_colors(Film &film, std::span<const float> data);
-
-    // Per-vertex scalars: N vertices × 1 float.
-    void upload_scalars(Film &film, std::span<const float> data);
+    // ── Index buffers ───────────────────────────────────────────────
 
     // Triangle indices: T triangles × 3 uint32.
     void upload_triangle_indices(Film &film,
@@ -115,71 +119,34 @@ class MeshBuffers {
                              std::span<const uint32_t> data,
                              uint32_t edge_count);
 
-    // ── Upload from size_t index data (performs narrowing conversion) ─
-
-    void upload_triangle_indices_from_sizet(Film &film,
-                                            std::span<const std::size_t> data,
-                                            uint32_t triangle_count);
-    void upload_edge_indices_from_sizet(Film &film,
-                                        std::span<const std::size_t> data,
-                                        uint32_t edge_count);
-
     // ── Release all GPU resources ───────────────────────────────────
 
     void release();
 
     // ── Queries ─────────────────────────────────────────────────────
 
-    uint32_t vertex_count() const { return _vertex_count; }
     uint32_t triangle_count() const { return _triangle_count; }
     uint32_t edge_count() const { return _edge_count; }
-
-    // Number of float components per position vertex (1–4, default 3).
-    uint8_t position_components() const { return _position_components; }
-
-    // Number of float components per normal vertex (1–4, default 3).
-    uint8_t normal_components() const { return _normal_components; }
-
-    bool has_positions() const { return _positions.is_valid(); }
-    bool has_normals() const { return _normals.is_valid(); }
-    bool has_colors() const { return _colors.is_valid(); }
-    bool has_scalars() const { return _scalars.is_valid(); }
     bool has_triangle_indices() const { return _triangle_indices.is_valid(); }
     bool has_edge_indices() const { return _edge_indices.is_valid(); }
 
-    // Raw buffer access (for binding in draw commands)
-    vk::Buffer positions_buffer() const { return _positions.buffer(); }
-    vk::Buffer normals_buffer() const { return _normals.buffer(); }
-    vk::Buffer colors_buffer() const { return _colors.buffer(); }
-    vk::Buffer scalars_buffer() const { return _scalars.buffer(); }
     vk::Buffer triangle_index_buffer() const {
         return _triangle_indices.buffer();
     }
     vk::Buffer edge_index_buffer() const { return _edge_indices.buffer(); }
 
-    // ── Vertex input descriptions ───────────────────────────────────
-    //
-    // Return Vulkan vertex input binding/attribute descriptions based
-    // on which attributes are currently populated.  Uses stored
-    // component counts for position/normal formats.
-
-    std::vector<vk::VertexInputBindingDescription> binding_descriptions() const;
-    std::vector<vk::VertexInputAttributeDescription>
-        attribute_descriptions() const;
-
   private:
-    VulkanBuffer _positions;
-    VulkanBuffer _normals;
-    VulkanBuffer _colors;
-    VulkanBuffer _scalars;
+    struct CachedAttribute {
+        scene_graph::MeshAttributeHandle source; // keeps the key alive
+        AttributeBuffer gpu;
+    };
+    std::unordered_map<const scene_graph::MeshAttribute *, CachedAttribute>
+        _attributes;
     VulkanBuffer _triangle_indices;
     VulkanBuffer _edge_indices;
 
-    uint32_t _vertex_count = 0;
     uint32_t _triangle_count = 0;
     uint32_t _edge_count = 0;
-    uint8_t _position_components = 3;
-    uint8_t _normal_components = 3;
 };
 
 } // namespace balsa::visualization::vulkan

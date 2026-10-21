@@ -20,17 +20,13 @@ std::size_t
     MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noexcept {
     std::size_t h = std::hash<uint8_t>{}(static_cast<uint8_t>(k.shading));
     h = hash_combine(
-        h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.color_source)));
-    h = hash_combine(
         h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.normal_source)));
     h = hash_combine(h,
                      std::hash<uint32_t>{}(static_cast<uint32_t>(k.topology)));
-    h = hash_combine(h, std::hash<std::string>{}(k.colormap_name));
-    h = hash_combine(h, std::hash<bool>{}(k.has_normals));
-    h = hash_combine(h, std::hash<bool>{}(k.has_colors));
-    h = hash_combine(h, std::hash<bool>{}(k.has_scalars));
+    h = hash_combine(h, std::hash<std::string>{}(k.colormap));
     h = hash_combine(h, std::hash<uint8_t>{}(k.position_components));
     h = hash_combine(h, std::hash<uint8_t>{}(k.normal_components));
+    h = hash_combine(h, std::hash<uint8_t>{}(k.scalar_components));
     h = hash_combine(h,
                      std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
     h = hash_combine(h, std::hash<bool>{}(k.wireframe_overlay));
@@ -43,33 +39,39 @@ std::size_t
 // ── make_pipeline_key ────────────────────────────────────────────────
 
 MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
+                                  std::string_view colormap,
                                   vk::PrimitiveTopology topology,
-                                  const MeshBuffers &buffers,
+                                  const MeshVertexInputs &inputs,
                                   Film &film,
                                   bool wireframe_overlay) {
     MeshPipelineKey key;
     key.shading = state.shading;
-    key.color_source = state.color_source;
     key.normal_source = state.normal_source;
     key.topology = topology;
 
-    // Normalise colormap name: only relevant for ScalarField
-    key.colormap_name = (state.color_source == ColorSource::ScalarField)
-                            ? state.colormap_name
-                            : std::string{};
+    auto components = [](const AttributeBuffer *b) -> uint8_t {
+        return b ? b->components : 0;
+    };
+    key.position_components = components(inputs.positions);
+    key.normal_components = components(inputs.normals);
+    key.scalar_components = components(inputs.scalars);
 
-    key.has_normals = buffers.has_normals();
-    key.has_colors = buffers.has_colors();
-    key.has_scalars = buffers.has_scalars();
-    key.position_components = buffers.position_components();
-    key.normal_components = buffers.normal_components();
+    // A colormap needs a scalar to map; without one, draw uniform colour.
+    if (key.scalar_components != 0) key.colormap = colormap;
+    if (key.colormap.empty()) {
+        key.scalar_components = 0; // unused: keep keys equal
+    }
 
     // ── Safety net: enforce normal constraints ──────────────────────
     // The UI and load-time code should already enforce these via
     // MeshRenderState::constrain(), but clamp here as a last resort
     // to prevent shader/vertex-layout mismatches.
-    if (key.normal_source == NormalSource::FromAttribute && !key.has_normals) {
+    if (key.normal_source == NormalSource::FromAttribute
+        && key.normal_components == 0) {
         key.normal_source = NormalSource::ComputedInShader;
+    }
+    if (key.normal_source != NormalSource::FromAttribute) {
+        key.normal_components = 0; // unused: keep keys equal
     }
     if (key.normal_source == NormalSource::ComputedInShader
         && (key.shading == ShadingModel::Phong
@@ -295,8 +297,9 @@ void MeshPipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
 // ── Pipeline access ──────────────────────────────────────────────────
 
 vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
+                                                std::string_view colormap,
                                                 vk::PrimitiveTopology topology,
-                                                const MeshBuffers &buffers,
+                                                const MeshVertexInputs &inputs,
                                                 Film &film,
                                                 bool wireframe_overlay) {
     if (!_initialized) {
@@ -307,7 +310,7 @@ vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
         _shader_revision = _shader_library.revision();
     }
     auto key =
-        make_pipeline_key(state, topology, buffers, film, wireframe_overlay);
+        make_pipeline_key(state, colormap, topology, inputs, film, wireframe_overlay);
     auto it = _cache.find(key);
     if (it != _cache.end()) { return it->second; }
     auto pipeline = create_pipeline(key);
@@ -322,20 +325,19 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
         "MeshPipelineManager: creating pipeline for shading={}, color={}, "
         "topology={}",
         static_cast<int>(key.shading),
-        static_cast<int>(key.color_source),
+        key.colormap,
         static_cast<int>(key.topology));
 
     // Build a temporary MeshRenderState from the key to drive shader
     // compilation
     MeshRenderState temp_state;
     temp_state.shading = key.shading;
-    temp_state.color_source = key.color_source;
     temp_state.normal_source = key.normal_source;
-    temp_state.colormap_name = key.colormap_name;
 
     using ET3F = scene_graph::embedding_traits3F;
     shaders::MeshShader<ET3F> shader(
-        temp_state, key.topology, key.wireframe_overlay, _shader_library);
+        temp_state, key.colormap, key.topology, key.wireframe_overlay,
+        _shader_library);
     auto vert_spv = shader.vert_spirv();
     auto frag_spv = shader.frag_spirv();
 
@@ -375,16 +377,11 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
 
     // ── Vertex input ────────────────────────────────────────────────
     //
-    // Build binding/attribute descriptions from the key's attribute flags
-    // and component counts, matching the layout in mesh.vert:
-    //   binding 0: position   (vec2/vec3, location 0)  — format from
-    //   key.position_components binding 1: normal     (vec2/vec3, location 1)
-    //   — format from key.normal_components, if has_normals binding 2: color
-    //   (vec4,      location 2)  — if has_colors binding 3: scalar     (float,
-    //   location 3)  — if has_scalars
-    //
-    // Vulkan auto-fills missing components in the shader: a R32G32_SFLOAT
-    // attribute read as vec3 gets (x, y, 0.0).
+    // One binding per stream, matching mesh.vert; formats follow the
+    // key's component counts (Vulkan fills missing components):
+    //   binding 0: position (location 0)
+    //   binding 1: normal   (location 1)  — if normal_components > 0
+    //   binding 3: scalar   (location 3)  — if scalar_components > 0
 
     auto float_format = [](uint8_t components) -> vk::Format {
         switch (components) {
@@ -394,40 +391,24 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
             return vk::Format::eR32G32Sfloat;
         case 3:
             return vk::Format::eR32G32B32Sfloat;
-        case 4:
-            return vk::Format::eR32G32B32A32Sfloat;
         default:
-            return vk::Format::eR32G32B32Sfloat;
+            return vk::Format::eR32G32B32A32Sfloat;
         }
     };
 
     std::vector<vk::VertexInputBindingDescription> binding_descs;
     std::vector<vk::VertexInputAttributeDescription> attrib_descs;
-
-    // Positions always present
-    binding_descs.push_back(
-        {0,
-         static_cast<uint32_t>(sizeof(float) * key.position_components),
-         vk::VertexInputRate::eVertex});
-    attrib_descs.push_back({0, 0, float_format(key.position_components), 0});
-
-    if (key.has_normals) {
+    auto add_stream = [&](uint32_t location, uint8_t components) {
+        if (components == 0) return;
         binding_descs.push_back(
-            {1,
-             static_cast<uint32_t>(sizeof(float) * key.normal_components),
+            {location,
+             static_cast<uint32_t>(sizeof(float) * components),
              vk::VertexInputRate::eVertex});
-        attrib_descs.push_back({1, 1, float_format(key.normal_components), 0});
-    }
-    if (key.has_colors) {
-        binding_descs.push_back(
-            {2, sizeof(float) * 4, vk::VertexInputRate::eVertex});
-        attrib_descs.push_back({2, 2, vk::Format::eR32G32B32A32Sfloat, 0});
-    }
-    if (key.has_scalars) {
-        binding_descs.push_back(
-            {3, sizeof(float), vk::VertexInputRate::eVertex});
-        attrib_descs.push_back({3, 3, vk::Format::eR32Sfloat, 0});
-    }
+        attrib_descs.push_back({location, location, float_format(components), 0});
+    };
+    add_stream(0, key.position_components);
+    add_stream(1, key.normal_components);
+    add_stream(3, key.scalar_components);
 
     vk::PipelineVertexInputStateCreateInfo vertex_input;
     vertex_input.setVertexBindingDescriptions(binding_descs);

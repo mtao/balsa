@@ -14,14 +14,6 @@ enum class ShadingModel : uint8_t { Flat,
                                     Gouraud,
                                     Phong };
 
-// Where fragment color comes from.
-//   Uniform:     single color for the whole mesh (from uniform_color)
-//   PerVertex:   per-vertex RGB attribute
-//   ScalarField: per-vertex scalar mapped through a colormap
-enum class ColorSource : uint8_t { Uniform,
-                                   PerVertex,
-                                   ScalarField };
-
 // Where surface normals come from.
 //   FromAttribute:    per-vertex normal attribute (smooth shading)
 //   ComputedInShader: flat normals computed from dFdx/dFdy in fragment shader
@@ -42,30 +34,19 @@ enum class CullMode : uint8_t { None,
 // Read/written by both ImGui and Qt UI panels.
 struct MeshRenderState {
     ShadingModel shading = ShadingModel::Phong;
-    ColorSource color_source = ColorSource::Uniform;
     NormalSource normal_source = NormalSource::FromAttribute;
 
     // Face culling (rasterizer).
     CullMode cull_mode = CullMode::None;
-
-    // ── Render layers ───────────────────────────────────────────────
-    // Three composable layers (solid, wireframe, points), each with
-    // independent enable flag and color.  Default: solid + wireframe
-    // enabled, points disabled.
-    scene_graph::RenderLayers layers;
 
     // ── Material ────────────────────────────────────────────────────
     // Per-mesh material response to scene lighting.  The light
     // source (direction, color) comes from the scene's Light feature.
     scene_graph::MaterialProperties material;
 
-    // Uniform color (when color_source == Uniform).  RGBA.
-    scene_graph::Vec4f uniform_color{ 0.8f, 0.8f, 0.8f, 1.0f };
-
-    // Colormap name for scalar field (matches Qt resource alias, e.g. "MATLAB_jet").
-    std::string colormap_name = "MATLAB_jet";
-    float scalar_min = 0.0f;
-    float scalar_max = 1.0f;
+    // Uniform color (unless the renderer colours by a scalar).  RGBA.
+    scene_graph::Vec4f uniform_color{
+        63.0f / 255.0f, 38.0f / 255.0f, 1.0f, 1.0f };
 
     // Light both sides of faces.
     bool two_sided = true;
@@ -116,6 +97,9 @@ struct MeshRenderState {
 // both scene lighting and per-mesh MaterialProperties.
 
 struct ResolvedLightState {
+    // False when the scene has no enabled lights.  The drawable maps this to
+    // an unlit material response rather than falling back to a phantom light.
+    bool enabled = false;
     // World-space light direction (normalised).
     scene_graph::Vec3f light_dir{ 0.577f, 0.577f, 0.577f };
     // Light color (multiplied with diffuse/specular).

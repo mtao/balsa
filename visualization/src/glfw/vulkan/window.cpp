@@ -173,6 +173,10 @@ void Window::cb_framebuffer_size(GLFWwindow *w, int width, int height) {
 
     spdlog::debug("Framebuffer resized to {}x{}", width, height);
 
+    // GLFW owns the surface extent.  Tell the Film immediately instead of
+    // relying on a later acquire/present result to notice the resize.
+    win->_film.notify_framebuffer_resized();
+
     // Notify the InputHandler
     WindowResizeEvent e;
     int ww = 0, wh = 0;

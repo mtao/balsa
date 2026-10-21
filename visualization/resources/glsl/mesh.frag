@@ -10,7 +10,7 @@
 // Preprocessor defines (set by MeshShader):
 //   HAS_NORMALS          — vertex normal attribute is present
 //   SHADING_FLAT / SHADING_PHONG / SHADING_GOURAUD
-//   COLOR_UNIFORM / COLOR_PER_VERTEX / COLOR_SCALAR_FIELD
+//   COLOR_UNIFORM / COLOR_SCALAR_FIELD
 //   RENDER_WIREFRAME — bypass lighting, output layer_color directly
 //   RENDER_POINTS    — bypass lighting, output layer_color directly
 //   WIREFRAME_OVERLAY — merged solid+wireframe: overlay wireframe edges
@@ -72,6 +72,7 @@ layout(binding = 1) uniform Material {
     vec4 u_specular_params;     // xyz = specular_color, w = shininess
     vec4 u_scalar_params;       // x = scalar_min, y = scalar_max, z = point_size, w = two_sided
     vec4 u_layer_color;         // rgba — per-layer color (wireframe, point, or solid override)
+    vec4 u_scalar_select;       // x = mode (0 component, 1 p-norm), y = component or p, z = component count
 };
 
 // --- Output ---
@@ -96,7 +97,11 @@ void main() {
 #endif
 
     // ── 2. Lighting ──
-#if defined(SHADING_GOURAUD)
+#if defined(SHADING_UNLIT)
+    // NormalSource::None explicitly opts out of lighting.  Do not fall
+    // through to the Phong fallback, which derives a face normal.
+    outColor = vec4(base_color, alpha);
+#elif defined(SHADING_GOURAUD)
     // Gouraud: lighting was computed per-vertex in the vertex shader.
     // v_lit_color contains the interpolated lit result.
     vec3 result = v_lit_color.rgb;

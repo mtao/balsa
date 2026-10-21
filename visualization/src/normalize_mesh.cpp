@@ -1,17 +1,16 @@
 #include "balsa/visualization/normalize_mesh.hpp"
 
 #include <balsa/geometry/bounding_box.hpp>
-#include <balsa/scene_graph/BasicShading.hpp>
+#include <balsa/scene_graph/MeshAttribute.hpp>
 #include <zipper/MatrixBase.hxx>
 #include <zipper/expression/nullary/Constant.hpp>
 #include <zipper/utils/max_coeff.hpp>
 
 namespace balsa::visualization {
 
-auto unit_box_transform(const scene_graph::BasicShading &shading)
+auto unit_box_transform(const scene_graph::MeshAttribute &positions)
     -> std::optional<scene_graph::AffineTransformf> {
-    const auto &positions = shading.position_binding();
-    if (positions.component_count() != 3 || positions.size() == 0) {
+    if (positions.component_count() != 3 || positions.count() == 0) {
         return std::nullopt;
     }
     // Positions may be stored in any attribute type; compute in float.

@@ -8,36 +8,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include <zipper/MatrixBase.hxx>
-
-#include <vector>
 
 namespace balsa::visualization::vulkan {
-
-namespace {
-    // Bound values as element-major floats, as the vertex buffers expect.
-    // Contiguous float bindings are returned in place; anything else is
-    // converted into staging.
-    auto float_values(const scene_graph::RoleBinding &binding,
-                      std::vector<float> &staging) -> std::span<const float> {
-        return binding.visit([&](const auto &values) -> std::span<const float> {
-            using T = std::remove_const_t<
-                typename std::decay_t<decltype(values)>::element_type>;
-            const std::size_t n = values.extent(0) * values.extent(1);
-            if constexpr (std::is_same_v<T, float>) {
-                if (values.is_exhaustive()) return { values.data_handle(), n };
-            }
-            staging.resize(n);
-            ::zipper::MatrixBase out(
-                ::zipper::mdspan<float,
-                                 ::zipper::dextents<2>,
-                                 ::zipper::storage::col_major>(
-                    staging.data(), values.extent(0), values.extent(1)));
-            out = ::zipper::MatrixBase(values).template cast<float>();
-            return staging;
-        });
-    }
-} // namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
@@ -114,7 +86,6 @@ void VulkanMeshDrawable::release() {
 
     _synced_geometry = nullptr;
     _synced_geometry_version = 0;
-    _synced_shading_version = 0;
     _initialized = false;
 }
 
@@ -124,10 +95,8 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
     if (!_initialized) return;
     if (!object().visible) return;
 
-    // Re-upload GPU buffers if the geometry or its shading changed.
+    // Re-upload GPU buffers if the geometry changed.
     sync_buffers(film);
-
-    if (!_buffers.has_positions()) return;
 
     // Upload transforms once per frame (to current frame's UBO).
     update_transform_ubo(cam, film);
@@ -141,39 +110,15 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 void VulkanMeshDrawable::sync_buffers(Film &film) {
     const auto *shading = object().find_feature<scene_graph::BasicShading>();
     const auto *geometry = shading ? shading->geometry() : nullptr;
-    if (!geometry || !shading) return;
+    if (!geometry) return;
     if (geometry == _synced_geometry
-        && geometry->version() == _synced_geometry_version
-        && shading->version() == _synced_shading_version) {
+        && geometry->version() == _synced_geometry_version) {
         return;
     }
 
-    std::vector<float> staging;
-
-    // Upload positions.
-    const auto &pos = shading->position_binding();
-    if (pos.is_bound()) {
-        const auto data = float_values(pos, staging);
-        _buffers.upload_positions(film,
-                                  data.data(),
-                                  data.size_bytes(),
-                                  static_cast<uint32_t>(pos.size()),
-                                  pos.component_count());
-    }
-
-    // Upload normals.
-    const auto &nrm = shading->normal_binding();
-    if (nrm.is_bound()) {
-        const auto data = float_values(nrm, staging);
-        _buffers.upload_normals(
-            film, data.data(), data.size_bytes(), nrm.component_count());
-    }
-
-    // Upload scalar field.
-    const auto &scl = shading->scalar_binding();
-    if (scl.is_bound()) {
-        _buffers.upload_scalars(film, float_values(scl, staging));
-    }
+    // Attribute values may have changed in place; layers re-upload what
+    // they bind on their next draw.
+    _buffers.clear_attributes();
 
     // Upload triangle indices.
     if (geometry->has_triangle_indices()) {
@@ -196,7 +141,18 @@ void VulkanMeshDrawable::sync_buffers(Film &film) {
 
     _synced_geometry = geometry;
     _synced_geometry_version = geometry->version();
-    _synced_shading_version = shading->version();
+}
+
+auto VulkanMeshDrawable::layer_inputs(Film &film,
+                                      const scene_graph::BasicShading &shading,
+                                      const scene_graph::MeshRenderLayer &layer)
+    -> MeshVertexInputs {
+    auto input = [&](std::string_view role) {
+        return _buffers.attribute(film, shading.layer_attribute(layer, role));
+    };
+    return {.positions = input(scene_graph::position_role),
+            .normals = input(scene_graph::normal_role),
+            .scalars = input(scene_graph::scalar_role)};
 }
 
 // ── Private: transform UBO ──────────────────────────────────────────
@@ -239,51 +195,55 @@ void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam,
 void VulkanMeshDrawable::upload_material_ubo_for_layer(
     Film &film,
     uint32_t layer_slot,
-    const scene_graph::Vec4f &layer_color,
-    float point_size,
     const MeshRenderState &rs,
-    const scene_graph::Vec4f *wireframe_color_override) {
+    const scene_graph::MeshRenderer &renderer,
+    const scene_graph::MeshLayerContext &layer,
+    const MeshVertexInputs &inputs) {
     const int fi = film.current_frame();
 
     MaterialUBO material;
 
-    // Uniform color (used by COLOR_UNIFORM path in the shader).
-    // For the solid layer (slot 0), override with the layer's own color
-    // so that each layer independently controls its base color.
-    if (layer_slot == 0 && rs.color_source == ColorSource::Uniform) {
-        material.uniform_color = layer_color;
-    } else {
-        material.uniform_color = rs.uniform_color;
-    }
+    scene_graph::MeshMaterial renderer_material;
+    renderer.write_material(renderer_material, layer);
+    material.uniform_color = renderer_material.uniform_color;
+    material.layer_color = renderer_material.layer_color;
+
+    // With no enabled scene light, preserve the base color as an unlit pass.
+    // Otherwise disabling the headlight would accidentally fall back to the
+    // ResolvedLightState's default white light.
+    const bool lighting_enabled = _scene_light_state.enabled;
 
     // Lighting — scene light direction + per-mesh material response.
     const auto &ld = _scene_light_state.light_dir;
     material.light_dir =
-        scene_graph::Vec4f{ ld(0), ld(1), ld(2), rs.material.ambient_strength };
+        scene_graph::Vec4f{ ld(0), ld(1), ld(2),
+                            lighting_enabled ? rs.material.ambient_strength : 1.0f };
 
     // Light color (from scene light) + diffuse strength in .w.
     const auto &lcol = _scene_light_state.light_color;
     material.light_color = scene_graph::Vec4f{
-        lcol(0), lcol(1), lcol(2), rs.material.diffuse_strength };
+        lcol(0), lcol(1), lcol(2),
+        lighting_enabled ? rs.material.diffuse_strength : 0.0f };
 
     material.specular_params = scene_graph::Vec4f{
-        rs.material.specular_strength,
-        rs.material.specular_strength,
-        rs.material.specular_strength,
+        lighting_enabled ? rs.material.specular_strength : 0.0f,
+        lighting_enabled ? rs.material.specular_strength : 0.0f,
+        lighting_enabled ? rs.material.specular_strength : 0.0f,
         rs.material.shininess };
 
     // Scalar / sizing parameters.
-    material.scalar_params(0) = rs.scalar_min;
-    material.scalar_params(1) = rs.scalar_max;
-    material.scalar_params(2) = point_size;
+    material.scalar_params(0) = renderer_material.scalar_min;
+    material.scalar_params(1) = renderer_material.scalar_max;
+    material.scalar_params(2) = renderer_material.primitive_size;
     material.scalar_params(3) = rs.two_sided ? 1.0f : 0.0f;
 
-    // Per-layer colour.  When wireframe_color_override is provided
-    // (merged solid+wireframe pass), use the wireframe color here
-    // so the fragment shader can read it from u_layer_color for the
-    // wireframe overlay blend.
-    material.layer_color =
-        wireframe_color_override ? *wireframe_color_override : layer_color;
+    // Reduction of the raw scalar-role attribute, evaluated in the shader.
+    const auto &reduction = renderer_material.scalar_reduction;
+    material.scalar_select = scene_graph::Vec4f{
+        reduction.kind == scene_graph::ScalarReduction::Kind::Norm ? 1.0f : 0.0f,
+        static_cast<float>(reduction.value),
+        static_cast<float>(inputs.scalars ? inputs.scalars->components : 0),
+        0.0f};
 
     // Write to the slot's aligned offset within the multi-slot buffer.
     vk::DeviceSize offset =
@@ -310,14 +270,13 @@ void VulkanMeshDrawable::bind_descriptor_set_for_layer(Film &film,
 
 void VulkanMeshDrawable::record_draw_commands(Film &film) {
     const auto *shading = object().find_feature<scene_graph::BasicShading>();
-    const MeshRenderState rs =
-        shading ? shading->render_state() : MeshRenderState{};
-    const auto &layers = rs.layers;
+    if (!shading) return;
 
     auto cb = film.current_command_buffer();
 
-    // ── Shared state: viewport, scissor, vertex buffers ─────────────
-    // Note: descriptor set is bound per-layer with a dynamic offset.
+    // ── Shared state: viewport, scissor ─────────────────────────────
+    // Pipeline, vertex streams and the descriptor set (dynamic material
+    // offset) are bound per layer.
 
     auto extent = film.swapchain_image_size();
     vk::Viewport viewport;
@@ -332,154 +291,59 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
     scissor.setOffset({0, 0});
     scissor.setExtent({extent[0], extent[1]});
 
-    // Bind pipeline + viewport/scissor + vertex buffers (shared across
-    // all layers).  Does NOT bind the descriptor set — that happens
-    // per-layer via bind_descriptor_set_for_layer().
-    auto bind_shared_state = [&](vk::Pipeline pipeline) {
+    // Each layer binds its own vertex streams: layers may bind different
+    // attributes to the same role.
+    auto bind_vertex_inputs = [&](const MeshVertexInputs &inputs) {
+        auto bind = [&](uint32_t binding, const AttributeBuffer *b) {
+            if (b) cb.bindVertexBuffers(binding, {b->buffer.buffer()}, {vk::DeviceSize{0}});
+        };
+        bind(0, inputs.positions);
+        bind(1, inputs.normals);
+        bind(3, inputs.scalars);
+    };
+
+    uint32_t layer_slot = 0;
+    for (const auto &layer : shading->render_layers()) {
+        if (!layer.enabled || !layer.renderer) continue;
+        if (layer_slot == k_max_material_layers) break;
+        const auto inputs = layer_inputs(film, *shading, layer);
+        if (inputs.positions == nullptr) continue;
+        const auto request = layer.renderer->draw_request();
+        const auto topology = request.primitive == scene_graph::MeshPrimitive::Triangles
+                                  ? vk::PrimitiveTopology::eTriangleList
+                              : request.primitive == scene_graph::MeshPrimitive::Edges
+                                  ? vk::PrimitiveTopology::eLineList
+                                  : vk::PrimitiveTopology::ePointList;
+        const bool available =
+            (request.primitive == scene_graph::MeshPrimitive::Triangles && _buffers.has_triangle_indices())
+            || (request.primitive == scene_graph::MeshPrimitive::Edges && _buffers.has_edge_indices())
+            || request.primitive == scene_graph::MeshPrimitive::Vertices;
+        if (!available) continue;
+        const auto pipeline = _manager->get_or_create(request.state, request.colormap, topology,
+                                                      inputs, film);
+        if (!pipeline) continue;
+
+        upload_material_ubo_for_layer(film, layer_slot, request.state,
+                                      *layer.renderer,
+                                      scene_graph::MeshLayerContext(*shading, layer.id),
+                                      inputs);
         cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         cb.setViewport(0, {viewport});
         cb.setScissor(0, {scissor});
-
-        cb.bindVertexBuffers(
-            0, {_buffers.positions_buffer()}, {vk::DeviceSize{0}});
-        if (_buffers.has_normals()) {
-            cb.bindVertexBuffers(
-                1, {_buffers.normals_buffer()}, {vk::DeviceSize{0}});
-        }
-        if (_buffers.has_colors()) {
-            cb.bindVertexBuffers(
-                2, {_buffers.colors_buffer()}, {vk::DeviceSize{0}});
-        }
-        if (_buffers.has_scalars()) {
-            cb.bindVertexBuffers(
-                3, {_buffers.scalars_buffer()}, {vk::DeviceSize{0}});
-        }
-    };
-
-    // ── Decide whether to merge solid + wireframe into one draw ────
-    //
-    // When the VK_KHR_fragment_shader_barycentric extension is available,
-    // both solid and wireframe are enabled, and we have triangle data,
-    // we can render both in a single eTriangleList draw call.  The
-    // fragment shader uses gl_BaryCoordEXT to overlay wireframe edges.
-    //
-    // Otherwise fall back to the existing two-pass approach: solid
-    // triangles + line-based wireframe from the edge index buffer.
-
-    const bool use_merged = layers.solid.enabled && layers.wireframe.enabled
-                            && _buffers.has_triangle_indices()
-                            && film.has_fragment_shader_barycentric();
-
-    // Upload all enabled layers' material data BEFORE recording any
-    // draw commands.  Each layer writes to its own aligned slot in
-    // the current frame's _material_ubo, so the writes don't interfere
-    // with each other.
-    // Layer slots: 0 = solid, 1 = wireframe, 2 = points.
-    if (use_merged) {
-        // Merged pass: slot 0 carries solid lighting + wireframe overlay.
-        //   u_uniform_color   = solid base color (slot 0 override for
-        //   COLOR_UNIFORM) u_layer_color     = wireframe color (via
-        //   wireframe_color_override) u_scalar_params.z = wireframe width
-        //   (passed as point_size)
-        upload_material_ubo_for_layer(film,
-                                      0,
-                                      layers.solid.color,
-                                      layers.wireframe.width,
-                                      rs,
-                                      &layers.wireframe.color);
-    } else {
-        // Separate passes.
-        if (layers.solid.enabled && _buffers.has_triangle_indices()) {
-            upload_material_ubo_for_layer(
-                film, 0, layers.solid.color, layers.points.size, rs);
-        }
-        if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-            upload_material_ubo_for_layer(
-                film, 1, layers.wireframe.color, layers.points.size, rs);
-        }
-    }
-    if (layers.points.enabled && _buffers.vertex_count() > 0) {
-        upload_material_ubo_for_layer(
-            film, 2, layers.points.color, layers.points.size, rs);
-    }
-
-    // ── Merged solid + wireframe (barycentric overlay) ──────────────
-
-    if (use_merged) {
-        auto pipeline =
-            _manager->get_or_create(rs,
-                                    vk::PrimitiveTopology::eTriangleList,
-                                    _buffers,
-                                    film,
-                                    /*wireframe_overlay=*/true);
-        if (pipeline) {
-            bind_shared_state(pipeline);
-            bind_descriptor_set_for_layer(film, cb, 0);
-            cb.setLineWidth(1.0f);
-            cb.setDepthBias(0.0f, 0.0f, 0.0f);
-
-            cb.bindIndexBuffer(
-                _buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
+        bind_vertex_inputs(inputs);
+        bind_descriptor_set_for_layer(film, cb, layer_slot);
+        cb.setLineWidth(layer.renderer->line_width());
+        cb.setDepthBias(0.0f, 0.0f, 0.0f);
+        if (request.primitive == scene_graph::MeshPrimitive::Triangles) {
+            cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
+        } else if (request.primitive == scene_graph::MeshPrimitive::Edges) {
+            cb.bindIndexBuffer(_buffers.edge_index_buffer(), 0, vk::IndexType::eUint32);
+            cb.drawIndexed(_buffers.edge_count() * 2, 1, 0, 0, 0);
+        } else {
+            cb.draw(inputs.positions->count, 1, 0, 0);
         }
-    } else {
-        // ── Layer 1: Solid (triangles) ──────────────────────────────
-
-        if (layers.solid.enabled && _buffers.has_triangle_indices()) {
-            auto pipeline = _manager->get_or_create(
-                rs, vk::PrimitiveTopology::eTriangleList, _buffers, film);
-            if (pipeline) {
-                bind_shared_state(pipeline);
-                bind_descriptor_set_for_layer(film, cb, 0);
-                cb.setLineWidth(1.0f);
-                // Push solid geometry slightly back so wireframe wins
-                // z-test, but only when line-based wireframe is also
-                // being drawn — the slope bias causes flickering on its
-                // own.
-                if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-                    cb.setDepthBias(1.0f, 0.0f, 1.0f);
-                } else {
-                    cb.setDepthBias(0.0f, 0.0f, 0.0f);
-                }
-
-                cb.bindIndexBuffer(_buffers.triangle_index_buffer(),
-                                   0,
-                                   vk::IndexType::eUint32);
-                cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
-            }
-        }
-
-        // ── Layer 2: Wireframe (lines) ──────────────────────────────
-
-        if (layers.wireframe.enabled && _buffers.has_edge_indices()) {
-            auto pipeline = _manager->get_or_create(
-                rs, vk::PrimitiveTopology::eLineList, _buffers, film);
-            if (pipeline) {
-                bind_shared_state(pipeline);
-                bind_descriptor_set_for_layer(film, cb, 1);
-                cb.setLineWidth(layers.wireframe.width);
-                cb.setDepthBias(0.0f, 0.0f, 0.0f);
-
-                cb.bindIndexBuffer(
-                    _buffers.edge_index_buffer(), 0, vk::IndexType::eUint32);
-                cb.drawIndexed(_buffers.edge_count() * 2, 1, 0, 0, 0);
-            }
-        }
-    }
-
-    // ── Layer 3: Points ─────────────────────────────────────────────
-
-    if (layers.points.enabled && _buffers.vertex_count() > 0) {
-        auto pipeline = _manager->get_or_create(
-            rs, vk::PrimitiveTopology::ePointList, _buffers, film);
-        if (pipeline) {
-            bind_shared_state(pipeline);
-            bind_descriptor_set_for_layer(film, cb, 2);
-            cb.setLineWidth(1.0f);
-            cb.setDepthBias(0.0f, 0.0f, 0.0f);
-
-            cb.draw(_buffers.vertex_count(), 1, 0, 0);
-        }
+        ++layer_slot;
     }
 }
 

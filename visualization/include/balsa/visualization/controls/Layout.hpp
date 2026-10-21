@@ -24,6 +24,12 @@ class Layout {
         return *this;
     }
 
+    auto add_layout(Layout layout) -> Layout & {
+        auto &slot = m_items.emplace_back(
+            std::make_unique<Layout>(std::move(layout)));
+        return *std::get<std::unique_ptr<Layout>>(slot);
+    }
+
     /// Nested horizontal / vertical group.  The returned reference stays
     /// valid until the parent Layout is destroyed.
     auto add_row(std::string heading = {}) -> Layout & {

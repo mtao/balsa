@@ -94,7 +94,13 @@ auto draw_property(const ctl::Property &prop) -> bool {
             }
         },
         prop.widget);
-    if (!prop.tooltip.empty()) ImGui::SetItemTooltip("%s", prop.tooltip.c_str());
+    if (prop.live_tooltip) {
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) {
+            ImGui::SetTooltip("%s", prop.live_tooltip().c_str());
+        }
+    } else if (!prop.tooltip.empty()) {
+        ImGui::SetItemTooltip("%s", prop.tooltip.c_str());
+    }
     return changed;
 }
 
