@@ -7,6 +7,9 @@
 #include <imgui.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+// -Wkeyword-macro is new (GCC 16); -Wpragmas silences "unknown option" on older compilers.
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wkeyword-macro"
 #include <colormap/colormap.h>
 #pragma GCC diagnostic pop
 namespace balsa::visualization::shaders {
