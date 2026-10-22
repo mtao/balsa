@@ -64,3 +64,5 @@ subprojects/*.wrap
 !subprojects/zipper.wrap
 
 docs/
+
+imgui.ini
