@@ -3,6 +3,8 @@
 !packagefiles/
 !packagefiles/colormap_shaders/
 !packagefiles/colormap_shaders/meson.build
+!draco/
+!draco/meson.build
 
 # Ignore auto-promoted wrap-redirect files from transitive deps.
 # Only directly-needed wraps are whitelisted below.

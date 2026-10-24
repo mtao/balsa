@@ -9,6 +9,7 @@ option('partio', type : 'boolean', value : false, description : 'Use partio')
 option('imgui', type : 'boolean', value : true, description : 'Build the ImGui UI frontend (currently requires GLFW)')
 option('alembic', type : 'boolean', value : false, description : 'Use alembic')
 option('perfetto', type : 'boolean', value : false, description : 'Use perfetto')
+option('draco', type : 'boolean', value : false, description : 'Use draco for mesh compression')
 
 option('visualization', type : 'boolean', value : true, description : 'Build visualization library')
 option('glfw', type : 'boolean', value : true, description : 'Build the GLFW window backend')

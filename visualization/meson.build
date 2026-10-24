@@ -10,6 +10,11 @@ if get_option('imgui') and not get_option('glfw')
   error('The ImGui frontend currently requires GLFW; enable -Dglfw=true or disable -Dimgui')
 endif
 
+if get_option('draco')
+  draco_dep = dependency('draco')
+  geometry_required_deps += draco_dep
+endif
+
 # Shader source files are part of the dependency contract, so a binary system
 # package cannot satisfy it. Always use the pinned source subproject.
 colormap_proj = subproject('colormap_shaders')
