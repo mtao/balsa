@@ -4,7 +4,18 @@
 !packagefiles/colormap_shaders/
 !packagefiles/colormap_shaders/meson.build
 
-# Auto-generated wrap-redirects from transitive deps
-lua.wrap
-mdspan.wrap
-sol2.wrap
+# Ignore auto-promoted wrap-redirect files from transitive deps.
+# Only directly-needed wraps are whitelisted below.
+*.wrap
+!catch2.wrap
+!cli11.wrap
+!colormap_shaders.wrap
+!draco-src.wrap
+!eigen.wrap
+!fmt.wrap
+!imgui.wrap
+!mshio.wrap
+!nlohmann_json.wrap
+!partio.wrap
+!spdlog.wrap
+!zipper.wrap
