@@ -33,8 +33,26 @@ endif
 
 
 if get_option('json')
+  # balsa's JSON (de)serialization is driven by C++26 static reflection with
+  # annotations (balsa/json/reflection.hpp). As of 2026 only GCC 16+ supports
+  # it, and only with -freflection. Disable with -Djson=false otherwise.
+  reflection_args = ['-freflection']
+  reflection_probe = '''
+#include <version>
+#if !defined(__cpp_impl_reflection) || !defined(__cpp_lib_reflection)
+#error "no C++26 reflection"
+#endif
+'''
+  if not cc.compiles(reflection_probe, args: reflection_args,
+                     name: 'C++26 reflection (__cpp_impl_reflection, __cpp_lib_reflection)')
+    error('-Djson=true requires C++26 reflection (__cpp_impl_reflection / ' +
+          '__cpp_lib_reflection), e.g. GCC 16+ with -freflection; ' +
+          'disable it with -Djson=false')
+  endif
   nlohmann_json_dep = dependency('nlohmann_json')
-  core_required_deps += nlohmann_json_dep
+  # Propagated: headers using balsa::json annotations need -freflection too.
+  core_required_deps += [nlohmann_json_dep,
+                         declare_dependency(compile_args: reflection_args)]
 endif
 
 # balsa::parallel dispatches to std::execution::par when TBB is available.

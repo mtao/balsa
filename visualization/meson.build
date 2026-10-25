@@ -122,6 +122,32 @@ visualization_sources = [
   'src/normalize_mesh.cpp',
 ]
 
+# ── glTF ──────────────────────────────────────────────────────────────────
+# glTF uses balsa's reflection-based JSON, so it is built whenever -Djson=true
+# (core checks for reflection and propagates -freflection).
+# BALSA_VISUALIZATION_GLTF marks support.
+visualization_public_args = []
+if get_option('json')
+  visualization_public_args += ['-DBALSA_VISUALIZATION_GLTF']
+  visualization_sources += [
+    'src/scene_graph/gltf/Accessor.cpp',
+    'src/scene_graph/gltf/Animation.cpp',
+    'src/scene_graph/gltf/Asset.cpp',
+    'src/scene_graph/gltf/Buffer.cpp',
+    'src/scene_graph/gltf/BufferView.cpp',
+    'src/scene_graph/gltf/Camera.cpp',
+    'src/scene_graph/gltf/glTF.cpp',
+    'src/scene_graph/gltf/Image.cpp',
+    'src/scene_graph/gltf/Material.cpp',
+    'src/scene_graph/gltf/Mesh.cpp',
+    'src/scene_graph/gltf/Node.cpp',
+    'src/scene_graph/gltf/Sampler.cpp',
+    'src/scene_graph/gltf/Scene.cpp',
+    'src/scene_graph/gltf/Skin.cpp',
+    'src/scene_graph/gltf/Texture.cpp',
+  ]
+endif
+
 if get_option('qt')
   visualization_public_deps += qt_dep
   visualization_qt_sources = [
@@ -177,7 +203,7 @@ visualization_lib = library('balsaVisualization', visualization_sources,
   cpp_args: embed_args)
 
 # For consumers: propagate public deps (including imgui shared library).
-visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir)
+visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir, compile_args: visualization_public_args)
 meson.override_dependency('balsaVisualization', visualization_dep)
 
 if get_option('testing')
