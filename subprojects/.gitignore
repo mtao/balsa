@@ -13,7 +13,6 @@
 !cli11.wrap
 !colormap_shaders.wrap
 !draco-src.wrap
-!eigen.wrap
 !fmt.wrap
 !imgui.wrap
 !mshio.wrap

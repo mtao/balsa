@@ -18,9 +18,7 @@ core_sources = [
   'src/types/get_type_name.cpp',
  ] + filesystem_sources
 
-core_headers = [
-  'include/eigen/types.hpp'
-] + filesystem_headers
+core_headers = filesystem_headers
 
 include_dir = [include_directories('include')]
 

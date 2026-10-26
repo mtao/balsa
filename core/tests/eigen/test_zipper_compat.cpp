@@ -1,17 +1,17 @@
 #include <catch2/catch_all.hpp>
 #include <iostream>
 #include <balsa/eigen/zipper_compat.hpp>
-#include <balsa/eigen/types.hpp>
+#include <Eigen/Core>
 #include <zipper/Vector.hpp>
 #include <zipper/Matrix.hpp>
 TEST_CASE("eigen2zipper", "[zipper,eigen]") {
 
 
-    balsa::eigen::VecXd A(4);
-    balsa::eigen::Vec4d B;
+    Eigen::VectorXd A(4);
+    Eigen::Vector4d B;
     A << 0, 1, 2, 3;
     B << 4, 5, 6, 7;
-    balsa::eigen::Mat2d M;
+    Eigen::Matrix2d M;
     M << 9, 10, 11, 12;
     auto a = balsa::eigen::as_zipper(A);
     auto b = balsa::eigen::as_zipper(B);
