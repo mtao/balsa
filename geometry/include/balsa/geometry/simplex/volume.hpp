@@ -35,9 +35,6 @@
 #include <zipper/concepts/Matrix.hpp>
 #include <zipper/concepts/Vector.hpp>
 
-#include "balsa/eigen/concepts/matrix_types.hpp"
-#include "balsa/eigen/zipper_compat.hpp"
-
 namespace balsa::geometry::simplex {
 
 // ============================================================================
@@ -153,23 +150,6 @@ template <::zipper::concepts::Matrix M>
 auto volume(const M &V) -> typename M::value_type {
     if (V.extent(0) + 1 == V.extent(1)) { return volume_signed(V); }
     return volume_unsigned(V);
-}
-
-// ── Eigen overloads (convert to zipper) ─────────────────────────────
-
-template <eigen::concepts::MatrixBaseDerived M>
-auto volume_signed(const M &V) -> typename M::Scalar {
-    return volume_signed(eigen::as_zipper(V));
-}
-
-template <eigen::concepts::MatrixBaseDerived M>
-auto volume_unsigned(const M &V) -> typename M::Scalar {
-    return volume_unsigned(eigen::as_zipper(V));
-}
-
-template <eigen::concepts::MatrixBaseDerived M>
-auto volume(const M &V) -> typename M::Scalar {
-    return volume(eigen::as_zipper(V));
 }
 
 } // namespace balsa::geometry::simplex

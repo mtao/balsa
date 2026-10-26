@@ -6,12 +6,8 @@
 //
 // Wraps balsa::geometry::simplex::uniformly_sample_simplex with a
 // (vertices, rng) argument order.
-// Eigen overloads convert to zipper and forward.
 
 #include "balsa/geometry/simplex/uniformly_sample_simplex.hpp"
-
-#include "balsa/eigen/concepts/matrix_types.hpp"
-#include "balsa/eigen/zipper_compat.hpp"
 
 #include <cstddef>
 #include <random>
@@ -32,27 +28,6 @@ auto uniformly_sample_simplex(const MatType &V, RNG &gen) {
 template<::zipper::concepts::Matrix MatType, std::uniform_random_bit_generator RNG>
 auto uniformly_sample_simplex(const MatType &V, std::size_t num_samples, RNG &gen) {
     return simplex::uniformly_sample_simplex(gen, V, num_samples);
-}
-
-// ── Eigen overloads (convert to zipper, then delegate) ─────────────────
-
-/// Uniformly sample a single point from an N-simplex (Eigen).
-/// V: (dim × (N+1)) matrix of column-vector vertices.
-template<eigen::concepts::MatrixBaseDerived Derived, std::uniform_random_bit_generator RNG>
-auto uniformly_sample_simplex(const Derived &V, RNG &gen)
-  -> Eigen::Vector<typename Derived::Scalar, Derived::RowsAtCompileTime> {
-    auto result = simplex::uniformly_sample_simplex(gen, eigen::as_zipper(V));
-    return eigen::as_eigen(result);
-}
-
-/// Sample multiple uniform random points from an N-simplex (Eigen).
-/// Returns a (dim × num_samples) matrix.
-template<eigen::concepts::MatrixBaseDerived Derived, std::uniform_random_bit_generator RNG>
-auto uniformly_sample_simplex(const Derived &V, int num_samples, RNG &gen)
-  -> Eigen::Matrix<typename Derived::Scalar, Derived::RowsAtCompileTime, Eigen::Dynamic> {
-    auto result = simplex::uniformly_sample_simplex(
-      gen, eigen::as_zipper(V), static_cast<std::size_t>(num_samples));
-    return eigen::as_eigen(result);
 }
 
 }// namespace balsa::geometry::point_cloud

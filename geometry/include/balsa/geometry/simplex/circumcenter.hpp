@@ -36,9 +36,6 @@
 #include <zipper/concepts/Matrix.hpp>
 #include <zipper/concepts/Vector.hpp>
 
-#include "balsa/eigen/concepts/matrix_types.hpp"
-#include "balsa/eigen/zipper_compat.hpp"
-
 namespace balsa::geometry::simplex {
 
 // ============================================================================
@@ -247,23 +244,6 @@ auto circumcenter_with_radius(const ID &id) {
             return std::make_pair(to_array(C), r);
         },
         id.as_tuple());
-}
-
-// ── Eigen overloads (convert to zipper) ─────────────────────────────
-
-template <eigen::concepts::MatrixBaseDerived M>
-auto circumcenter(const M &V) {
-    return circumcenter(eigen::as_zipper(V));
-}
-
-template <eigen::concepts::MatrixBaseDerived M>
-auto circumcenter_with_squared_radius(const M &V) {
-    return circumcenter_with_squared_radius(eigen::as_zipper(V));
-}
-
-template <eigen::concepts::MatrixBaseDerived M>
-auto circumcenter_with_radius(const M &V) {
-    return circumcenter_with_radius(eigen::as_zipper(V));
 }
 
 } // namespace balsa::geometry::simplex

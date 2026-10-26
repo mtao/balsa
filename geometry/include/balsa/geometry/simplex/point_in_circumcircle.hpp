@@ -21,9 +21,6 @@
 #include <zipper/concepts/Matrix.hpp>
 #include <zipper/concepts/Vector.hpp>
 
-#include "balsa/eigen/concepts/matrix_types.hpp"
-#include "balsa/eigen/zipper_compat.hpp"
-
 namespace balsa::geometry::simplex {
 
 // ============================================================================
@@ -73,14 +70,6 @@ auto point_in_circumsphere(const V &P, const M &pts) -> bool {
     constexpr auto D = V::extents_type::static_extent(0);
     ::zipper::Vector<T, D> diff = C - P;
     return diff.template norm_powered<2>() < r2;
-}
-
-// ── Eigen overloads (convert to zipper) ─────────────────────────────
-
-template <eigen::concepts::MatrixBaseDerived P,
-          eigen::concepts::MatrixBaseDerived M>
-auto point_in_circumsphere(const P &p, const M &S) -> bool {
-    return point_in_circumsphere(eigen::as_zipper(p), eigen::as_zipper(S));
 }
 
 } // namespace balsa::geometry::simplex

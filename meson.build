@@ -10,11 +10,14 @@ dl_lib = cc.find_library('dl', required: false)
 # leaks -DFMT_EXPORT into interface compile_args when built as shared with std::format,
 # which breaks fmt's own headers for any target that also depends on fmt directly.
 spdlog_dep = dependency('spdlog', version: '>=1.9.2', default_options: ['tests=disabled', 'default_library=static'])
-eigen_dep  = dependency('eigen3', version: '>=3.4.0')
-
 zipper_dep = dependency('zipper', default_options: ['testing=false'])
 
-core_required_deps = [spdlog_dep, eigen_dep, zipper_dep]
+core_required_deps = [spdlog_dep, zipper_dep]
+
+# Eigen is optional: balsa/eigen/* headers (e.g. zipper_compat.hpp) are
+# shipped for consumers that bring their own Eigen; their tests only build
+# when Eigen is found.
+eigen_dep = dependency('eigen3', version: '>=3.4.0', required: false)
 
 # ── Optional dependencies (system packages) ────────────────────────────────
 if get_option('protobuf')
