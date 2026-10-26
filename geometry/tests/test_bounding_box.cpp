@@ -1,7 +1,7 @@
 #include <catch2/catch_all.hpp>
 #include <spdlog/spdlog.h>
 
-#include <balsa/geometry/bounding_box.hpp>
+#include <balsa/geometry/BoundingBox.hpp>
 #include <balsa/zipper/types.hpp>
 #include <zipper/expression/nullary/Constant.hpp>
 #include <zipper/expression/nullary/Random.hpp>
@@ -17,7 +17,7 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         V.col(3) = { 0, 0, 0 };
         V.col(4) = { 0, 0, 0 };
 
-        auto bb = balsa::geometry::bounding_box(V);
+        auto bb = balsa::geometry::BoundingBox<double, 3>(V.rowwise().min(), V.rowwise().max());
 
 
         // spdlog::info("{} {}", fmt::join(bb.min(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
@@ -30,7 +30,7 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
 
         V.col(1) = { 1, 3, 4 };
         V.col(2) = { -2, -5, 20 };
-        bb = balsa::geometry::bounding_box(V);
+        bb = balsa::geometry::BoundingBox<double, 3>(V.rowwise().min(), V.rowwise().max());
 
         CHECK(bb.min() == zipper::Vector<double, 3>({ -2, -5, 0 }));
         CHECK(bb.max() == zipper::Vector<double, 3>({ 1, 3, 20 }));

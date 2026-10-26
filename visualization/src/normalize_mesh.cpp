@@ -1,6 +1,6 @@
 #include "balsa/visualization/normalize_mesh.hpp"
 
-#include <balsa/geometry/bounding_box.hpp>
+#include <balsa/geometry/BoundingBox.hpp>
 #include <balsa/scene_graph/MeshAttribute.hpp>
 #include <zipper/MatrixBase.hxx>
 #include <zipper/expression/nullary/Constant.hpp>
@@ -18,7 +18,9 @@ auto unit_box_transform(const scene_graph::MeshAttribute &positions)
         using T = std::remove_const_t<
             typename std::decay_t<decltype(values)>::element_type>;
         const ::zipper::MatrixBase P(*positions.view<T, 3>());
-        return geometry::bounding_box(P.template cast<float>());
+        const auto Pf = P.template cast<float>();
+        return geometry::BoundingBox<float, 3>(Pf.rowwise().min(),
+                                               Pf.rowwise().max());
     });
 
     // Largest extent across axes; guard degenerate meshes.
