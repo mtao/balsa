@@ -17,6 +17,7 @@
 #include <span>
 
 #include <zipper/Vector.hpp>
+#include <zipper/concepts/Matrix.hpp>
 #include <zipper/concepts/Vector.hpp>
 #include <zipper/as.hpp>
 #include <zipper/expression/nullary/Constant.hpp>
@@ -61,6 +62,13 @@ class BoundingBox {
             arr[j] = static_cast<T>(pt(j));
         }
         m_aabb.expand(std::span<const T, Dim>(arr));
+    }
+
+    /// From a Dim×N matrix of column points (empty box if N == 0).
+    template <::zipper::concepts::Matrix Mat>
+    explicit BoundingBox(const Mat &points) : m_aabb(aabb_type::empty()) {
+        if (points.extent(1) == 0) { return; }
+        *this = BoundingBox(points.rowwise().min(), points.rowwise().max());
     }
 
     /// From explicit min/max values (for integral types like uint32_t).

@@ -17,7 +17,7 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         V.col(3) = { 0, 0, 0 };
         V.col(4) = { 0, 0, 0 };
 
-        auto bb = balsa::geometry::BoundingBox<double, 3>(V.rowwise().min(), V.rowwise().max());
+        auto bb = balsa::geometry::BoundingBox<double, 3>(V);
 
 
         // spdlog::info("{} {}", fmt::join(bb.min(), ","), fmt::join(zipper::Vector(V.col(0)), ","));
@@ -30,7 +30,7 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
 
         V.col(1) = { 1, 3, 4 };
         V.col(2) = { -2, -5, 20 };
-        bb = balsa::geometry::BoundingBox<double, 3>(V.rowwise().min(), V.rowwise().max());
+        bb = balsa::geometry::BoundingBox<double, 3>(V);
 
         CHECK(bb.min() == zipper::Vector<double, 3>({ -2, -5, 0 }));
         CHECK(bb.max() == zipper::Vector<double, 3>({ 1, 3, 20 }));
@@ -57,6 +57,12 @@ TEST_CASE("bounding_box", "[bounding_box][geometry]") {
         CHECK(bb3.max() == bb2.max());
         CHECK(bb3.range() == zipper::Vector<double, 2>({ 4, 3 }));
     }
+}
+
+TEST_CASE("bounding_box_from_empty_points", "[bounding_box][geometry]") {
+    balsa::zipper::ColVectors<double, 3> V(3, 0);
+    balsa::geometry::BoundingBox<double, 3> bb(V);
+    CHECK(bb.is_empty());
 }
 
 TEST_CASE("bounding_box_center", "[bounding_box][geometry]") {
