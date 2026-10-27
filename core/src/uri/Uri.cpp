@@ -54,8 +54,7 @@ namespace detail {
         if (!uri) { return not_file(); }
         // An empty authority means no host; file URLs carry no userinfo or
         // port.
-        if (uri->scheme() != "file" || !uri->authority()
-            || !uri->authority()->empty()) {
+        if (uri->scheme() != "file" || uri->authority() != "") {
             return not_file();
         }
         auto decoded = percent_decode(uri->path());

@@ -29,7 +29,10 @@ namespace {
 
 auto DataUri::parse(UriView uri)
     -> std::expected<DataUri, UriError> {
-    if (!uri.scheme() || !case_insensitive_equals(*uri.scheme(), "data")) {
+    const auto is_data = [](std::string_view scheme) {
+        return case_insensitive_equals(scheme, "data");
+    };
+    if (!uri.scheme().transform(is_data).value_or(false)) {
         return std::unexpected(
             UriError{UriError::Code::InvalidDataUri,
                      std::format("'{}' is not a data: URI", uri.text())});

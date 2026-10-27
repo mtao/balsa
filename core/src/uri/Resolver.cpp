@@ -15,15 +15,14 @@ namespace {
         return DataUri::parse(uri).and_then(&DataUri::decode);
     }
 
-    auto fetch_file(UriView uri) -> std::expected<Resolver::Bytes, UriError> {
-        const auto path = uri.to_path();
-        if (!path) { return std::unexpected(path.error()); }
+    auto read_file(const std::filesystem::path &path)
+        -> std::expected<Resolver::Bytes, UriError> {
         const auto io_error = [&](std::string_view what) {
             return std::unexpected(UriError{
                 UriError::Code::Io,
-                std::format("cannot {} '{}'", what, path->string())});
+                std::format("cannot {} '{}'", what, path.string())});
         };
-        std::ifstream ifs(*path, std::ios::binary | std::ios::ate);
+        std::ifstream ifs(path, std::ios::binary | std::ios::ate);
         if (!ifs) { return io_error("open"); }
         Resolver::Bytes bytes(static_cast<std::size_t>(ifs.tellg()));
         ifs.seekg(0);
@@ -32,6 +31,10 @@ namespace {
             return io_error("read");
         }
         return bytes;
+    }
+
+    auto fetch_file(UriView uri) -> std::expected<Resolver::Bytes, UriError> {
+        return uri.to_path().and_then(read_file);
     }
 } // namespace
 
