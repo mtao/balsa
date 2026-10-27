@@ -1,4 +1,4 @@
-catch2_with_main_dep = dependency('catch2-with-main', allow_fallback: true, default_options: ['tests=false'])
+catch2_with_main_dep = dependency('catch2-with-main', default_options: ['tests=false'])
 
 
 

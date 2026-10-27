@@ -1,4 +1,4 @@
-catch2_with_main_dep = dependency('catch2-with-main', allow_fallback: true)
+catch2_with_main_dep = dependency('catch2-with-main')
 test_asset_dir = meson.current_source_dir() / 'assets'
 
 test_mesh_loading = executable('test_mesh_loading',  'test_mesh_loading.cpp', dependencies: [geometry_dep,catch2_with_main_dep], cpp_args: '-DBALSA_TEST_ASSET_PATH="'+test_asset_dir+'"')

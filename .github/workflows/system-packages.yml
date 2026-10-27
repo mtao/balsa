@@ -125,6 +125,10 @@ jobs:
           key: subprojects-${{ hashFiles('subprojects/*.wrap') }}
 
       # -- Build & Test --
+      # Default wrap mode: use the apt packages above where present, and fall
+      # back to subprojects/*.wrap only for what the system lacks (zipper,
+      # mshio, imgui, ada, ...). Don't force fallback, or the apt packages
+      # are ignored for anything that also has a wrap.
       - name: Configure
         env:
           CC: ccache ${{ matrix.platform.cc }}
@@ -132,7 +136,6 @@ jobs:
         run: >
           meson setup build/
           --buildtype=${{ matrix.build_type }}
-          --wrap-mode=forcefallback
           -Dtesting=true
           ${{ matrix.platform.extra_args }}
 
@@ -147,7 +150,6 @@ jobs:
         run: |
           meson setup build-qt-only/ \
             --buildtype=debug \
-            --wrap-mode=forcefallback \
             -Dtesting=false -Dexamples=false \
             -Dqt=true -Dglfw=false -Dimgui=false
           ninja -C build-qt-only/ \
@@ -163,7 +165,6 @@ jobs:
         run: |
           meson setup build-glfw-imgui/ \
             --buildtype=debug \
-            --wrap-mode=forcefallback \
             -Dtesting=false -Dexamples=false \
             -Dqt=false -Dglfw=true -Dimgui=true
           ninja -C build-glfw-imgui/ \
