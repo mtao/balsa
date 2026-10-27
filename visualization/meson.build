@@ -136,6 +136,8 @@ if get_option('json')
     'src/scene_graph/gltf/Buffer.cpp',
     'src/scene_graph/gltf/BufferView.cpp',
     'src/scene_graph/gltf/Camera.cpp',
+    'src/scene_graph/gltf/Document.cpp',
+    'src/scene_graph/gltf/detail/Glb.cpp',
     'src/scene_graph/gltf/glTF.cpp',
     'src/scene_graph/gltf/Image.cpp',
     'src/scene_graph/gltf/Material.cpp',
