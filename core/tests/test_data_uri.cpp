@@ -2,6 +2,7 @@
 
 #include <balsa/encoding/base64.hpp>
 #include <balsa/uri/DataUri.hpp>
+#include <balsa/uri/Uri.hpp>
 
 #include <string_view>
 
@@ -50,9 +51,18 @@ TEST_CASE("data_uri_parse", "[uri][data_uri]") {
     const auto uri =
         Uri::parse("data:application/octet-stream;base64,Zm9vYmFy#frag");
     REQUIRE(uri);
-    const auto data = DataUri::parse(*uri);
+    const auto data = DataUri::parse(uri->view());
     REQUIRE(data);
     CHECK(uri->body() == "application/octet-stream;base64,Zm9vYmFy");
+
+    // Directly on a reference, without ada: views the original text.
+    constexpr std::string_view text = "DATA:;base64,Zm9vYmFy#f";
+    const auto ref = balsa::uri::UriView::parse(text);
+    REQUIRE(ref);
+    const auto direct = DataUri::parse(*ref);
+    REQUIRE(direct);
+    CHECK(direct->payload.data() == text.data() + 13);
+    CHECK(direct->decode() == as_bytes("foobar"));
     CHECK(data->media_type == "application/octet-stream");
     CHECK(data->is_base64);
     CHECK(data->payload == "Zm9vYmFy");
@@ -61,7 +71,7 @@ TEST_CASE("data_uri_parse", "[uri][data_uri]") {
     // Parameters stay in the media type; ;base64 is case-insensitive.
     const auto typed = Uri::parse("data:text/plain;charset=utf-8;BASE64,Zm8=");
     REQUIRE(typed);
-    const auto typed_data = DataUri::parse(*typed);
+    const auto typed_data = DataUri::parse(typed->view());
     REQUIRE(typed_data);
     CHECK(typed_data->media_type == "text/plain;charset=utf-8");
     CHECK(typed_data->is_base64);
@@ -69,7 +79,7 @@ TEST_CASE("data_uri_parse", "[uri][data_uri]") {
     // No media type, percent-encoded payload.
     const auto plain = Uri::parse("data:,hello%20world");
     REQUIRE(plain);
-    const auto plain_data = DataUri::parse(*plain);
+    const auto plain_data = DataUri::parse(plain->view());
     REQUIRE(plain_data);
     CHECK(plain_data->media_type.empty());
     CHECK_FALSE(plain_data->is_base64);
@@ -79,17 +89,17 @@ TEST_CASE("data_uri_parse", "[uri][data_uri]") {
 TEST_CASE("data_uri_errors", "[uri][data_uri]") {
     const auto https = Uri::parse("https://example.com/x");
     REQUIRE(https);
-    REQUIRE_FALSE(DataUri::parse(*https));
-    CHECK(DataUri::parse(*https).error().code
+    REQUIRE_FALSE(DataUri::parse(https->view()));
+    CHECK(DataUri::parse(https->view()).error().code
           == UriError::Code::InvalidDataUri);
 
     const auto no_comma = Uri::parse("data:text/plain;base64");
     REQUIRE(no_comma);
-    CHECK_FALSE(DataUri::parse(*no_comma));
+    CHECK_FALSE(DataUri::parse(no_comma->view()));
 
     const auto bad = Uri::parse("data:;base64,Zm9vY");
     REQUIRE(bad);
-    const auto bad_data = DataUri::parse(*bad);
+    const auto bad_data = DataUri::parse(bad->view());
     REQUIRE(bad_data);
     REQUIRE_FALSE(bad_data->decode());
     CHECK(bad_data->decode().error().code == UriError::Code::InvalidBase64);

@@ -16,8 +16,10 @@ core_sources = [
   'src/logging/stopwatch.cpp',
   'src/logging/json_sink.cpp', 
   'src/types/get_type_name.cpp',
+  'src/uri/detail/UriComponents.cpp',
   'src/uri/Uri.cpp',
   'src/uri/DataUri.cpp',
+  'src/uri/Resolver.cpp',
   'src/encoding/base64.cpp',
  ] + filesystem_sources
 

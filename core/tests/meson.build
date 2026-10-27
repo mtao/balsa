@@ -8,6 +8,9 @@ test('uri test', test_uri)
 
 test_data_uri = executable('test_data_uri', 'test_data_uri.cpp', dependencies: [core_dep, catch2_with_main_dep])
 test('data uri test', test_data_uri)
+
+test_resolver = executable('test_resolver', 'test_resolver.cpp', dependencies: [core_dep, catch2_with_main_dep])
+test('resolver test', test_resolver)
 if eigen_dep.found()
   subdir('eigen')
 endif

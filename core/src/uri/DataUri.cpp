@@ -1,6 +1,7 @@
 #include "balsa/uri/DataUri.hpp"
 
 #include "balsa/encoding/base64.hpp"
+#include "balsa/uri/Uri.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -26,11 +27,12 @@ namespace {
     }
 } // namespace
 
-auto DataUri::parse(const Uri &uri) -> std::expected<DataUri, UriError> {
-    if (uri.scheme() != "data") {
+auto DataUri::parse(UriView uri)
+    -> std::expected<DataUri, UriError> {
+    if (!uri.scheme() || !case_insensitive_equals(*uri.scheme(), "data")) {
         return std::unexpected(
             UriError{UriError::Code::InvalidDataUri,
-                     std::format("'{}' is not a data: URI", uri.href())});
+                     std::format("'{}' is not a data: URI", uri.text())});
     }
     const auto body = uri.body();
 
@@ -38,7 +40,7 @@ auto DataUri::parse(const Uri &uri) -> std::expected<DataUri, UriError> {
     if (comma == body.npos) {
         return std::unexpected(
             UriError{UriError::Code::InvalidDataUri,
-                     std::format("data: URI '{}' has no ','", uri.href())});
+                     std::format("data: URI '{}' has no ','", uri.text())});
     }
 
     DataUri data;

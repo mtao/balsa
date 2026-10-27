@@ -1,83 +1,81 @@
 #pragma once
-#include <array>
-#include <cstdint>
+#include "UriError.hpp"
+#include "detail/UriComponents.hpp"
+
 #include <expected>
 #include <filesystem>
-#include <optional>
 #include <string>
 #include <string_view>
 
 namespace balsa::uri {
 
-struct UriError {
-    enum class Code {
-        // The text is not a valid URI (or not resolvable against the base).
-        InvalidUri,
-        // to_path() on a URI whose scheme is not file: or that has a host.
-        NotAFileUri,
-        // The decoded path is not usable (e.g. contains a NUL byte).
-        InvalidPath,
-        // DataUri::parse() on a URI that is not a well-formed data: URI.
-        InvalidDataUri,
-        // A base64 data: URI payload failed to decode.
-        InvalidBase64,
-    };
-    Code code;
-    std::string message;
+// URI references (RFC 3986 §4.1): absolute URIs ("https://a/b", "data:,x")
+// or relative references ("../a.bin"), kept as written. UriView and Uri
+// share their whole API (see detail::UriComponents) and differ only in
+// ownership, like std::string_view and std::string. Normalization (via ada)
+// happens only in resolve(), normalized() and Uri::from_path().
+
+// Non-owning: the viewed text must outlive it.
+class UriView : public detail::UriComponents<UriView> {
+  public:
+    auto text() const -> std::string_view { return m_text; }
+
+  private:
+    friend class detail::UriComponents<UriView>;
+    friend class Uri;
+
+    explicit UriView(std::string_view text)
+      : UriComponents(text), m_text(text) {}
+    UriView(std::string_view text, const Offsets &offsets)
+      : UriComponents(offsets), m_text(text) {}
+
+    std::string_view m_text;
 };
 
-// A parsed, normalized absolute URI (WHATWG URL semantics, via ada).
-// Component accessors return views into href().
-class Uri {
+// Owning.
+class Uri : public detail::UriComponents<Uri> {
   public:
-    static auto parse(std::string_view text) -> std::expected<Uri, UriError>;
-    // Resolves `reference` against `base` (RFC 3986 §5), e.g. a relative
-    // glTF URI against the asset's URI.
-    static auto parse(std::string_view reference, const Uri &base)
-        -> std::expected<Uri, UriError>;
-    // file:// URI for `path`, made absolute first.
+    // A copy of `view`'s text.
+    explicit Uri(UriView view)
+      : UriComponents(view.m_offsets), m_text(view.text()) {}
+
+    // Normalized file:// URI for `path`, made absolute first.
     static auto from_path(const std::filesystem::path &path)
         -> std::expected<Uri, UriError>;
 
-    // Without the trailing ':', e.g. "file", "data", "https".
-    auto scheme() const -> std::string_view;
-    // Still percent-encoded.
-    auto path() const -> std::string_view;
-    // Path and query (without the fragment), still percent-encoded, e.g. the
-    // "<type>;base64,<data>" of a data: URI. Always present, possibly empty.
-    auto body() const -> std::string_view;
-    // Without the leading '?' / '#'.
-    auto query() const -> std::optional<std::string_view>;
-    auto fragment() const -> std::optional<std::string_view>;
-    auto href() const -> std::string_view { return m_href; }
+    auto text() const -> std::string_view { return m_text; }
 
-    // Percent-decoded local path of a file: URI.
-    auto to_path() const -> std::expected<std::filesystem::path, UriError>;
+    // Borrows text(), so not on temporaries.
+    auto view() const & -> UriView { return UriView(m_text, m_offsets); }
+    auto view() const && -> UriView = delete;
 
   private:
-    friend struct UriAccess; // fills the members from ada in Uri.cpp
+    friend class detail::UriComponents<Uri>;
+    friend auto detail::uri_resolve(std::string_view, const Uri &)
+        -> std::expected<Uri, UriError>;
+    friend auto detail::uri_normalized(std::string_view)
+        -> std::expected<Uri, UriError>;
 
-    // Sections in href order. Each starts at its offset (including its
-    // delimiter) and ends where the next present section starts; End is a
-    // sentinel at m_href.size().
-    enum class Section : std::uint8_t {
-        Scheme, // "file:"
-        Authority, // "//host", possibly empty
-        Path,
-        Query, // "?..."
-        Fragment, // "#..."
-        End,
-    };
-    auto section(Section s) const -> std::optional<std::string_view>;
-    // Raw end of `s` in m_href (including its delimiters): the start of the
-    // next present section, or End.
-    auto section_end(Section s) const -> std::uint32_t;
+    explicit Uri(std::string_view text) : Uri(std::string(text)) {}
+    explicit Uri(std::string text)
+      : UriComponents(text), m_text(std::move(text)) {}
 
-    std::string m_href;
-    // Start of each section in m_href (UINT32_MAX if absent), then End.
-    std::array<std::uint32_t, static_cast<std::size_t>(Section::End) + 1>
-        m_offsets{};
+    std::string m_text;
 };
+
+namespace detail {
+    template <typename Derived>
+    auto UriComponents<Derived>::resolve(const Uri &base) const
+        -> std::expected<Uri, UriError> {
+        return uri_resolve(whole(), base);
+    }
+
+    template <typename Derived>
+    auto UriComponents<Derived>::normalized() const
+        -> std::expected<Uri, UriError> {
+        return uri_normalized(whole());
+    }
+} // namespace detail
 
 // Decodes %XX escapes; other characters (including invalid escapes) are kept
 // as-is.
