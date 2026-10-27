@@ -11,3 +11,12 @@ test_embedded_shaders = executable(
   dependencies: [visualization_dep, catch2_with_main_dep],
 )
 test('embedded shader test', test_embedded_shaders)
+
+if get_option('json')
+  test_gltf_document = executable(
+    'test_gltf_document',
+    'test_gltf_document.cpp',
+    dependencies: [visualization_dep, catch2_with_main_dep],
+  )
+  test('gltf document test', test_gltf_document)
+endif
