@@ -16,6 +16,7 @@ core_sources = [
   'src/logging/stopwatch.cpp',
   'src/logging/json_sink.cpp', 
   'src/types/get_type_name.cpp',
+  'src/uri/Uri.cpp',
  ] + filesystem_sources
 
 core_headers = filesystem_headers
@@ -61,7 +62,10 @@ if tbb_dep.found()
   core_compile_args += '-DBALSA_PARALLEL'
 endif
 
-core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps)
+# URL parsing for balsa::uri; private to balsaCore (not in its public headers).
+ada_dep = dependency('ada')
+
+core_lib = library('balsaCore', core_sources, include_directories: include_dir, dependencies: core_required_deps + [ada_dep])
 
 core_dep = declare_dependency(link_with: core_lib, dependencies: core_required_deps, include_directories: include_dir, compile_args: core_compile_args)
 meson.override_dependency('balsaCore', core_dep)
