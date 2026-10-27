@@ -17,6 +17,10 @@ struct UriError {
         NotAFileUri,
         // The decoded path is not usable (e.g. contains a NUL byte).
         InvalidPath,
+        // DataUri::parse() on a URI that is not a well-formed data: URI.
+        InvalidDataUri,
+        // A base64 data: URI payload failed to decode.
+        InvalidBase64,
     };
     Code code;
     std::string message;
@@ -39,6 +43,9 @@ class Uri {
     auto scheme() const -> std::string_view;
     // Still percent-encoded.
     auto path() const -> std::string_view;
+    // Path and query (without the fragment), still percent-encoded, e.g. the
+    // "<type>;base64,<data>" of a data: URI. Always present, possibly empty.
+    auto body() const -> std::string_view;
     // Without the leading '?' / '#'.
     auto query() const -> std::optional<std::string_view>;
     auto fragment() const -> std::optional<std::string_view>;
@@ -62,11 +69,18 @@ class Uri {
         End,
     };
     auto section(Section s) const -> std::optional<std::string_view>;
+    // Raw end of `s` in m_href (including its delimiters): the start of the
+    // next present section, or End.
+    auto section_end(Section s) const -> std::uint32_t;
 
     std::string m_href;
     // Start of each section in m_href (UINT32_MAX if absent), then End.
     std::array<std::uint32_t, static_cast<std::size_t>(Section::End) + 1>
         m_offsets{};
 };
+
+// Decodes %XX escapes; other characters (including invalid escapes) are kept
+// as-is.
+auto percent_decode(std::string_view text) -> std::string;
 
 } // namespace balsa::uri

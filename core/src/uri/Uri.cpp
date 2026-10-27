@@ -31,7 +31,15 @@ namespace {
         return std::unexpected(UriError{UriError::Code::InvalidUri,
                                         std::format("invalid URI '{}'", text)});
     }
+
 } // namespace
+
+auto Uri::section_end(Section s) const -> std::uint32_t {
+    // End is never omitted, so this always finds one.
+    return *std::ranges::find_if(
+        m_offsets.begin() + std::to_underlying(s) + 1, m_offsets.end(),
+        [](std::uint32_t start) { return start != omitted; });
+}
 
 auto Uri::parse(std::string_view text) -> std::expected<Uri, UriError> {
     const auto url = ada::parse<ada::url_aggregator>(text);
@@ -65,20 +73,22 @@ auto Uri::section(Section s) const -> std::optional<std::string_view> {
     const auto i = static_cast<std::size_t>(s);
     const auto start = m_offsets[i];
     if (start == omitted) { return std::nullopt; }
-    // End is never omitted, so this always finds an endpoint.
-    const auto end = *std::ranges::find_if(
-        m_offsets.begin() + i + 1, m_offsets.end(), [](std::uint32_t offset) {
-            return offset != omitted;
-        });
+    const auto end = section_end(s);
     const auto [prefix, suffix] = delimiters[i];
 
-    size_t local_start = start + prefix;
+    const auto local_start = start + prefix;
     return std::string_view(m_href).substr(local_start,
                                            end - local_start - suffix);
 }
 
 auto Uri::scheme() const -> std::string_view {
     return *section(Section::Scheme);
+}
+
+auto Uri::body() const -> std::string_view {
+    const auto start = m_offsets[static_cast<std::size_t>(Section::Path)];
+    const auto end = section_end(Section::Query);
+    return std::string_view(m_href).substr(start, end - start);
 }
 
 auto Uri::path() const -> std::string_view { return *section(Section::Path); }
@@ -99,14 +109,17 @@ auto Uri::to_path() const -> std::expected<std::filesystem::path, UriError> {
             UriError{UriError::Code::NotAFileUri,
                      std::format("'{}' is not a local file URI", m_href)});
     }
-    const auto encoded = path();
-    auto decoded = ada::unicode::percent_decode(encoded, encoded.find('%'));
+    auto decoded = percent_decode(path());
     if (decoded.find('\0') != std::string::npos) {
         return std::unexpected(UriError{
             UriError::Code::InvalidPath,
             std::format("'{}' decodes to a path with a NUL byte", m_href)});
     }
     return std::filesystem::path(std::move(decoded));
+}
+
+auto percent_decode(std::string_view text) -> std::string {
+    return ada::unicode::percent_decode(text, text.find('%'));
 }
 
 } // namespace balsa::uri

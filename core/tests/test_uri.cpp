@@ -12,6 +12,7 @@ TEST_CASE("uri_parse_components", "[uri]") {
     CHECK(uri->path() == "/a/b%20c");
     CHECK(uri->query() == "x=1");
     CHECK(uri->fragment() == "frag");
+    CHECK(uri->body() == "/a/b%20c?x=1");
 
     const auto bare = Uri::parse("file:///tmp/x.bin");
     REQUIRE(bare);
@@ -19,6 +20,7 @@ TEST_CASE("uri_parse_components", "[uri]") {
     CHECK(bare->path() == "/tmp/x.bin");
     CHECK_FALSE(bare->query());
     CHECK_FALSE(bare->fragment());
+    CHECK(bare->body() == "/tmp/x.bin");
 
     CHECK_FALSE(Uri::parse("not a uri"));
     CHECK_FALSE(Uri::parse("relative/path.bin"));
