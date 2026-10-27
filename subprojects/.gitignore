@@ -9,6 +9,7 @@
 # Ignore auto-promoted wrap-redirect files from transitive deps.
 # Only directly-needed wraps are whitelisted below.
 *.wrap
+!ada.wrap
 !catch2.wrap
 !cli11.wrap
 !colormap_shaders.wrap
@@ -18,5 +19,6 @@
 !mshio.wrap
 !nlohmann_json.wrap
 !partio.wrap
+!simdutf.wrap
 !spdlog.wrap
 !zipper.wrap
