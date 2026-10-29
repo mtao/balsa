@@ -68,18 +68,19 @@ template <AttributeValue T,
           typename Extents,
           typename Layout,
           typename Accessor>
-    requires(Extents::rank() == 1 || Extents::rank() == 2)
+    requires(Extents::rank() >= 1 && Extents::rank() <= 3)
 auto MeshGeometry::add_attribute(std::string name,
                              AttributeDomain domain,
                              ::zipper::mdspan<T, Extents, Layout, Accessor> data)
     -> MeshAttributeHandle {
-    if constexpr (Extents::rank() == 2) {
-        if (data.extent(0) == 0
-            || data.extent(0) > MeshAttribute::max_components) {
+    if constexpr (Extents::rank() >= 2) {
+        std::size_t components = data.extent(0);
+        if constexpr (Extents::rank() == 3) { components *= data.extent(1); }
+        if (components == 0 || components > MeshAttribute::max_components) {
             spdlog::warn("MeshGeometry: attribute '{}' has {} components, "
                          "expected 1..{}",
                          name,
-                         data.extent(0),
+                         components,
                          MeshAttribute::max_components);
             return {};
         }

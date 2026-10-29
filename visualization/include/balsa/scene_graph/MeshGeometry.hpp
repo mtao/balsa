@@ -75,7 +75,7 @@ class MeshGeometry {
               typename Extents,
               typename Layout,
               typename Accessor>
-        requires(Extents::rank() == 1 || Extents::rank() == 2)
+        requires(Extents::rank() >= 1 && Extents::rank() <= 3)
     auto add_attribute(std::string name,
                        AttributeDomain domain,
                        ::zipper::mdspan<T, Extents, Layout, Accessor> data)
