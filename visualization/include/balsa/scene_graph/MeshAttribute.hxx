@@ -3,8 +3,7 @@
 
 #include <cassert>
 
-#include <zipper/DataArrayBase.hxx>
-#include <zipper/expression/nullary/MDSpan.hpp>
+#include <zipper/DataArray.hpp>
 
 namespace balsa::scene_graph {
 
@@ -29,15 +28,10 @@ MeshAttribute::MeshAttribute(
     assert(columns >= 1 && rows * columns <= max_components);
 
     storage_type<S> values(rows * columns, count);
-    using dst_span =
-        ::zipper::mdspan<S, ::zipper::dextents<R>, ::zipper::storage::col_major>;
-    using dst_t = ::zipper::expression::nullary::MDSpan<
-        S, ::zipper::dextents<R>, ::zipper::storage::col_major,
-        ::zipper::default_accessor_policy<S>>;
-    using src_t =
-        ::zipper::expression::nullary::MDSpan<T, Extents, Layout, Accessor>;
-    ::zipper::DataArrayBase(dst_t(dst_span(values.data(), data.extents()))) =
-        ::zipper::DataArrayBase(src_t(data)).template cast<S>();
+    ::zipper::DataArrayBase(
+        ::zipper::mdspan<S, ::zipper::dextents<R>, ::zipper::storage::col_major>(
+            values.data(), data.extents())) =
+        ::zipper::DataArrayBase(data).template cast<S>();
 
     m_values = std::move(values);
     m_columns = static_cast<uint8_t>(columns);
