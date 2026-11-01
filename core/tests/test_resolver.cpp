@@ -12,7 +12,7 @@ using balsa::uri::Uri;
 using balsa::uri::UriError;
 
 namespace {
-auto as_bytes(std::string_view text) -> Resolver::Bytes {
+auto as_bytes(std::string_view text) -> Resolver::bytes_type {
     const auto *begin = reinterpret_cast<const std::byte *>(text.data());
     return {begin, begin + text.size()};
 }
@@ -59,13 +59,13 @@ TEST_CASE("resolver_defaults", "[uri][resolver]") {
           == UriError::Code::UnsupportedScheme);
 }
 
-TEST_CASE("resolver_with", "[uri][resolver]") {
+TEST_CASE("resolver_add", "[uri][resolver]") {
     const auto base = Resolver::defaults();
-    const auto extended = base.with(
-        "https", [](const balsa::uri::UriView &) -> std::expected<Resolver::Bytes, UriError> {
-            return as_bytes("remote");
-        });
-    // `with` copies: the original is unchanged.
+    auto extended = base;
+    extended.add("HTTPS", [](balsa::uri::UriView) -> Resolver::result_type {
+        return as_bytes("remote");
+    });
+    // Copies are independent; schemes match case-insensitively.
     CHECK_FALSE(base.handles("https"));
     CHECK(extended.handles("https"));
     CHECK(extended.handles("data"));
@@ -74,9 +74,9 @@ TEST_CASE("resolver_with", "[uri][resolver]") {
     REQUIRE(https);
     CHECK(extended.fetch(https->view()) == as_bytes("remote"));
 
-    // Replacing a handler.
-    const auto no_files = Resolver::defaults().with(
-        "file", [](const balsa::uri::UriView &uri) -> std::expected<Resolver::Bytes, UriError> {
+    // Chained on a temporary, replacing a handler.
+    const auto no_files = Resolver::defaults().add(
+        "file", [](balsa::uri::UriView uri) -> Resolver::result_type {
             return std::unexpected(UriError{UriError::Code::Io,
                                             std::string(uri.text())});
         });

@@ -1,6 +1,7 @@
 #pragma once
 #include "UriError.hpp"
 #include "Uri.hpp"
+#include "balsa/string/capitalization.hpp"
 
 #include <cstddef>
 #include <expected>
@@ -20,25 +21,25 @@ namespace balsa::uri {
 // shared_ptr so copies share it.
 class Resolver {
   public:
-    using Bytes = std::vector<std::byte>;
-    using Fetch = std::copyable_function<
-        std::expected<Bytes, UriError>(UriView) const>;
+    using bytes_type = std::vector<std::byte>;
+    using result_type = std::expected<bytes_type, UriError>;
+    using fetch_function_type =
+        std::copyable_function<result_type(UriView) const>;
 
     // Handles data: (decoded) and file: (read from disk).
     static auto defaults() -> Resolver;
 
-    // A copy with `fetch` handling `scheme` (lowercase; replacing any
-    // existing handler).
-    auto with(std::string scheme, Fetch fetch) const & -> Resolver;
-    auto with(std::string scheme, Fetch fetch) && -> Resolver;
+    // Makes `fetch` handle `scheme`, replacing any existing handler.
+    auto add(std::string_view scheme, fetch_function_type fetch) & -> Resolver &;
+    auto add(std::string_view scheme, fetch_function_type fetch) && -> Resolver &&;
 
     auto handles(std::string_view scheme) const -> bool;
     // `uri` must be absolute.
-    auto fetch(UriView uri) const
-        -> std::expected<Bytes, UriError>;
+    auto fetch(UriView uri) const -> result_type;
 
   private:
-    std::flat_map<std::string, Fetch, std::less<>> m_fetchers;
+    std::flat_map<std::string, fetch_function_type, string::ascii::IgnoreCaseLess>
+        m_fetchers;
 };
 
 } // namespace balsa::uri
