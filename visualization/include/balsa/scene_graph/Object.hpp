@@ -22,8 +22,9 @@ namespace balsa::scene_graph {
 //   - A name, visibility flag, and selectability flag
 //
 // The local transform is composed as T * R * S.  local_transform()
-// returns the composed AffineTransformf by value; there is no stored
-// 4×4 matrix.
+// returns the composed AffineTransformf by value.  world_transform() and
+// visible_in_hierarchy() are cached, recomputed lazily after this Object
+// or an ancestor changes (so not thread-safe).
 //
 // Features are the extensibility mechanism: Camera, MeshInstance,
 // BasicShading, Drawable etc. are all features that can be attached to
@@ -50,11 +51,17 @@ class Object {
 
     // Translation
     const Vec3f &translation() const { return _translation; }
-    void set_translation(const Vec3f &t) { _translation = t; }
+    void set_translation(const Vec3f &t) {
+        _translation = t;
+        invalidate();
+    }
 
     // Rotation (stored as unit quaternion)
     const Quaternionf &rotation() const { return _rotation; }
-    void set_rotation(const Quaternionf &q) { _rotation = q; }
+    void set_rotation(const Quaternionf &q) {
+        _rotation = q;
+        invalidate();
+    }
 
     // Rotation as Euler angles in degrees (XYZ / pitch-yaw-roll).
     // Returns (pitch, yaw, roll) in degrees.
@@ -65,7 +72,10 @@ class Object {
 
     // Scale factors (per-axis)
     const Vec3f &scale_factors() const { return _scale; }
-    void set_scale_factors(const Vec3f &s) { _scale = s; }
+    void set_scale_factors(const Vec3f &s) {
+        _scale = s;
+        invalidate();
+    }
 
     // ── Convenience mutators ────────────────────────────────────────
 
@@ -95,7 +105,7 @@ class Object {
 
     // Accumulated world transform: product of all ancestors' local
     // transforms, from root down to (and including) this node.
-    AffineTransformf world_transform() const;
+    const AffineTransformf &world_transform() const;
 
     // ── Hierarchy ───────────────────────────────────────────────────
 
@@ -140,20 +150,36 @@ class Object {
     // ── Identity ────────────────────────────────────────────────────
 
     std::string name;
-    bool visible = true;
     bool selectable = true;
+
+    // This Object's own visibility flag.
+    bool visible() const { return _visible; }
+    void set_visible(bool visible);
+
+    // True if this Object and every ancestor are visible.
+    bool visible_in_hierarchy() const;
 
     // If true, this Object cannot be deleted or detached from its parent.
     // Used for scene fixtures such as the default camera.
     bool permanent = false;
 
   private:
+    // Marks this Object and its subtree dirty.
+    void invalidate();
+    void invalidate_subtree();
+    void update_cache() const;
+
+    bool _visible = true;
     Vec3f _translation{ 0.0f, 0.0f, 0.0f };
     Quaternionf _rotation{ 1, 0, 0, 0 };// identity quaternion (w=1)
     Vec3f _scale{ 1.0f, 1.0f, 1.0f };
     Object *_parent = nullptr;
     std::vector<std::unique_ptr<Object>> _children;
     std::vector<std::unique_ptr<AbstractFeature>> _features;
+
+    mutable AffineTransformf _world;
+    mutable bool _visible_in_hierarchy = true;
+    mutable bool _cache_dirty = true;
 };
 
 

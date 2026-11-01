@@ -20,8 +20,8 @@ Object::~Object() = default;
 
 Object::Object(Object &&other) noexcept
   : name(std::move(other.name)),
-    visible(other.visible),
     selectable(other.selectable),
+    _visible(other._visible),
     _translation(other._translation),
     _rotation(other._rotation),
     _scale(other._scale),
@@ -38,13 +38,14 @@ Object::Object(Object &&other) noexcept
         if (f) f->_object = this;
     }
     other._parent = nullptr;
+    invalidate_subtree();
 }
 
 Object &Object::operator=(Object &&other) noexcept {
     if (this != &other) {
         name = std::move(other.name);
-        visible = other.visible;
         selectable = other.selectable;
+        _visible = other._visible;
         _translation = other._translation;
         _rotation = other._rotation;
         _scale = other._scale;
@@ -59,6 +60,7 @@ Object &Object::operator=(Object &&other) noexcept {
             if (f) f->_object = this;
         }
         other._parent = nullptr;
+        invalidate_subtree();
     }
     return *this;
 }
@@ -73,27 +75,32 @@ Vec3f Object::rotation_euler() const {
 void Object::set_rotation_euler(const Vec3f &degrees) {
     const Vec3f radians(::zipper::transform::radians(1.0f) * degrees);
     _rotation = ::zipper::transform::from_euler_angles(radians);
+    invalidate();
 }
 
 // ── Convenience mutators ────────────────────────────────────────────
 
 void Object::translate(const Vec3f &delta) {
     _translation = (_translation + delta).eval();
+    invalidate();
 }
 
 void Object::rotate(const Quaternionf &q) {
     // Post-multiply: new_rotation = q * old_rotation
     _rotation = (q * _rotation).eval();
+    invalidate();
 }
 
 void Object::set_uniform_scale(float s) {
     _scale = ::zipper::expression::nullary::Constant<float, 3>(s);
+    invalidate();
 }
 
 void Object::reset_transform() {
     _translation = ::zipper::expression::nullary::Constant<float, 3>(0.0f);
     _rotation = Quaternionf(1, 0, 0, 0);
     _scale = ::zipper::expression::nullary::Constant<float, 3>(1.0f);
+    invalidate();
 }
 
 // ── Composed transforms ─────────────────────────────────────────────
@@ -112,13 +119,50 @@ void Object::set_from_transform(const AffineTransformf &xf) {
     _translation = t.vector();
     _scale = s.factors();
     _rotation = ::zipper::transform::to_quaternion(r.matrix());
+    invalidate();
 }
 
-AffineTransformf Object::world_transform() const {
-    if (_parent) {
-        return _parent->world_transform() * local_transform();
+// ── Cached world state ──────────────────────────────────────────────
+
+void Object::set_visible(bool visible) {
+    if (visible == _visible) return;
+    _visible = visible;
+    invalidate();
+}
+
+void Object::invalidate() {
+    if (_cache_dirty) return;
+    invalidate_subtree();
+}
+
+void Object::invalidate_subtree() {
+    _cache_dirty = true;
+    for (auto &child : _children) {
+        if (child) child->invalidate();
     }
-    return local_transform();
+}
+
+void Object::update_cache() const {
+    if (!_cache_dirty) return;
+    // Parents update first, so clean Objects have clean ancestors.
+    if (_parent) {
+        _world = _parent->world_transform() * local_transform();
+        _visible_in_hierarchy = _visible && _parent->visible_in_hierarchy();
+    } else {
+        _world = local_transform();
+        _visible_in_hierarchy = _visible;
+    }
+    _cache_dirty = false;
+}
+
+const AffineTransformf &Object::world_transform() const {
+    update_cache();
+    return _world;
+}
+
+bool Object::visible_in_hierarchy() const {
+    update_cache();
+    return _visible_in_hierarchy;
 }
 
 // ── Hierarchy ───────────────────────────────────────────────────────
@@ -146,6 +190,7 @@ Object &Object::add_child(std::unique_ptr<Object> child) {
         }
     }
     child->_parent = this;
+    child->invalidate(); // new parent, new world state
     _children.push_back(std::move(child));
     return *_children.back();
 }
@@ -162,6 +207,7 @@ std::unique_ptr<Object> Object::detach() {
     std::unique_ptr<Object> self = std::move(*it);
     siblings.erase(it);
     _parent = nullptr;
+    invalidate(); // no parent any more
     return self;
 }
 
