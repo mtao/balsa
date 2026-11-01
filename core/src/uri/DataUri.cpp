@@ -2,22 +2,13 @@
 
 #include "balsa/encoding/base64.hpp"
 #include "balsa/uri/Uri.hpp"
+#include "balsa/string/capitalization.hpp"
 
-#include <algorithm>
-#include <cctype>
 #include <format>
 
 namespace balsa::uri {
 
 namespace {
-    auto case_insensitive_equals(std::string_view a, std::string_view b)
-        -> bool {
-        return std::ranges::equal(a, b, [](char x, char y) {
-            return std::tolower(static_cast<unsigned char>(x))
-                   == std::tolower(static_cast<unsigned char>(y));
-        });
-    }
-
     auto trim_whitespace(std::string_view text) -> std::string_view {
         constexpr std::string_view whitespace = " \t\n\r\f";
         const auto first = text.find_first_not_of(whitespace);
@@ -30,7 +21,7 @@ namespace {
 auto DataUri::parse(UriView uri)
     -> std::expected<DataUri, UriError> {
     const auto is_data = [](std::string_view scheme) {
-        return case_insensitive_equals(scheme, "data");
+        return string::ascii::IgnoreCaseEqual{}(scheme, "data");
     };
     if (!uri.scheme().transform(is_data).value_or(false)) {
         return std::unexpected(
@@ -52,7 +43,7 @@ auto DataUri::parse(UriView uri)
     // A trailing ";base64" parameter (case-insensitive) selects base64.
     if (const auto semicolon = data.media_type.rfind(';');
         semicolon != std::string_view::npos
-        && case_insensitive_equals(
+        && string::ascii::IgnoreCaseEqual{}(
             trim_whitespace(data.media_type.substr(semicolon + 1)), "base64")) {
         data.is_base64 = true;
         data.media_type = trim_whitespace(data.media_type.substr(0, semicolon));

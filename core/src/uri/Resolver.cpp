@@ -1,9 +1,8 @@
 #include "balsa/uri/Resolver.hpp"
 
 #include "balsa/uri/DataUri.hpp"
+#include "balsa/string/capitalization.hpp"
 
-#include <algorithm>
-#include <cctype>
 #include <format>
 #include <fstream>
 
@@ -62,10 +61,7 @@ auto Resolver::fetch(UriView uri) const
             UriError::Code::InvalidUri,
             std::format("cannot fetch relative URI '{}'", uri.text())});
     }
-    std::string scheme(*uri.scheme());
-    std::ranges::transform(scheme, scheme.begin(), [](char c) {
-        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    });
+    const auto scheme = string::ascii::tolower(*uri.scheme());
     const auto it = m_fetchers.find(scheme);
     if (it == m_fetchers.end()) {
         return std::unexpected(UriError{

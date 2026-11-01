@@ -23,6 +23,7 @@
 
 #if BALSA_HAS_OPENVDB
 #include <balsa/geometry/point_cloud/vdb_points.hpp>
+#include <balsa/string/capitalization.hpp>
 #endif
 
 namespace pc = balsa::geometry::point_cloud;
@@ -36,8 +37,8 @@ enum class Format { XYZ,
                     Unknown };
 
 Format detect_format(const std::string &path) {
-    auto ext = std::filesystem::path(path).extension().string();
-    std::ranges::transform(ext, ext.begin(), ::tolower);
+    const auto ext = balsa::string::ascii::tolower(
+        std::filesystem::path(path).extension().string());
     if (ext == ".extxyz") return Format::ExtXYZ;
     if (ext == ".xyz") return Format::XYZ;
     if (ext == ".vdb") return Format::VDB;

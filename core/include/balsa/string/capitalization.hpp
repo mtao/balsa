@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <compare>
 #include <string>
 #include <string_view>
 
@@ -30,10 +31,33 @@ namespace ascii {
         toupper_in_place(r);
         return r;
     }
-    constexpr auto equals_ignore_case(std::string_view a, std::string_view b)
-        -> bool {
-        return std::ranges::equal(
-            a, b, [](char x, char y) { return tolower(x) == tolower(y); });
+    // Lexicographic order of the lowercased strings.  Weak: strings that
+    // differ only in case are equivalent.
+    constexpr auto compare_ignore_case(std::string_view a, std::string_view b)
+        -> std::weak_ordering {
+        return std::lexicographical_compare_three_way(
+            a.begin(), a.end(), b.begin(), b.end(), [](char x, char y) {
+                return std::weak_order(tolower(x), tolower(y));
+            });
     }
+
+    // Case-insensitive comparators, transparent for string_view lookups,
+    // e.g. std::map<std::string, T, ascii::IgnoreCaseLess>.
+    struct IgnoreCaseEqual {
+        using is_transparent = void;
+        static constexpr auto operator()(std::string_view a, std::string_view b)
+            -> bool {
+            return std::ranges::equal(
+                a, b, [](char x, char y) { return tolower(x) == tolower(y); });
+        }
+    };
+
+    struct IgnoreCaseLess {
+        using is_transparent = void;
+        static constexpr auto operator()(std::string_view a, std::string_view b)
+            -> bool {
+            return compare_ignore_case(a, b) < 0;
+        }
+    };
 } // namespace ascii
 } // namespace balsa::string
