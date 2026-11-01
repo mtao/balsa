@@ -78,8 +78,8 @@ class MeshGeometry {
         requires(Extents::rank() >= 1 && Extents::rank() <= 3)
     auto add_attribute(std::string name,
                        AttributeDomain domain,
-                       ::zipper::mdspan<T, Extents, Layout, Accessor> data)
-        -> MeshAttributeHandle;
+                       ::zipper::mdspan<T, Extents, Layout, Accessor> data,
+                       bool normalized = false) -> MeshAttributeHandle;
     // Convenience: flat element-major data (any contiguous range),
     // component_count values per element.
     template <std::ranges::contiguous_range R>

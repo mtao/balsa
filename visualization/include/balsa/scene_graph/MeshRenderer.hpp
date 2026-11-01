@@ -46,7 +46,8 @@ struct MeshRoleRequirement {
     std::string default_attribute = {};
 
     [[nodiscard]] auto accepts(const MeshAttribute &attribute) const -> bool {
-        return attribute.domain == domain
+        // Roles take scalars and vectors only.
+        return attribute.domain == domain && attribute.is_vector()
                && attribute.component_count() >= min_components
                && attribute.component_count() <= max_components;
     }

@@ -71,8 +71,8 @@ template <AttributeValue T,
     requires(Extents::rank() >= 1 && Extents::rank() <= 3)
 auto MeshGeometry::add_attribute(std::string name,
                              AttributeDomain domain,
-                             ::zipper::mdspan<T, Extents, Layout, Accessor> data)
-    -> MeshAttributeHandle {
+                             ::zipper::mdspan<T, Extents, Layout, Accessor> data,
+                             bool normalized) -> MeshAttributeHandle {
     if constexpr (Extents::rank() >= 2) {
         std::size_t components = data.extent(0);
         if constexpr (Extents::rank() == 3) { components *= data.extent(1); }
@@ -89,8 +89,14 @@ auto MeshGeometry::add_attribute(std::string name,
         spdlog::warn("MeshGeometry: attribute name '{}' is reserved", name);
         return {};
     }
+    if (normalized && !is_normalizable(attribute_type_of<T>)) {
+        spdlog::warn("MeshGeometry: attribute '{}' cannot be normalized "
+                     "(only 8 / 16-bit integers can)",
+                     name);
+        return {};
+    }
     return add_user_attribute(
-        MeshAttribute(std::move(name), domain, std::move(data)));
+        MeshAttribute(std::move(name), domain, std::move(data), normalized));
 }
 
 template <std::ranges::contiguous_range R>
