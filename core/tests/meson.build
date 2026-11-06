@@ -14,6 +14,9 @@ test('resolver test', test_resolver)
 
 test_capitalization = executable('test_capitalization', 'test_capitalization.cpp', dependencies: [core_dep, catch2_with_main_dep])
 test('capitalization test', test_capitalization)
+
+test_catalog = executable('test_catalog', 'test_catalog.cpp', dependencies: [core_dep, catch2_with_main_dep])
+test('catalog test', test_catalog)
 if eigen_dep.found()
   subdir('eigen')
 endif
