@@ -72,7 +72,7 @@ template <AttributeValue T,
 auto MeshGeometry::add_attribute(std::string name,
                              AttributeDomain domain,
                              ::zipper::mdspan<T, Extents, Layout, Accessor> data,
-                             bool normalized) -> MeshAttributeHandle {
+                             AttributeOptions options) -> MeshAttributeHandle {
     if constexpr (Extents::rank() >= 2) {
         std::size_t components = data.extent(0);
         if constexpr (Extents::rank() == 3) { components *= data.extent(1); }
@@ -89,14 +89,16 @@ auto MeshGeometry::add_attribute(std::string name,
         spdlog::warn("MeshGeometry: attribute name '{}' is reserved", name);
         return {};
     }
-    if (normalized && !is_normalizable(attribute_type_of<T>)) {
+    if (options.normalized && !is_normalizable(attribute_type_of<T>)) {
         spdlog::warn("MeshGeometry: attribute '{}' cannot be normalized "
                      "(only 8 / 16-bit integers can)",
                      name);
         return {};
     }
+    const bool normalized = options.normalized;
     return add_user_attribute(
-        MeshAttribute(std::move(name), domain, std::move(data), normalized));
+        MeshAttribute(std::move(name), domain, std::move(data), normalized),
+        options);
 }
 
 template <std::ranges::contiguous_range R>
@@ -104,7 +106,8 @@ template <std::ranges::contiguous_range R>
 auto MeshGeometry::add_attribute(std::string name,
                              AttributeDomain domain,
                              uint8_t component_count,
-                             const R &data) -> MeshAttributeHandle {
+                             const R &data,
+                             AttributeOptions options) -> MeshAttributeHandle {
     const std::span flat(data);
     if (component_count == 0 || flat.size() % component_count != 0) {
         spdlog::warn("MeshGeometry: attribute '{}' has {} values, not a multiple "
@@ -120,33 +123,8 @@ auto MeshGeometry::add_attribute(std::string name,
         domain,
         ::zipper::mdspan<E, ::zipper::dextents<2>, ::zipper::storage::col_major>(
             flat.data(), std::size_t{component_count},
-            flat.size() / component_count));
-}
-
-template <typename T, typename Extents, typename Layout, typename Accessor>
-    requires(Extents::rank() == 2)
-auto MeshGeometry::set_triangle_indices(
-    ::zipper::mdspan<T, Extents, Layout, Accessor> indices) -> bool {
-    const auto converted = to_element_indices<3>(indices);
-    if (!converted) return false;
-    set_topology<3>(face_vertices_name,
-                    AttributeDomain::Face,
-                    converted->expression().as_mdspan());
-    if (!_explicit_edges) derive_edges();
-    return true;
-}
-
-template <typename T, typename Extents, typename Layout, typename Accessor>
-    requires(Extents::rank() == 2)
-auto MeshGeometry::set_edge_indices(
-    ::zipper::mdspan<T, Extents, Layout, Accessor> indices) -> bool {
-    const auto converted = to_element_indices<2>(indices);
-    if (!converted) return false;
-    set_topology<2>(edge_vertices_name,
-                    AttributeDomain::Edge,
-                    converted->expression().as_mdspan());
-    _explicit_edges = true;
-    return true;
+            flat.size() / component_count),
+        std::move(options));
 }
 
 } // namespace balsa::scene_graph

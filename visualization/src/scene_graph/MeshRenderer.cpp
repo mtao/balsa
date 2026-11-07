@@ -1,4 +1,6 @@
 #include "balsa/scene_graph/MeshRenderer.hpp"
+#include "balsa/scene_graph/AttributeSemantic.hpp"
+#include "balsa/scene_graph/MeshGeometry.hpp"
 
 #include <algorithm>
 #include <format>
@@ -47,10 +49,10 @@ auto float_property(std::string label, float &field, float min, float max,
 }
 
 auto position_requirement() -> MeshRoleRequirement {
-    return {.id = std::string(position_role),
+    return {.role = roles::position(),
             .min_components = 1,
             .max_components = 4,
-            .default_attribute = "vertex_positions"};
+            .semantic = semantics::position()};
 }
 
 auto scalar_reduction_options() -> std::vector<std::string> {
@@ -98,15 +100,32 @@ auto scalar_extents(const MeshAttribute &attribute, ScalarReduction reduction)
     });
 }
 
-auto MeshRenderer::requirement(std::string_view role) const
+auto MeshRenderer::requirement(MeshRole role) const
     -> const MeshRoleRequirement * {
     const auto roles = required_roles();
-    const auto it = std::ranges::find(roles, role, &MeshRoleRequirement::id);
+    const auto it = std::ranges::find(roles, role, &MeshRoleRequirement::role);
     return it == roles.end() ? nullptr : &*it;
 }
 
+auto MeshRenderer::fit_to(const MeshLayerContext &layer) -> bool {
+    const auto *geometry = layer.geometry();
+    if (geometry == nullptr) return false;
+    switch (draw_request().primitive) {
+    case MeshPrimitive::Triangles:
+        if (!geometry->has_triangle_indices()) return false;
+        break;
+    case MeshPrimitive::Edges:
+        if (!geometry->has_edge_indices()) return false;
+        break;
+    case MeshPrimitive::Vertices: break;
+    }
+    return std::ranges::all_of(required_roles(), [&](const MeshRoleRequirement &r) {
+        return !r.required || layer.attribute(r.role).valid();
+    });
+}
+
 MeshRenderLayer::MeshRenderLayer(const MeshRenderLayer &other)
-    : id(other.id), name(other.name), enabled(other.enabled),
+    : id(other.id), name(other.name), enabled(other.enabled), view(other.view),
       renderer(other.renderer ? other.renderer->clone() : nullptr),
       bindings(other.bindings) {}
 
@@ -115,6 +134,7 @@ auto MeshRenderLayer::operator=(const MeshRenderLayer &other) -> MeshRenderLayer
     id = other.id;
     name = other.name;
     enabled = other.enabled;
+    view = other.view;
     renderer = other.renderer ? other.renderer->clone() : nullptr;
     bindings = other.bindings;
     return *this;
@@ -128,20 +148,24 @@ auto PhongSurfaceRenderer::id() const -> std::string_view {
 }
 auto PhongSurfaceRenderer::required_roles() const
     -> std::span<const MeshRoleRequirement> {
-    static const std::array roles{
+    static const std::array requirements{
         position_requirement(),
-        MeshRoleRequirement{.id = std::string(normal_role),
+        MeshRoleRequirement{.role = roles::normal(),
                             .min_components = 2,
                             .max_components = 4,
                             .required = false,
-                            .default_attribute = "vertex_normals"},
+                            .semantic = semantics::normal()},
         // Up to 4 raw components; scalar_colormap.reduction picks the scalar.
-        MeshRoleRequirement{.id = std::string(scalar_role),
+        MeshRoleRequirement{.role = roles::scalar(),
                             .min_components = 1,
                             .max_components = 4,
                             .required = false},
     };
-    return roles;
+    return requirements;
+}
+auto PhongSurfaceRenderer::fit_to(const MeshLayerContext &layer) -> bool {
+    state.constrain(layer.attribute(roles::normal()).valid());
+    return MeshRenderer::fit_to(layer);
 }
 auto PhongSurfaceRenderer::draw_request() const -> MeshDrawRequest {
     return {.primitive = MeshPrimitive::Triangles,
@@ -150,7 +174,7 @@ auto PhongSurfaceRenderer::draw_request() const -> MeshDrawRequest {
 }
 auto PhongSurfaceRenderer::scalar_data_extents(const MeshLayerContext &layer) const
     -> std::optional<std::array<float, 2>> {
-    const auto attribute = layer.attribute(scalar_role);
+    const auto attribute = layer.attribute(roles::scalar());
     if (!attribute) return std::nullopt;
     const auto version = layer.geometry_version();
     if (!(m_extents.attribute == attribute && m_extents.geometry_version == version
@@ -184,7 +208,7 @@ auto PhongSurfaceRenderer::build_controls(const MeshLayerContext &layer)
     auto &scalar = scalar_colormap;
     auto uniform = color_property("Color", state.uniform_color);
     // Bound scalars replace the uniform colour.
-    auto scalar_bound = [layer] { return layer.attribute(scalar_role).valid(); };
+    auto scalar_bound = [layer] { return layer.attribute(roles::scalar()).valid(); };
     uniform.visible_when = [scalar_bound] { return !scalar_bound(); };
     layout.add_property(std::move(uniform));
     layout.add_property(float_property("Ambient", state.material.ambient_strength,
@@ -265,8 +289,8 @@ auto UnlitWireframeRenderer::id() const -> std::string_view {
 }
 auto UnlitWireframeRenderer::required_roles() const
     -> std::span<const MeshRoleRequirement> {
-    static const std::array roles{position_requirement()};
-    return roles;
+    static const std::array requirements{position_requirement()};
+    return requirements;
 }
 auto UnlitWireframeRenderer::draw_request() const -> MeshDrawRequest {
     visualization::vulkan::MeshRenderState state;
@@ -295,8 +319,8 @@ auto UnlitPointsRenderer::id() const -> std::string_view {
 }
 auto UnlitPointsRenderer::required_roles() const
     -> std::span<const MeshRoleRequirement> {
-    static const std::array roles{position_requirement()};
-    return roles;
+    static const std::array requirements{position_requirement()};
+    return requirements;
 }
 auto UnlitPointsRenderer::draw_request() const -> MeshDrawRequest {
     visualization::vulkan::MeshRenderState state;
@@ -352,11 +376,14 @@ auto register_builtin_mesh_renderers() -> void {
     (void)once;
 }
 
-auto make_default_mesh_render_layers() -> std::vector<MeshRenderLayer> {
+auto make_default_mesh_render_layers(std::size_t dimension)
+    -> std::vector<MeshRenderLayer> {
     register_builtin_mesh_renderers();
     std::vector<MeshRenderLayer> layers;
     layers.emplace_back("Surface", create_mesh_renderer("balsa.phong_surface"));
+    layers.back().view = views::surface_for(dimension);
     layers.emplace_back("Wireframe", create_mesh_renderer("balsa.unlit_wireframe"));
+    layers.back().view = views::wireframe_for(dimension);
     layers.emplace_back("Points", create_mesh_renderer("balsa.unlit_points"));
     return layers;
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "AccessorView.hpp"
 #include "LoadError.hpp"
 #include "glTF.hpp"
 
@@ -14,7 +15,7 @@ namespace balsa::visualization::scene_graph::gltf {
 
 struct LoadOptions {
     // Fetches the asset's buffer and image URIs. The default handles data:
-    // URIs and files relative to the asset; add schemes with with().
+    // URIs and files relative to the asset; add schemes with add().
     uri::Resolver resolver = uri::Resolver::defaults();
 };
 
@@ -50,6 +51,8 @@ class Document {
     // or bufferView. The media type is in images[i].mimeType (required for
     // bufferView images) or implied by the URI.
     auto image(std::size_t i) const -> std::span<const std::byte>;
+    // Typed view of manifest().accessors[i].
+    auto accessor(std::size_t i) const -> AccessorView;
 
   private:
     friend auto load(const std::filesystem::path &, const LoadOptions &)
@@ -62,6 +65,9 @@ class Document {
     std::vector<std::vector<std::byte>> m_buffers;
     // Indexed like manifest().images; empty for bufferView images.
     std::vector<std::vector<std::byte>> m_uri_images;
+    // Values of accessors that can't be viewed in place; indexed like
+    // manifest().accessors.
+    std::vector<std::vector<std::byte>> m_accessors;
 };
 
 } // namespace balsa::visualization::scene_graph::gltf

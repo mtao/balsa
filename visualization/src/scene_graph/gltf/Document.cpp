@@ -1,11 +1,15 @@
 #include "balsa/visualization/scene_graph/gltf/Document.hpp"
 #include "balsa/visualization/scene_graph/gltf/detail/Glb.hpp"
+#include "balsa/visualization/scene_graph/gltf/detail/LoadErrors.hpp"
+#include "balsa/visualization/scene_graph/gltf/detail/accessors.hpp"
+#include "balsa/visualization/scene_graph/gltf/detail/meshes.hpp"
+#include "balsa/visualization/scene_graph/gltf/detail/nodes.hpp"
 #include <balsa/json/reflection.hpp>
 #include <balsa/uri/DataUri.hpp>
 #include <balsa/uri/Uri.hpp>
+#include <balsa/string/capitalization.hpp>
 
-#include <algorithm>
-#include <cctype>
+#include <array>
 #include <charconv>
 #include <format>
 #include <fstream>
@@ -17,6 +21,8 @@
 namespace balsa::visualization::scene_graph::gltf {
 
 namespace {
+
+    using detail::LoadErrors;
 
     using Bytes = std::vector<std::byte>;
 
@@ -69,11 +75,7 @@ namespace {
 
         if (!reference->is_relative()) {
             const auto scheme = *reference->scheme();
-            if (scheme.size() == 4
-                && std::ranges::equal(
-                    scheme, std::string_view("file"), [](char a, char b) {
-                        return std::tolower(static_cast<unsigned char>(a)) == b;
-                    })) {
+            if (balsa::string::ascii::IgnoreCaseEqual{}(scheme, "file")) {
                 return error(
                     LoadError::Code::MissingData,
                     std::format("absolute file URI '{}' is not allowed", text));
@@ -197,37 +199,6 @@ namespace {
         return ParsedAsset{std::move(*manifest), glb_bin};
     }
 
-    // Problems found while loading, reported together as one LoadError.
-    class LoadErrors {
-      public:
-        void add(LoadError::Code code, std::string message) {
-            m_errors.push_back(LoadError{code, std::move(message)});
-        }
-        // `error`, with its message prefixed by what it was loading.
-        void add(std::string_view context, LoadError error) {
-            error.message = std::format("{}: {}", context, error.message);
-            m_errors.push_back(std::move(error));
-        }
-
-        auto empty() const -> bool { return m_errors.empty(); }
-
-        // The first error's code, with every message joined.
-        auto combined() && -> LoadError {
-            if (m_errors.size() == 1) { return std::move(m_errors.front()); }
-            auto messages =
-                m_errors
-                | std::views::transform(&LoadError::message)
-                | std::views::join_with(std::string_view("; "))
-                | std::ranges::to<std::string>();
-            return LoadError{
-                m_errors.front().code,
-                std::format("{} errors: {}", m_errors.size(), messages)};
-        }
-
-      private:
-        std::vector<LoadError> m_errors;
-    };
-
     // Every bufferView's range lies within its buffer's byteLength.
     void check_buffer_views(const glTF &manifest, LoadErrors &errors) {
         for (const auto &[i, view] : std::views::enumerate(manifest.bufferViews)) {
@@ -347,6 +318,20 @@ auto load(const std::filesystem::path &path, const LoadOptions &options)
           })
         | std::ranges::to<std::vector>();
 
+    detail::check_accessors(manifest, errors);
+    detail::check_meshes(manifest, errors);
+    detail::check_nodes(manifest, errors);
+    // Sparse accessors read the buffers, so need everything else valid.
+    if (errors.empty()) {
+        const auto views =
+            std::views::iota(std::size_t{0}, manifest.bufferViews.size())
+            | std::views::transform(
+                [&](std::size_t v) { return document.buffer_view(v); })
+            | std::ranges::to<std::vector>();
+        document.m_accessors =
+            detail::materialize_accessors(manifest, views, errors);
+    }
+
     if (!errors.empty()) { return std::unexpected(std::move(errors).combined()); }
     return document;
 }
@@ -367,6 +352,60 @@ auto Document::image(std::size_t i) const -> std::span<const std::byte> {
     const auto &entry = m_manifest.images[i];
     if (entry.uri) { return m_uri_images[i]; }
     return buffer_view(static_cast<std::size_t>(*entry.bufferView));
+}
+
+namespace {
+    template <typename T>
+    auto make_accessor_span(const std::byte *data,
+                            const detail::AccessorLayout &layout,
+                            std::size_t count,
+                            std::size_t stride) -> AccessorSpan<T> {
+        using Span = AccessorSpan<T>;
+        // mdspan strides are in elements of T, not bytes.
+        const typename Span::mapping_type mapping(
+            ::zipper::dextents<3>(layout.rows, layout.columns, count),
+            std::array<std::size_t, 3>{
+                1, layout.column_stride / sizeof(T), stride / sizeof(T)});
+        return Span(data, mapping);
+    }
+} // namespace
+
+auto Document::accessor(std::size_t i) const -> AccessorView {
+    const auto &entry = m_manifest.accessors[i];
+    const auto layout = detail::accessor_layout(entry);
+    const auto count = static_cast<std::size_t>(entry.count);
+
+    const std::byte *data = nullptr;
+    std::size_t stride = layout.element_size;
+    if (!m_accessors[i].empty()) {
+        data = m_accessors[i].data();
+    } else {
+        const auto view_index = static_cast<std::size_t>(*entry.bufferView);
+        data = buffer_view(view_index).data()
+               + static_cast<std::size_t>(entry.byteOffset);
+        if (const auto byte_stride = m_manifest.bufferViews[view_index].byteStride) {
+            stride = static_cast<std::size_t>(*byte_stride);
+        }
+    }
+
+    const auto make = [&]<typename T>() -> AccessorData {
+        return make_accessor_span<T>(data, layout, count, stride);
+    };
+    AccessorData values = [&] {
+        switch (entry.componentType) {
+        case ComponentType::BYTE: return make.template operator()<std::int8_t>();
+        case ComponentType::UNSIGNED_BYTE:
+            return make.template operator()<std::uint8_t>();
+        case ComponentType::SHORT: return make.template operator()<std::int16_t>();
+        case ComponentType::UNSIGNED_SHORT:
+            return make.template operator()<std::uint16_t>();
+        case ComponentType::UNSIGNED_INT:
+            return make.template operator()<std::uint32_t>();
+        case ComponentType::FLOAT: break;
+        }
+        return make.template operator()<float>();
+    }();
+    return AccessorView{.data = std::move(values), .normalized = entry.normalized};
 }
 
 } // namespace balsa::visualization::scene_graph::gltf
