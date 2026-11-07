@@ -37,6 +37,7 @@ void Window::post_draw_hook() {
 
 void Window::draw_frame() {
     pre_draw_hook();
+    film().collect_retired();
     if (_scene) {
         _scene->draw(film());
     }

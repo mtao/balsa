@@ -1,5 +1,8 @@
 #pragma once
 #include <array>
+#include <cstdint>
+#include <concepts>
+#include <memory>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan.hpp>
@@ -8,6 +11,11 @@ namespace balsa::visualization::vulkan {
 
 class Film {
   public:
+    Film() = default;
+    Film(const Film &) = delete;
+    auto operator=(const Film &) -> Film & = delete;
+    Film(Film &&) = default;
+    auto operator=(Film &&) -> Film & = default;
     virtual ~Film();
 
     virtual std::array<uint32_t, 2> swapchain_image_size() const = 0;
@@ -82,6 +90,28 @@ class Film {
     // fragment shader.  Default: false (line-based wireframe fallback).
     virtual bool has_fragment_shader_barycentric() const { return false; }
 
+    // ── Deferred destruction ────────────────────────────────────────
+    //
+    // retire() keeps `resource` alive until every frame now in flight has
+    // finished, then destroys it; its destructor frees its GPU objects.
+    // collect_retired() advances the frame count and destroys what is due;
+    // call it once per frame, after the frame slot's fence wait.
+    template <typename T>
+        requires std::movable<T> && std::destructible<T>
+    void retire(T resource) {
+        _retired.push_back({_frame_number, std::make_shared<T>(std::move(resource))});
+    }
+    void collect_retired();
+    // Destroys everything retired; the GPU must be idle.  Films that own
+    // their device call this before destroying it.
+    void release_retired();
+
   private:
+    struct Retired {
+        uint64_t frame;
+        std::shared_ptr<void> resource;
+    };
+    uint64_t _frame_number = 0;
+    std::vector<Retired> _retired;
 };
 }// namespace balsa::visualization::vulkan

@@ -72,7 +72,10 @@ NativeFilm::NativeFilm(const std::vector<std::string> &device_extensions, const 
 }
 NativeFilm::NativeFilm(std::nullptr_t) {}
 
-NativeFilm::~NativeFilm() = default;
+NativeFilm::~NativeFilm() {
+    if (*_device_raii) _device_raii.waitIdle();
+    release_retired();
+}
 
 void NativeFilm::initialize() {
     create_instance();

@@ -477,7 +477,7 @@ TEST_CASE("gltf_accessors", "[gltf][accessor]") {
 
     SECTION("sparse index widths") {
         // Base of three zeros; sparse index [2] -> 7, stored as 16 and 32 bit.
-        for (const auto [type, index] :
+        for (const auto &[type, index] :
              {std::pair{5123, le_bytes<std::uint16_t>({2, 0})},
               std::pair{5125, le_bytes<std::uint32_t>({2})}}) {
             CAPTURE(type);

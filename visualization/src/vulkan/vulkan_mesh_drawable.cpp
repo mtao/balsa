@@ -6,6 +6,8 @@
 #include "balsa/visualization/vulkan/film.hpp"
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 
+#include <algorithm>
+
 #include <spdlog/spdlog.h>
 
 
@@ -348,6 +350,16 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         }
         ++layer_slot;
     }
+
+    // Retire buffers of views no layer references any more.
+    std::erase_if(_view_buffers, [&](auto &view) {
+        if (std::ranges::contains(shading->render_layers(), view->view,
+                                  &scene_graph::MeshRenderLayer::view)) {
+            return false;
+        }
+        film.retire(std::move(view->buffers));
+        return true;
+    });
 }
 
 } // namespace balsa::visualization::vulkan

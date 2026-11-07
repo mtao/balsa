@@ -78,12 +78,6 @@ auto bool_property(std::string label, bool &field) -> Property {
                            .set = [&field](const bool &v) { field = v; } });
 }
 
-auto color_property(std::string label, sg::Vec4f &field) -> Property {
-    return make_property(std::move(label),
-                ColorInput{ .get = [&field] { return field; },
-                            .set = [&field](const sg::Vec4f &v) { field = v; } });
-}
-
 auto vec3_property(std::string label, Getter<sg::Vec3f> get, Setter<sg::Vec3f> set,
                float min = -1e6f, float max = 1e6f, float step = 0.1f)
     -> Property {

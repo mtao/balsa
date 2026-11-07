@@ -3,7 +3,17 @@
 
 
 namespace balsa::visualization::vulkan {
-Film::~Film() {}
+Film::~Film() { release_retired(); }
+
+void Film::release_retired() { _retired.clear(); }
+
+void Film::collect_retired() {
+    ++_frame_number;
+    const auto frames = static_cast<uint64_t>(concurrent_frame_count());
+    std::erase_if(_retired, [&](const Retired &retired) {
+        return _frame_number - retired.frame >= frames;
+    });
+}
 
 uint32_t Film::find_memory_type(uint32_t type_filter, vk::MemoryPropertyFlags properties) const {
     auto mem_props = physical_device().getMemoryProperties();
