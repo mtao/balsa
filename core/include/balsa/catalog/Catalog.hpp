@@ -13,7 +13,7 @@
 
 namespace balsa::catalog {
 
-// Something a Catalog can hold: it has an `id`, its stable name.
+// Catalog-storable: has a stable `id`.
 template <typename T>
 concept Identified = requires(const T &t) {
     { t.id } -> std::convertible_to<std::string_view>;
@@ -22,8 +22,8 @@ concept Identified = requires(const T &t) {
 template <Identified T>
 class Catalog;
 
-// An entry of a Catalog: stores a pointer to identifiable data the catalog
-// owns, compared by identity.  Only catalogs hand these out.
+// Reference to a Catalog value, compared by identity.  Only catalogs create
+// these.
 template <Identified T>
 class Entry {
   public:
@@ -37,17 +37,16 @@ class Entry {
     const T *m_value;
 };
 
-// Values keyed by their id, kept at stable addresses so entries stay valid
-// (also when the catalog is moved).  Sorted by id for lookup; callers that
-// list entries choose their own order.
+// Values keyed by id, at stable addresses so entries survive inserts and
+// moves.
 template <Identified T>
 class Catalog {
   public:
-    // `kind` names the values in log messages.
+    // `kind` is used in log messages.
     explicit Catalog(std::string_view kind) : m_kind(kind) {}
 
-    // Adds `value`, replacing (with a debug message) any with the same id;
-    // entries for it then see the new value.
+    // Replaces any value with the same id (logged at debug); existing
+    // entries see the new value.
     auto add(T value) -> Entry<T> {
         std::string id(value.id);
         if (const auto it = m_items.find(id); it != m_items.end()) {
@@ -59,14 +58,13 @@ class Catalog {
             std::move(id), std::make_unique<T>(std::move(value)));
         return Entry<T>(it->second.get());
     }
-    // nullopt if `id` is not in the catalog.
     [[nodiscard]] auto find(std::string_view id) const
         -> std::optional<Entry<T>> {
         const auto it = m_items.find(id);
         if (it == m_items.end()) return std::nullopt;
         return Entry<T>(it->second.get());
     }
-    // In no particular order.
+    // Unordered.
     [[nodiscard]] auto all() const -> std::vector<Entry<T>> {
         std::vector<Entry<T>> result;
         result.reserve(m_items.size());
