@@ -162,14 +162,24 @@ void MeshBuffers::upload_edge_indices(Film &film,
                                        vk::BufferUsageFlagBits::eIndexBuffer);
 }
 
+void MeshBuffers::upload_point_indices(Film &film, std::span<const uint32_t> data) {
+    _point_count = static_cast<uint32_t>(data.size());
+    _point_indices = make_device_buffer(film,
+                                        data.data(),
+                                        data.size_bytes(),
+                                        vk::BufferUsageFlagBits::eIndexBuffer);
+}
+
 // ── Release ──────────────────────────────────────────────────────────
 
 void MeshBuffers::release() {
     _attributes.clear();
     _triangle_indices.release();
     _edge_indices.release();
+    _point_indices.release();
     _triangle_count = 0;
     _edge_count = 0;
+    _point_count = 0;
 }
 
 } // namespace balsa::visualization::vulkan

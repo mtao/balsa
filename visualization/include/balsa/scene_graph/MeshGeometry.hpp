@@ -54,12 +54,14 @@ class MeshGeometry {
 
     /// Highest supported simplex dimension.
     static constexpr std::size_t max_dimension = 3;
-    /// Topology attribute names, by simplex dimension.
+    /// Topology attribute names, by simplex dimension; 0-simplices are a
+    /// vertex subset, e.g. a curve's boundary.
+    static constexpr std::string_view vertex_subset_name = ".vertex_subset";
     static constexpr std::string_view edge_vertices_name = ".edge_vertices";
     static constexpr std::string_view face_vertices_name = ".face_vertices";
     static constexpr std::string_view cell_vertices_name = ".cell_vertices";
     static constexpr std::array<std::string_view, max_dimension + 1>
-        simplex_names{{"", edge_vertices_name, face_vertices_name,
+        simplex_names{{vertex_subset_name, edge_vertices_name, face_vertices_name,
                        cell_vertices_name}};
     /// Names starting with '.' are reserved for MeshGeometry's own
     /// attributes (the topology).
@@ -162,7 +164,7 @@ class MeshGeometry {
               typename Extents,
               typename Layout,
               typename Accessor>
-        requires(D >= 1 && D <= max_dimension && Extents::rank() == 2)
+        requires(D <= max_dimension && Extents::rank() == 2)
     auto set_simplices(::zipper::mdspan<T, Extents, Layout, Accessor> indices)
         -> bool {
         const auto converted = to_element_indices<D + 1>(indices);
@@ -175,11 +177,11 @@ class MeshGeometry {
 
     /// (D + 1) x count.
     template <std::size_t D>
-        requires(D >= 1 && D <= max_dimension)
+        requires(D <= max_dimension)
     [[nodiscard]] auto simplices() const -> element_indices_view<D + 1> {
         return topology_view<D + 1>(simplex_names[D]);
     }
-    /// 0 for d outside 1..max_dimension.
+    /// Stored d-simplices; 0 for d above max_dimension.
     [[nodiscard]] auto simplex_count(std::size_t d) const -> std::size_t;
     [[nodiscard]] auto has_simplices(std::size_t d) const -> bool {
         return simplex_count(d) > 0;

@@ -13,10 +13,12 @@ namespace {
     namespace sc = balsa::geometry::simplicial_complex;
     using Geometry = std::shared_ptr<const MeshGeometry>;
 
-    // `source`'s vertex attributes with these D-simplices.
+    // `source`'s vertex attributes with these D-simplices; null if there are
+    // none (e.g. a closed surface's boundary).
     template <std::size_t D, typename Simplices>
     auto with_simplices(const MeshGeometry &source, const Simplices &simplices)
         -> Geometry {
+        if (simplices.extent(1) == 0) return nullptr;
         auto view = std::make_shared<MeshGeometry>(source.share_vertex_attributes());
         view->set_simplices<D>(simplices.expression().as_mdspan());
         return view;
@@ -28,8 +30,9 @@ namespace {
             return with_simplices<2>(g, sc::boundary(::zipper::MatrixBase(g.simplices<3>())));
         case 2:
             return with_simplices<1>(g, sc::boundary(::zipper::MatrixBase(g.simplices<2>())));
+        case 1:
+            return with_simplices<0>(g, sc::boundary(::zipper::MatrixBase(g.simplices<1>())));
         default:
-            // A curve's boundary (a vertex subset) is not representable yet.
             return nullptr;
         }
     }

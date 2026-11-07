@@ -140,6 +140,11 @@ auto VulkanMeshDrawable::buffers_for(Film &film,
             std::span(edges.data_handle(), edges.size()),
             static_cast<uint32_t>(edges.extent(1)));
     }
+    if (geometry->has_simplices(0)) {
+        const auto points = geometry->simplices<0>();
+        view.buffers.upload_point_indices(
+            film, std::span(points.data_handle(), points.size()));
+    }
     view.geometry = geometry;
     view.version = geometry->version();
     return &view.buffers;
@@ -345,6 +350,9 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         } else if (request.primitive == scene_graph::MeshPrimitive::Edges) {
             cb.bindIndexBuffer(buffers->edge_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(buffers->edge_count() * 2, 1, 0, 0, 0);
+        } else if (buffers->has_point_indices()) {
+            cb.bindIndexBuffer(buffers->point_index_buffer(), 0, vk::IndexType::eUint32);
+            cb.drawIndexed(buffers->point_count(), 1, 0, 0, 0);
         } else {
             cb.draw(inputs.positions->count, 1, 0, 0);
         }

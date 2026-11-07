@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <utility>
 #include <ranges>
 
 #include "balsa/scene_graph/MeshGeometry.hpp"
@@ -44,6 +45,7 @@ auto BasicShading::fit_to_geometry() -> void {
 auto BasicShading::copy_from(const BasicShading &other) -> void {
     if (&other == this) return;
     _render_layers = other._render_layers;
+    _active_layer = other._active_layer;
     _next_layer_id = other._next_layer_id;
     // Re-target explicit bindings so they do not keep other's data alive.
     // Unresolvable ones keep their attribute: layer_attribute() resolves
@@ -69,6 +71,21 @@ auto BasicShading::find_layer(MeshLayerId id) -> MeshRenderLayer * {
 auto BasicShading::find_layer(MeshLayerId id) const -> const MeshRenderLayer * {
     const auto it = std::ranges::find(_render_layers, id, &MeshRenderLayer::id);
     return it == _render_layers.end() ? nullptr : &*it;
+}
+
+auto BasicShading::active_layer() -> MeshRenderLayer * {
+    return const_cast<MeshRenderLayer *>(std::as_const(*this).active_layer());
+}
+
+auto BasicShading::active_layer() const -> const MeshRenderLayer * {
+    if (const auto *layer = find_layer(_active_layer)) return layer;
+    return _render_layers.empty() ? nullptr : &_render_layers.front();
+}
+
+auto BasicShading::set_active_layer(MeshLayerId id) -> bool {
+    if (find_layer(id) == nullptr) return false;
+    _active_layer = id;
+    return true;
 }
 
 auto BasicShading::find_layer(std::string_view renderer_id) -> MeshRenderLayer * {

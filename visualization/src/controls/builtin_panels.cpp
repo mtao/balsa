@@ -32,10 +32,20 @@ auto surface_renderer(const sg::MeshRenderLayer *layer) -> sg::PhongSurfaceRende
                  : nullptr;
 }
 
+// The active layer's surface renderer, or nullptr.
+auto active_surface(const sg::BasicShading &shading) -> sg::PhongSurfaceRenderer * {
+    return surface_renderer(shading.active_layer());
+}
+
 auto is_lit(const sg::BasicShading &shading) -> bool {
-    const auto *renderer = surface_renderer(shading.find_layer("balsa.phong_surface"));
+    const auto *renderer = active_surface(shading);
     return renderer && renderer->state.normal_source != NormalSource::None;
 }
+
+// A field that may move or vanish (e.g. in the active layer): looked up on
+// each access, nullptr if absent.
+template <typename T>
+using FieldRef = std::function<T *()>;
 
 // Whether role of layer resolves to an attribute of the shading's geometry.
 auto has_role(const sg::BasicShading &shading, const sg::MeshRenderLayer &layer,
@@ -49,33 +59,48 @@ auto make_property(std::string label, auto widget) -> Property {
 
 template <typename E>
 auto choice_input(std::vector<std::string> options,
-                E &field,
+                FieldRef<E> field,
                 std::function<void()> after = {}) -> ChoiceInput {
     return {
         .options = [options = std::move(options)] { return options; },
-        .get_index = [&field] { return static_cast<int>(field); },
+        .get_index = [field] {
+            const auto *f = field();
+            return f ? static_cast<int>(*f) : 0;
+        },
         .set_index =
-            [&field, after = std::move(after)](const int &i) {
-                field = static_cast<E>(i);
+            [field, after = std::move(after)](const int &i) {
+                auto *f = field();
+                if (f == nullptr) return;
+                *f = static_cast<E>(i);
                 if (after) after();
             },
     };
 }
 
-auto float_input(float &field, float min, float max, float step,
+auto float_input(FieldRef<float> field, float min, float max, float step,
                  bool use_slider = false) -> FloatInput {
-    return { .get = [&field] { return field; },
-             .set = [&field](const float &v) { field = v; },
+    return { .get = [field] {
+                 const auto *f = field();
+                 return f ? *f : 0.0f;
+             },
+             .set = [field](const float &v) {
+                 if (auto *f = field()) *f = v;
+             },
              .min = min,
              .max = max,
              .step = step,
              .use_slider = use_slider };
 }
 
-auto bool_property(std::string label, bool &field) -> Property {
+auto bool_property(std::string label, FieldRef<bool> field) -> Property {
     return make_property(std::move(label),
-                BoolInput{ .get = [&field] { return field; },
-                           .set = [&field](const bool &v) { field = v; } });
+                BoolInput{ .get = [field] {
+                               const auto *f = field();
+                               return f && *f;
+                           },
+                           .set = [field](const bool &v) {
+                               if (auto *f = field()) *f = v;
+                           } });
 }
 
 auto vec3_property(std::string label, Getter<sg::Vec3f> get, Setter<sg::Vec3f> set,
@@ -301,13 +326,48 @@ auto view_property(sg::BasicShading &shading, sg::MeshLayerId layer_id) -> Prope
     return property;
 }
 
+// Which layer the Shading and Material panels act on.
+auto active_layer_property(sg::BasicShading &shading) -> Property {
+    auto *sh = &shading;
+    auto property = make_property(
+        "Active Layer",
+        ChoiceInput{
+            .options =
+                [sh] {
+                    return std::ranges::to<std::vector>(
+                        sh->render_layers()
+                        | std::views::transform(&sg::MeshRenderLayer::name));
+                },
+            .get_index =
+                [sh] {
+                    const auto *active = sh->active_layer();
+                    return active ? static_cast<int>(active - sh->render_layers().data())
+                                  : 0;
+                },
+            .set_index =
+                [sh](const int &i) {
+                    const auto &layers = sh->render_layers();
+                    if (i >= 0 && static_cast<std::size_t>(i) < layers.size()) {
+                        sh->set_active_layer(layers[static_cast<std::size_t>(i)].id);
+                    }
+                },
+        });
+    property.tooltip = "The layer the Shading and Material panels edit";
+    return property;
+}
+
 auto render_layers_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
+    layout.add_property(active_layer_property(shading));
     for (auto &layer : shading.render_layers()) {
         if (!layer.renderer) continue;
         auto renderer_layout =
             layer.renderer->build_controls(sg::MeshLayerContext(shading, layer.id));
-        renderer_layout.add_property(bool_property("Enabled", layer.enabled));
+        renderer_layout.add_property(bool_property(
+            "Enabled", [sh = &shading, id = layer.id]() -> bool * {
+                auto *l = sh->find_layer(id);
+                return l ? &l->enabled : nullptr;
+            }));
         renderer_layout.add_property(view_property(shading, layer.id));
         auto &bindings = renderer_layout.add_column("Bindings");
         for (const auto &requirement : layer.renderer->required_roles()) {
@@ -321,43 +381,51 @@ auto render_layers_layout(sg::BasicShading &shading) -> Layout {
 auto shading_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
     auto *sh = &shading;
-    auto *layer = sh->find_layer("balsa.phong_surface");
-    auto *renderer = surface_renderer(layer);
-    if (!renderer) return layout;
-    auto &rs = renderer->state;
-    const sg::MeshLayerId layer_id = layer->id;
-    auto has_normals = [sh, layer_id] {
-        const auto *l = sh->find_layer(layer_id);
+    // Read through the active layer on every access: it can change while
+    // the panel is shown.
+    auto state = [sh]() -> vulkan::MeshRenderState * {
+        auto *renderer = active_surface(*sh);
+        return renderer ? &renderer->state : nullptr;
+    };
+    auto has_normals = [sh] {
+        const auto *l = sh->active_layer();
         return l && has_role(*sh, *l, sg::roles::normal());
     };
-    auto constrain = [renderer, has_normals] { renderer->state.constrain(has_normals()); };
+    auto constrain = [state, has_normals] {
+        if (auto *s = state()) s->constrain(has_normals());
+    };
     constrain(); // state may have been set before normals were known
 
     auto normals = choice_input<NormalSource>(
         { "From Attribute", "Computed (flat)", "None (unlit)" },
-        rs.normal_source, constrain);
+        [state] { return state() ? &state()->normal_source : nullptr; }, constrain);
     normals.option_enabled = [has_normals](int i) {
         return i != static_cast<int>(NormalSource::FromAttribute) || has_normals();
     };
     layout.add_property(make_property("Normals", std::move(normals)));
 
-    auto model = choice_input<ShadingModel>({ "Flat", "Gouraud", "Phong" },
-                                            rs.shading, constrain);
-    model.option_enabled = [renderer](int i) {
+    auto model = choice_input<ShadingModel>(
+        { "Flat", "Gouraud", "Phong" },
+        [state] { return state() ? &state()->shading : nullptr; }, constrain);
+    model.option_enabled = [state](int i) {
+        const auto *s = state();
         return i == static_cast<int>(ShadingModel::Flat)
-               || renderer->state.normal_source
-                       == NormalSource::FromAttribute;
+               || (s && s->normal_source == NormalSource::FromAttribute);
     };
     auto model_property = make_property("Shading", std::move(model));
     model_property.visible_when = [sh] { return is_lit(*sh); };
     layout.add_property(std::move(model_property));
 
-    auto two_sided = bool_property("Two-sided Lighting", rs.two_sided);
+    auto two_sided = bool_property("Two-sided Lighting", [state] {
+        return state() ? &state()->two_sided : nullptr;
+    });
     two_sided.visible_when = [sh] { return is_lit(*sh); };
     layout.add_property(std::move(two_sided));
 
     layout.add_property(make_property("Face Culling",
-                     choice_input<CullMode>({ "None", "Back", "Front" }, rs.cull_mode)));
+                     choice_input<CullMode>({ "None", "Back", "Front" }, [state] {
+                         return state() ? &state()->cull_mode : nullptr;
+                     })));
     return layout;
 }
 
@@ -365,13 +433,19 @@ auto shading_layout(sg::BasicShading &shading) -> Layout {
 
 auto material_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
-    auto *renderer = surface_renderer(shading.find_layer("balsa.phong_surface"));
-    if (!renderer) return layout;
-    auto &m = renderer->state.material;
-    layout.add_property(make_property("Ambient", float_input(m.ambient_strength, 0.0f, 1.0f, 0.01f, true)));
-    layout.add_property(make_property("Diffuse", float_input(m.diffuse_strength, 0.0f, 2.0f, 0.01f, true)));
-    layout.add_property(make_property("Specular", float_input(m.specular_strength, 0.0f, 2.0f, 0.01f, true)));
-    layout.add_property(make_property("Shininess", float_input(m.shininess, 1.0f, 256.0f, 1.0f, true)));
+    auto *sh = &shading;
+    // A material field of the active layer, looked up on each access.
+    auto field = [sh](float sg::MaterialProperties::*member) -> FieldRef<float> {
+        return [sh, member]() -> float * {
+            auto *renderer = active_surface(*sh);
+            return renderer ? &(renderer->state.material.*member) : nullptr;
+        };
+    };
+    using M = sg::MaterialProperties;
+    layout.add_property(make_property("Ambient", float_input(field(&M::ambient_strength), 0.0f, 1.0f, 0.01f, true)));
+    layout.add_property(make_property("Diffuse", float_input(field(&M::diffuse_strength), 0.0f, 2.0f, 0.01f, true)));
+    layout.add_property(make_property("Specular", float_input(field(&M::specular_strength), 0.0f, 2.0f, 0.01f, true)));
+    layout.add_property(make_property("Shininess", float_input(field(&M::shininess), 1.0f, 256.0f, 1.0f, true)));
     return layout;
 }
 
@@ -380,7 +454,7 @@ auto material_layout(sg::BasicShading &shading) -> Layout {
 auto lighting_layout(sg::Light &headlight) -> Layout {
     Layout layout;
     auto *light = &headlight;
-    layout.add_property(bool_property("Enabled", light->enabled));
+    layout.add_property(bool_property("Enabled", [light] { return &light->enabled; }));
 
     auto dir = vec3_property(
         "Direction", [light] { return light->direction; },
@@ -418,6 +492,10 @@ auto for_headlight(Layout (*build)(sg::Light &)) {
 
 auto has_active_object(const PanelContext &c) -> bool {
     return c.active_object != nullptr;
+}
+auto has_active_surface(const PanelContext &c) -> bool {
+    const auto *shading = c.active_shading();
+    return shading && active_surface(*shading);
 }
 auto has_lit_shading(const PanelContext &c) -> bool {
     const auto *shading = c.active_shading();
@@ -458,7 +536,7 @@ auto register_builtin_panels() -> void {
                          .tab_id = "data",
                          .sort_key = 10,
                          .label = "Shading & Rendering",
-                         .is_available = has_active_shading,
+                         .is_available = has_active_surface,
                          .build_layout = for_active_shading(shading_layout) });
         register_panel({ .id = "material.response",
                          .tab_id = "material",

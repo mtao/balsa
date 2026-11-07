@@ -120,6 +120,9 @@ class MeshBuffers {
                              std::span<const uint32_t> data,
                              uint32_t edge_count);
 
+    // Point indices: the vertex subset to draw as points.
+    void upload_point_indices(Film &film, std::span<const uint32_t> data);
+
     // ── Release all GPU resources ───────────────────────────────────
 
     void release();
@@ -128,13 +131,16 @@ class MeshBuffers {
 
     uint32_t triangle_count() const { return _triangle_count; }
     uint32_t edge_count() const { return _edge_count; }
+    uint32_t point_count() const { return _point_count; }
     bool has_triangle_indices() const { return _triangle_indices.is_valid(); }
     bool has_edge_indices() const { return _edge_indices.is_valid(); }
+    bool has_point_indices() const { return _point_indices.is_valid(); }
 
     vk::Buffer triangle_index_buffer() const {
         return _triangle_indices.buffer();
     }
     vk::Buffer edge_index_buffer() const { return _edge_indices.buffer(); }
+    vk::Buffer point_index_buffer() const { return _point_indices.buffer(); }
 
   private:
     struct CachedAttribute {
@@ -145,9 +151,11 @@ class MeshBuffers {
         _attributes;
     VulkanBuffer _triangle_indices;
     VulkanBuffer _edge_indices;
+    VulkanBuffer _point_indices;
 
     uint32_t _triangle_count = 0;
     uint32_t _edge_count = 0;
+    uint32_t _point_count = 0;
 };
 
 } // namespace balsa::visualization::vulkan

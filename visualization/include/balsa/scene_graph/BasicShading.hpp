@@ -71,6 +71,13 @@ class BasicShading : public AbstractFeature {
     [[nodiscard]] auto find_layer(std::string_view renderer_id) const
         -> const MeshRenderLayer *;
 
+    // The layer that per-layer controls act on: the one last set active,
+    // else the first; nullptr without layers.
+    [[nodiscard]] auto active_layer() -> MeshRenderLayer *;
+    [[nodiscard]] auto active_layer() const -> const MeshRenderLayer *;
+    // Fails, changing nothing, for unknown layers.
+    auto set_active_layer(MeshLayerId id) -> bool;
+
     // ── Role bindings ───────────────────────────────────────────────
     //
     // Binds a role to an attribute of the layer's geometry.  Fails, changing
@@ -101,6 +108,7 @@ class BasicShading : public AbstractFeature {
                      std::optional<MeshRoleBinding> binding) -> bool;
 
     std::vector<MeshRenderLayer> _render_layers;
+    MeshLayerId _active_layer;
     uint64_t _next_layer_id = 1;
     uint64_t _version = 0;
 };

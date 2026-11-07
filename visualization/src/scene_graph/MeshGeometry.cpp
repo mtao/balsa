@@ -147,6 +147,7 @@ auto MeshGeometry::attribute_for(AttributeSemantic semantic, uint8_t set) const
 
 auto MeshGeometry::simplex_count(std::size_t d) const -> std::size_t {
     switch (d) {
+    case 0: return simplices<0>().extent(1);
     case 1: return simplices<1>().extent(1);
     case 2: return simplices<2>().extent(1);
     case 3: return simplices<3>().extent(1);
@@ -187,7 +188,9 @@ auto MeshGeometry::clone() const -> MeshGeometry {
 auto MeshGeometry::share_vertex_attributes() const -> MeshGeometry {
     MeshGeometry view;
     for (const auto &a : _attributes) {
-        if (a->domain == AttributeDomain::Vertex) view._attributes.push_back(a);
+        if (a->domain == AttributeDomain::Vertex && !is_reserved_name(a->name)) {
+            view._attributes.push_back(a);
+        }
     }
     for (const auto &entry : _semantics) {
         if (entry.attribute->domain == AttributeDomain::Vertex) {

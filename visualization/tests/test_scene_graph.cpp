@@ -695,6 +695,35 @@ TEST_CASE("MeshGeometry clone and BasicShading copy_from", "[scene_graph]") {
     CHECK(flat_values<float>(*bound(src.shading, roles::scalar()))[1] == 4.0f);
 }
 
+TEST_CASE("basic_shading_active_layer", "[scene_graph]") {
+    using namespace balsa::scene_graph;
+
+    MeshObject object{make_quad()};
+    auto &shading = object.shading;
+    REQUIRE(shading.render_layers().size() >= 2);
+
+    // Defaults to the first layer.
+    CHECK(shading.active_layer() == &shading.render_layers().front());
+
+    const auto second = shading.render_layers()[1].id;
+    CHECK(shading.set_active_layer(second));
+    CHECK(shading.active_layer()->id == second);
+    CHECK_FALSE(shading.set_active_layer(MeshLayerId{999}));
+    CHECK(shading.active_layer()->id == second);
+
+    // Copies keep it.
+    MeshObject copy{object.geometry.clone()};
+    copy.shading.copy_from(shading);
+    CHECK(copy.shading.active_layer()->id == second);
+
+    // Falls back to the first layer once its layer is gone.
+    std::erase_if(shading.render_layers(),
+                  [&](const MeshRenderLayer &l) { return l.id == second; });
+    CHECK(shading.active_layer() == &shading.render_layers().front());
+    shading.render_layers().clear();
+    CHECK(shading.active_layer() == nullptr);
+}
+
 TEST_CASE("MeshInstance and BasicShading as Object features", "[scene_graph]") {
     using namespace balsa::scene_graph;
 
@@ -2837,6 +2866,29 @@ TEST_CASE("boundary_and_edges_views", "[scene_graph][views]") {
     CHECK(wound == std::vector<std::array<uint32_t, 2>>{{0, 1}, {1, 2}, {2, 3}, {3, 0}});
     CHECK(quad_instance.view(sg::views::edges())->edge_count() == 5);
     CHECK(quad_instance.view(sg::views::boundary_edges()) == border);
+
+    // A curve's boundary is its endpoints, a vertex subset; a closed
+    // curve has none.
+    const std::array<uint32_t, 6> path{0, 1, 1, 2, 2, 3};
+    auto curve = std::make_shared<sg::MeshGeometry>();
+    curve->add_attribute("p", sg::AttributeDomain::Vertex, 3, xyz, as_positions);
+    REQUIRE(curve->set_simplices<1>(Idx(path.data(), 3, 2)));
+    sg::MeshInstance curve_instance(curve);
+    const auto ends = curve_instance.view(boundary);
+    REQUIRE(ends);
+    CHECK(ends->dimension() == 0);
+    CHECK_FALSE(ends->has_simplices(1));
+    const auto end_vertices = ends->simplices<0>();
+    std::vector<uint32_t> end_list(end_vertices.data_handle(),
+                                   end_vertices.data_handle() + end_vertices.size());
+    std::ranges::sort(end_list);
+    CHECK(end_list == std::vector<uint32_t>{0, 3});
+    // The subset is topology, not a vertex attribute views share.
+    CHECK_FALSE(curve->share_vertex_attributes().has_simplices(0));
+
+    const std::array<uint32_t, 6> loop{0, 1, 1, 2, 2, 0};
+    curve->set_simplices<1>(Idx(loop.data(), 3, 2));
+    CHECK_FALSE(curve_instance.view(boundary));
 
     // Points have neither.
     auto points = std::make_shared<sg::MeshGeometry>();
