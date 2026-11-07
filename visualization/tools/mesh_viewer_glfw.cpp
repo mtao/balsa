@@ -1,9 +1,9 @@
 // mesh_viewer_glfw.cpp — GLFW + Vulkan mesh viewer with ImGui controls
 //
-// Usage:  mesh_viewer_glfw [--input path/to/model.obj]
-//         mesh_viewer_glfw path/to/model.obj
+// Usage:  mesh_viewer_glfw [--input path/to/model.{obj,gltf,glb}]
+//         mesh_viewer_glfw path/to/model.{obj,gltf,glb}
 //
-// Loads an OBJ mesh, renders it with Phong
+// Loads an OBJ mesh or glTF scene, renders it with Phong
 // shading, and provides an ImGui panel for tweaking render state
 // (shading model, color source, colormaps, lighting, wireframe, etc.)
 // and selecting which attribute is bound to each visualization role.
@@ -26,19 +26,16 @@
 #include <imgui.h>
 #include <spdlog/spdlog.h>
 
-#include <balsa/scene_graph/BasicShading.hpp>
-#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/visualization/glfw/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/imgui/mesh_controls_panel.hpp>
 #include <balsa/visualization/vulkan/imgui_integration.hpp>
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
+#include <balsa/scene_graph/SceneLoader.hpp>
+#include <balsa/visualization/normalize_mesh.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <balsa/geometry/triangle_mesh/read_obj.hpp>
-#include <balsa/visualization/mesh_conversion.hpp>
-#include <balsa/visualization/normalize_mesh.hpp>
 #include <zipper/transform/common.hpp>
 
 namespace viz = balsa::visualization;
@@ -127,7 +124,7 @@ class MeshViewerScene : public vk_viz::MeshScene {
 
         ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Open Mesh File", &_show_open_dialog)) {
-            ImGui::Text("Enter OBJ file path:");
+            ImGui::Text("Enter OBJ / glTF / GLB file path:");
             bool enter_pressed =
                 ImGui::InputText("##path",
                                  _path_buf,
@@ -198,62 +195,16 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
     void load_mesh(const std::filesystem::path &path) {
         spdlog::info("Loading mesh: {}", path.string());
-
-        if (!std::filesystem::exists(path)) {
-            spdlog::error("Failed to load mesh: file not found: {}",
-                          path.string());
+        static const auto loader = balsa::scene_graph::SceneLoader::defaults();
+        auto loaded = loader.load(path);
+        if (!loaded) {
+            spdlog::error("Failed to load mesh: {}", loaded.error());
             return;
         }
-        auto obj = balsa::geometry::triangle_mesh::read_objF(path);
-        if (obj.position.vertices.cols() == 0) {
-            spdlog::error("Failed to load mesh: no vertices in {}",
-                          path.string());
-            return;
-        }
-
-        // Add a mesh Object to the scene graph showing the loaded geometry.
-        auto &mesh_obj = _scene->add_mesh(path.filename().string(),
-                                          viz::to_mesh_geometry(obj));
-        const auto *geometry =
-            mesh_obj.find_feature<sg::MeshInstance>()->geometry();
-        auto *shading = mesh_obj.find_feature<sg::BasicShading>();
-
-        // Apply constraints: auto-selects shading/normal_source based
-        // on whether the mesh actually has normal data.
-        auto *surface_layer = shading->find_layer("balsa.phong_surface");
-        const auto positions = surface_layer
-            ? shading->layer_attribute(*surface_layer, sg::position_role)
-            : sg::MeshAttributeHandle{};
-        if (auto *surface = surface_layer
-                ? dynamic_cast<sg::PhongSurfaceRenderer *>(surface_layer->renderer.get())
-                : nullptr) {
-            surface->state.constrain(
-                shading->layer_attribute(*surface_layer, sg::normal_role).valid());
-        }
-
-        // Compute bounding box from the bound positions and set Object
-        // transform to center and normalize the mesh.  The source data
-        // stays pristine — normalization is applied via the Object's
-        // local transform.
-        if (auto xf = positions ? viz::unit_box_transform(*positions)
-                                 : std::nullopt) {
-            mesh_obj.set_from_transform(*xf);
-        }
-        _scene->panel_state().selected_object = &mesh_obj;
-
-        // If the mesh has edges but no triangles, default to wireframe.
-        if (!geometry->has_triangle_indices()
-            && geometry->has_edge_indices()) {
-            if (surface_layer) {
-                surface_layer->enabled = false;
-            }
-        }
-
-        spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
-                     mesh_obj.name,
-                     positions ? positions->count() : std::size_t{0},
-                     geometry->triangle_count(),
-                     geometry->edge_count());
+        auto &object = _scene->add_object(std::move(*loaded));
+        spdlog::info("  Loaded '{}'", object.name);
+        _camera->frame(viz::world_bounding_box(_scene->root()));
+        _scene->panel_state().selected_object = &object;
     }
 
   protected:
@@ -286,7 +237,7 @@ int main(int argc, char *argv[]) {
     CLI::App app{"Balsa Mesh Viewer (GLFW + Vulkan + ImGui)",
                  "mesh_viewer_glfw"};
 
-    app.add_option("input", input_path, "OBJ file to load")
+    app.add_option("input", input_path, "Mesh file to load (OBJ, glTF, GLB)")
         ->check(CLI::ExistingFile);
 
     CLI11_PARSE(app, argc, argv);

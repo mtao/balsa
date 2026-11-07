@@ -1,9 +1,9 @@
 // mesh_viewer_qt.cpp — Qt + Vulkan mesh viewer with native Qt controls
 //
-// Usage:  mesh_viewer_qt [--input path/to/model.{obj,msh}]
-//         mesh_viewer_qt path/to/model.{obj,msh}
+// Usage:  mesh_viewer_qt [--input path/to/model.{obj,gltf,glb}]
+//         mesh_viewer_qt path/to/model.{obj,gltf,glb}
 //
-// Loads an OBJ mesh, renders it with Phong
+// Loads an OBJ mesh or glTF scene, renders it with Phong
 // shading, and provides Qt dock panels for scene graph navigation
 // and mesh property editing.
 //
@@ -37,19 +37,16 @@
 // that transitively include TBB (via zipper <execution>), then restore it.
 #undef emit
 
-#include <balsa/scene_graph/BasicShading.hpp>
-#include <balsa/scene_graph/MeshInstance.hpp>
 #include <balsa/scene_graph/Object.hpp>
 #include <balsa/visualization/qt/SceneGraphWidget.hpp>
 #include <balsa/visualization/qt/ControlsWidget.hpp>
 #include <balsa/visualization/qt/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
+#include <balsa/scene_graph/SceneLoader.hpp>
+#include <balsa/visualization/normalize_mesh.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
-#include <balsa/geometry/triangle_mesh/read_obj.hpp>
-#include <balsa/visualization/mesh_conversion.hpp>
-#include <balsa/visualization/normalize_mesh.hpp>
 #include <zipper/transform/common.hpp>
 
 // Restore Qt's emit macro (expands to nothing, but needed for readability).
@@ -205,8 +202,8 @@ namespace {
                     this,
                     tr("Open Mesh"),
                     QString(),
-                    tr("Mesh Files (*.obj *.msh);;OBJ Files (*.obj);;MSH Files "
-                       "(*.msh);;All Files (*)"));
+                    tr("Mesh Files (*.obj *.gltf *.glb);;OBJ Files (*.obj);;"
+                       "glTF Files (*.gltf *.glb);;All Files (*)"));
                 if (!path.isEmpty()) {
                     load_mesh(std::filesystem::path(path.toStdString()));
                 }
@@ -232,67 +229,20 @@ namespace {
 
         void load_mesh(const std::filesystem::path &path) {
             spdlog::info("Loading mesh: {}", path.string());
-
-            if (!std::filesystem::exists(path)) {
-                spdlog::error("Failed to load mesh: file not found: {}",
-                              path.string());
+            static const auto loader = balsa::scene_graph::SceneLoader::defaults();
+            auto loaded = loader.load(path);
+            if (!loaded) {
+                spdlog::error("Failed to load mesh: {}", loaded.error());
                 return;
             }
-            auto obj = balsa::geometry::triangle_mesh::read_objF(path);
-            if (obj.position.vertices.cols() == 0) {
-                spdlog::error("Failed to load mesh: no vertices in {}",
-                              path.string());
-                return;
-            }
-
-            // Add a mesh Object to the scene graph showing the loaded geometry.
-            auto &mesh_obj = _scene->add_mesh(path.filename().string(),
-                                              viz::to_mesh_geometry(obj));
-            const auto *geometry =
-                mesh_obj.find_feature<sg::MeshInstance>()->geometry();
-            auto *shading = mesh_obj.find_feature<sg::BasicShading>();
-
-            // Apply constraints: auto-selects shading/normal_source based
-            // on whether the mesh actually has normal data.
-            auto *surface_layer = shading->find_layer("balsa.phong_surface");
-            const auto positions = surface_layer
-                ? shading->layer_attribute(*surface_layer, sg::position_role)
-                : sg::MeshAttributeHandle{};
-            if (auto *surface = surface_layer
-                    ? dynamic_cast<sg::PhongSurfaceRenderer *>(surface_layer->renderer.get())
-                    : nullptr) {
-                surface->state.constrain(
-                    shading->layer_attribute(*surface_layer, sg::normal_role).valid());
-            }
-
-            // Compute bounding box from the bound positions and set Object
-            // transform to center and normalize the mesh.  The source data
-            // stays pristine -- normalization is applied via the Object's
-            // local transform.
-            if (auto xf = positions ? viz::unit_box_transform(*positions)
-                                     : std::nullopt) {
-                mesh_obj.set_from_transform(*xf);
-            }
-
-            // If the mesh has edges but no triangles, default to wireframe
-            // so that edge-only meshes are visible immediately.
-            if (!geometry->has_triangle_indices()
-                && geometry->has_edge_indices()) {
-                if (surface_layer) {
-                    surface_layer->enabled = false;
-                }
-            }
-
-            spdlog::info("  Mesh '{}' added: {} verts, {} tris, {} edges",
-                         mesh_obj.name,
-                         positions ? positions->count() : std::size_t{0},
-                         geometry->triangle_count(),
-                         geometry->edge_count());
+            auto &object = _scene->add_object(std::move(*loaded));
+            spdlog::info("  Loaded '{}'", object.name);
+            _camera->frame(viz::world_bounding_box(_scene->root()));
 
             // Refresh the outliner and select the new mesh (this also
             // updates the properties panel via the object_selected signal).
             _outliner->refresh();
-            _outliner->select_object(&mesh_obj);
+            _outliner->select_object(&object);
 
             // Request a redraw
             _vk_window->requestUpdate();
@@ -309,7 +259,7 @@ int main(int argc, char *argv[]) {
 #if BALSA_HAS_CLI11
     CLI::App cli{"Balsa Mesh Viewer (Qt + Vulkan)", "mesh_viewer_qt"};
 
-    cli.add_option("input", input_path, "Mesh file to load (OBJ, MSH)")
+    cli.add_option("input", input_path, "Mesh file to load (OBJ, glTF, GLB)")
         ->check(CLI::ExistingFile);
 
     // Allow Qt-specific flags (e.g. -platform) to pass through.
