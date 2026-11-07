@@ -5,6 +5,7 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include "balsa/visualization/shaders/shader_library.hpp"
+#include "balsa/visualization/vulkan/DescriptorAllocator.hpp"
 
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
@@ -32,12 +33,11 @@ struct MeshPipelineKey {
     // Colormap applied to the scalar input; empty = uniform colour.
     std::string colormap;
 
-    // Vertex input component counts (1–4; 0 = stream absent).  Determine
-    // the VkFormat of each input.  Vulkan auto-fills missing components
-    // when the shader reads more than the buffer provides.
-    uint8_t position_components = 3;
-    uint8_t normal_components = 0;
-    uint8_t scalar_components = 0;
+    // Vertex input formats (eUndefined = stream absent), from the bound
+    // AttributeBuffers.
+    vk::Format position_format = vk::Format::eR32G32B32Sfloat;
+    vk::Format normal_format = vk::Format::eUndefined;
+    vk::Format scalar_format = vk::Format::eUndefined;
 
     // Rasterization state
     CullMode cull_mode = CullMode::None; // which faces to discard
@@ -155,7 +155,6 @@ class MeshPipelineManager {
 
     void create_descriptor_set_layout();
     void create_pipeline_layout();
-    void create_descriptor_pool(uint32_t max_sets);
 
     vk::Device _device;
     Film *_film = nullptr;
@@ -164,7 +163,7 @@ class MeshPipelineManager {
 
     vk::DescriptorSetLayout _descriptor_set_layout;
     vk::PipelineLayout _pipeline_layout;
-    vk::DescriptorPool _descriptor_pool;
+    DescriptorAllocator _descriptor_allocator;
 
     std::unordered_map<MeshPipelineKey, vk::Pipeline, MeshPipelineKeyHash>
         _cache;

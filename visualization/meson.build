@@ -95,8 +95,10 @@ visualization_sources = [
   'src/vulkan/pipeline.cpp',
   'src/vulkan/vulkan_buffer.cpp',
   'src/vulkan/mesh_buffers.cpp',
+  'src/vulkan/vertex_format.cpp',
   'src/vulkan/mesh_pipeline.cpp',
   'src/vulkan/mesh_scene.cpp',
+  'src/vulkan/DescriptorAllocator.cpp',
   'src/controls/Panel.cpp',
   'src/controls/builtin_panels.cpp',
   'src/vulkan/vulkan_mesh_drawable.cpp',
@@ -113,6 +115,11 @@ visualization_sources = [
   'src/scene_graph/BasicShading.cpp',
   'src/scene_graph/DrawableGroup.cpp',
   'src/scene_graph/ImageData.cpp',
+  'src/scene_graph/SceneLoader.cpp',
+  'src/scene_graph/AttributeSemantic.cpp',
+  'src/scene_graph/GeometryView.cpp',
+  'src/scene_graph/MeshRole.cpp',
+  'src/scene_graph/MeshInstance.cpp',
   'src/vulkan/VulkanTexture.cpp',
   'src/vulkan/ImagePipelineManager.cpp',
   'src/vulkan/VulkanImageDrawable.cpp',
@@ -138,6 +145,12 @@ if get_option('json')
     'src/scene_graph/gltf/Camera.cpp',
     'src/scene_graph/gltf/Document.cpp',
     'src/scene_graph/gltf/detail/Glb.cpp',
+    'src/scene_graph/gltf/detail/accessors.cpp',
+    'src/scene_graph/gltf/detail/meshes.cpp',
+    'src/scene_graph/gltf/detail/nodes.cpp',
+    'src/scene_graph/gltf/scene_conversion.cpp',
+    'src/scene_graph/gltf/mesh_conversion.cpp',
+    'src/scene_graph/gltf/AccessorView.cpp',
     'src/scene_graph/gltf/glTF.cpp',
     'src/scene_graph/gltf/Image.cpp',
     'src/scene_graph/gltf/Material.cpp',
@@ -202,7 +215,7 @@ include_dir = [include_directories('include')]
 visualization_lib = library('balsaVisualization', visualization_sources,
   dependencies: visualization_public_deps + visualization_private_deps,
   include_directories: include_dir + imgui_backend_inc,
-  cpp_args: embed_args)
+  cpp_args: embed_args + visualization_public_args)
 
 # For consumers: propagate public deps (including imgui shared library).
 visualization_dep = declare_dependency(link_with: visualization_lib, dependencies: visualization_public_deps, include_directories: include_dir, compile_args: visualization_public_args)

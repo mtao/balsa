@@ -1,10 +1,27 @@
 #include <catch2/catch_all.hpp>
 
+// Viewer headers first: the glTF namespace shadows balsa::scene_graph
+// for code inside balsa::visualization.
+#include <balsa/scene_graph/SceneLoader.hpp>
+#include <balsa/scene_graph/AttributeSemantic.hpp>
+#include <balsa/scene_graph/BasicShading.hpp>
+#include <balsa/visualization/normalize_mesh.hpp>
+#include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
+#include <balsa/visualization/vulkan/mesh_scene.hpp>
+#include <balsa/visualization/vulkan/vulkan_mesh_drawable.hpp>
+#include <balsa/scene_graph/MeshAttribute.hpp>
 #include <balsa/visualization/scene_graph/gltf/Document.hpp>
+#include <balsa/visualization/scene_graph/gltf/mesh_conversion.hpp>
+#include <balsa/visualization/scene_graph/gltf/scene_conversion.hpp>
+#include <balsa/scene_graph/MeshInstance.hpp>
 
+#include <array>
+#include <bit>
 #include <cstdint>
+#include <variant>
 #include <filesystem>
 #include <fstream>
+#include <ranges>
 #include <string>
 #include <string_view>
 
@@ -48,10 +65,24 @@ auto as_string(std::span<const std::byte> bytes) -> std::string {
     return {reinterpret_cast<const char *>(bytes.data()), bytes.size()};
 }
 
-void append_u32(std::string &out, std::uint32_t value) {
-    for (int i = 0; i < 4; ++i) {
-        out.push_back(static_cast<char>((value >> (8 * i)) & 0xFF));
+// Little-endian bytes of `value` appended to `out`.
+template <typename T>
+void append_le(std::string &out, T value) {
+    using Bits = std::conditional_t<sizeof(T) == 1, std::uint8_t,
+                 std::conditional_t<sizeof(T) == 2, std::uint16_t, std::uint32_t>>;
+    const auto bits = std::bit_cast<Bits>(value);
+    for (std::size_t i = 0; i < sizeof(T); ++i) {
+        out.push_back(static_cast<char>((bits >> (8 * i)) & 0xFF));
     }
+}
+
+void append_u32(std::string &out, std::uint32_t value) { append_le(out, value); }
+
+template <typename T>
+auto le_bytes(std::initializer_list<T> values) -> std::string {
+    std::string out;
+    for (const auto v : values) { append_le(out, v); }
+    return out;
 }
 
 // A GLB container with a JSON chunk and an optional BIN chunk, padded as the
@@ -171,11 +202,9 @@ TEST_CASE("gltf_uri_references", "[gltf][uri]") {
 
     SECTION("custom resolver handles extra schemes") {
         const gltf::LoadOptions options{
-            .resolver = uri::Resolver::defaults().with(
-                "https",
-                [](uri::UriView) -> std::expected<uri::Resolver::Bytes,
-                                                  uri::UriError> {
-                    return uri::Resolver::Bytes(8, std::byte{'x'});
+            .resolver = uri::Resolver::defaults().add(
+                "https", [](uri::UriView) -> uri::Resolver::result_type {
+                    return uri::Resolver::bytes_type(8, std::byte{'x'});
                 })};
         const auto doc = load("https://example.com/a.bin", options);
         REQUIRE(doc);
@@ -271,4 +300,711 @@ TEST_CASE("gltf_versions_and_extensions", "[gltf]") {
     REQUIRE_FALSE(ext);
     CHECK(ext.error().code == gltf::LoadError::Code::UnsupportedExtension);
     CHECK_THAT(ext.error().message, ContainsSubstring("KHR_a, EXT_b"));
+}
+
+namespace {
+// Loads a GLB with `json` (asset added) and `bin` as its binary chunk.
+auto load_glb(const TempDir &dir, std::string_view json, std::string bin)
+    -> std::expected<gltf::Document, gltf::LoadError> {
+    return gltf::load(dir.write(
+        "acc.glb",
+        make_glb(std::format(R"({{"asset":{{"version":"2.0"}},{}}})", json),
+                 std::move(bin))));
+}
+
+auto to_attribute(const gltf::AccessorView &view)
+    -> balsa::scene_graph::MeshAttribute {
+    return std::visit(
+        [&](const auto &values) {
+            return balsa::scene_graph::MeshAttribute(
+                "values", balsa::scene_graph::AttributeDomain::Vertex, values,
+                view.normalized);
+        },
+        view.data);
+}
+
+template <typename T>
+auto span_of(const gltf::AccessorView &view) -> gltf::AccessorSpan<T> {
+    REQUIRE(std::holds_alternative<gltf::AccessorSpan<T>>(view.data));
+    return std::get<gltf::AccessorSpan<T>>(view.data);
+}
+} // namespace
+
+TEST_CASE("gltf_accessors", "[gltf][accessor]") {
+    TempDir dir;
+
+    SECTION("packed float VEC3") {
+        const auto bin = le_bytes<float>({1, 2, 3, 4, 5, 6});
+        const auto doc = load_glb(
+            dir,
+            R"("buffers":[{"byteLength":24}],)"
+            R"("bufferViews":[{"buffer":0,"byteLength":24}],)"
+            R"("accessors":[{"bufferView":0,"componentType":5126,"count":2,"type":"VEC3"}])",
+            bin);
+        REQUIRE(doc);
+        const auto view = doc->accessor(0);
+        CHECK(view.type() == gltf::AccessorType::VEC3);
+        CHECK(view.rows() == 3);
+        CHECK(view.columns() == 1);
+        CHECK(view.count() == 2);
+        CHECK_FALSE(view.normalized);
+        const auto span = span_of<float>(view);
+        CHECK(span[0, 0, 0] == 1.f);
+        CHECK(span[2, 0, 1] == 6.f);
+
+        // Plugs straight into MeshAttribute as a vector attribute.
+        const auto attribute = to_attribute(view);
+        CHECK(attribute.is_vector());
+        CHECK(attribute.rows() == 3);
+        CHECK(attribute.component_count() == 3);
+        CHECK(attribute.count() == 2);
+        const auto stored = attribute.view<float, 3>();
+        REQUIRE(stored);
+        CHECK((*stored)[1, 1] == 5.f);
+        CHECK((*stored)[2, 1] == 6.f);
+    }
+
+    SECTION("interleaved positions and indices") {
+        // Two vertices of (VEC2 position, VEC2 uv), byteStride 16, then
+        // three uint16 indices.
+        auto bin = le_bytes<float>({1, 2, 10, 20, 3, 4, 30, 40});
+        bin += le_bytes<std::uint16_t>({0, 1, 1});
+        const auto doc = load_glb(
+            dir,
+            R"("buffers":[{"byteLength":38}],)"
+            R"("bufferViews":[{"buffer":0,"byteLength":32,"byteStride":16},)"
+            R"({"buffer":0,"byteOffset":32,"byteLength":6}],)"
+            R"("accessors":[)"
+            R"({"bufferView":0,"componentType":5126,"count":2,"type":"VEC2"},)"
+            R"({"bufferView":0,"byteOffset":8,"componentType":5126,"count":2,"type":"VEC2"},)"
+            R"({"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}])",
+            bin);
+        REQUIRE(doc);
+        const auto positions = span_of<float>(doc->accessor(0));
+        CHECK(positions[0, 0, 1] == 3.f);
+        CHECK(positions[1, 0, 1] == 4.f);
+        const auto uvs = span_of<float>(doc->accessor(1));
+        CHECK(uvs[0, 0, 0] == 10.f);
+        CHECK(uvs[1, 0, 1] == 40.f);
+        const auto indices = doc->accessor(2);
+        CHECK(indices.type() == gltf::AccessorType::SCALAR);
+        const auto i = span_of<std::uint16_t>(indices);
+        CHECK(i[0, 0, 2] == 1);
+    }
+
+    SECTION("normalized colors") {
+        const auto doc = load_glb(
+            dir,
+            R"("buffers":[{"byteLength":4}],)"
+            R"("bufferViews":[{"buffer":0,"byteLength":4}],)"
+            R"("accessors":[{"bufferView":0,"componentType":5121,"normalized":true,)"
+            R"("count":1,"type":"VEC4"}])",
+            le_bytes<std::uint8_t>({255, 128, 0, 64}));
+        REQUIRE(doc);
+        const auto view = doc->accessor(0);
+        CHECK(view.normalized);
+        CHECK(span_of<std::uint8_t>(view)[0, 0, 0] == 255);
+        CHECK(span_of<std::uint8_t>(view)[3, 0, 0] == 64);
+    }
+
+    SECTION("byte MAT2 with padded columns") {
+        // Each 2-byte column is padded to 4 bytes: [a b _ _ c d _ _].
+        const auto doc = load_glb(
+            dir,
+            R"("buffers":[{"byteLength":8}],)"
+            R"("bufferViews":[{"buffer":0,"byteLength":8}],)"
+            R"("accessors":[{"bufferView":0,"componentType":5121,"normalized":true,)"
+            R"("count":1,"type":"MAT2"}])",
+            le_bytes<std::uint8_t>({1, 2, 99, 99, 3, 4, 99, 99}));
+        REQUIRE(doc);
+        const auto view = doc->accessor(0);
+        CHECK(view.type() == gltf::AccessorType::MAT2);
+        const auto m = span_of<std::uint8_t>(view);
+        CHECK(m[0, 0, 0] == 1);
+        CHECK(m[1, 0, 0] == 2);
+        CHECK(m[0, 1, 0] == 3); // column 1 starts after the padding
+        CHECK(m[1, 1, 0] == 4);
+
+        // A matrix-valued MeshAttribute, without the padding.
+        const auto attribute = to_attribute(view);
+        CHECK_FALSE(attribute.is_vector());
+        CHECK(attribute.rows() == 2);
+        CHECK(attribute.columns() == 2);
+        CHECK(attribute.component_count() == 4);
+        CHECK(attribute.normalized());
+        const auto tensor = attribute.tensor_view<std::uint8_t, 2, 2>();
+        REQUIRE(tensor);
+        CHECK((*tensor)[0, 0, 0] == 1);
+        CHECK((*tensor)[1, 0, 0] == 2);
+        CHECK((*tensor)[0, 1, 0] == 3);
+        CHECK((*tensor)[1, 1, 0] == 4);
+    }
+
+    SECTION("sparse over a bufferView and over zeros") {
+        // Base: four floats. Sparse: indices [1, 3], values [10, 30].
+        auto bin = le_bytes<float>({1, 2, 3, 4});
+        bin += le_bytes<std::uint8_t>({1, 3, 0, 0});
+        bin += le_bytes<float>({10, 30});
+        const auto doc = load_glb(
+            dir,
+            R"("buffers":[{"byteLength":28}],)"
+            R"("bufferViews":[{"buffer":0,"byteLength":16},)"
+            R"({"buffer":0,"byteOffset":16,"byteLength":2},)"
+            R"({"buffer":0,"byteOffset":20,"byteLength":8}],)"
+            R"("accessors":[)"
+            R"({"bufferView":0,"componentType":5126,"count":4,"type":"SCALAR",)"
+            R"("sparse":{"count":2,"indices":{"bufferView":1,"componentType":5121},)"
+            R"("values":{"bufferView":2}}},)"
+            R"({"componentType":5126,"count":4,"type":"SCALAR",)"
+            R"("sparse":{"count":2,"indices":{"bufferView":1,"componentType":5121},)"
+            R"("values":{"bufferView":2}}}])",
+            bin);
+        REQUIRE(doc);
+        const auto over_view = span_of<float>(doc->accessor(0));
+        CHECK(over_view[0, 0, 0] == 1.f);
+        CHECK(over_view[0, 0, 1] == 10.f);
+        CHECK(over_view[0, 0, 2] == 3.f);
+        CHECK(over_view[0, 0, 3] == 30.f);
+        const auto over_zeros = span_of<float>(doc->accessor(1));
+        CHECK(over_zeros[0, 0, 0] == 0.f);
+        CHECK(over_zeros[0, 0, 1] == 10.f);
+        CHECK(over_zeros[0, 0, 2] == 0.f);
+        CHECK(over_zeros[0, 0, 3] == 30.f);
+        // The base bufferView is untouched.
+        CHECK(span_of<float>(doc->accessor(0)).data_handle()
+              != doc->buffer_view(0).data());
+    }
+
+    SECTION("sparse index widths") {
+        // Base of three zeros; sparse index [2] -> 7, stored as 16 and 32 bit.
+        for (const auto [type, index] :
+             {std::pair{5123, le_bytes<std::uint16_t>({2, 0})},
+              std::pair{5125, le_bytes<std::uint32_t>({2})}}) {
+            CAPTURE(type);
+            const auto doc = load_glb(
+                dir,
+                std::format(
+                    R"("buffers":[{{"byteLength":8}}],)"
+                    R"("bufferViews":[{{"buffer":0,"byteLength":4}},)"
+                    R"({{"buffer":0,"byteOffset":4,"byteLength":4}}],)"
+                    R"("accessors":[{{"componentType":5126,"count":3,"type":"SCALAR",)"
+                    R"("sparse":{{"count":1,"indices":{{"bufferView":0,"componentType":{}}},)"
+                    R"("values":{{"bufferView":1}}}}}}])",
+                    type),
+                index + le_bytes<float>({7}));
+            REQUIRE(doc);
+            const auto values = span_of<float>(doc->accessor(0));
+            CHECK(values[0, 0, 0] == 0.f);
+            CHECK(values[0, 0, 2] == 7.f);
+        }
+    }
+
+    SECTION("invalid accessors") {
+        const auto message = [&](std::string_view accessors,
+                                 std::string_view views =
+                                     R"({"buffer":0,"byteLength":8})") {
+            const auto doc = load_glb(
+                dir,
+                std::format(R"("buffers":[{{"byteLength":8}}],)"
+                            R"("bufferViews":[{}],"accessors":[{}])",
+                            views,
+                            accessors),
+                std::string(8, '\0'));
+            REQUIRE_FALSE(doc);
+            return doc.error().message;
+        };
+        CHECK_THAT(message(R"({"bufferView":0,"componentType":5126,"count":3,"type":"SCALAR"})"),
+                   ContainsSubstring("needs 12 bytes, but bufferView 0 has 8"));
+        CHECK_THAT(message(R"({"bufferView":0,"byteOffset":2,"componentType":5126,"count":1,"type":"SCALAR"})"),
+                   ContainsSubstring("not aligned"));
+        CHECK_THAT(message(R"({"bufferView":0,"componentType":5126,"count":2,"type":"VEC2"})",
+                           R"({"buffer":0,"byteLength":8,"byteStride":4})"),
+                   ContainsSubstring("cannot use byteStride 4"));
+        CHECK_THAT(message(R"({"bufferView":0,"componentType":5126,"normalized":true,"count":1,"type":"SCALAR"})"),
+                   ContainsSubstring("is normalized"));
+        CHECK_THAT(message(R"({"bufferView":3,"componentType":5126,"count":1,"type":"SCALAR"})"),
+                   ContainsSubstring("missing bufferView 3"));
+        CHECK_THAT(message(R"({"componentType":5126,"count":2,"type":"SCALAR",)"
+                           R"("sparse":{"count":2,"indices":{"bufferView":0,"componentType":5121},)"
+                           R"("values":{"bufferView":0}}})"),
+                   ContainsSubstring("strictly increasing"));
+    }
+}
+
+namespace {
+// A GLB with `vertices` float positions (accessor 0), `extra` bytes in
+// bufferView 1, and the JSON members in `rest`.
+constexpr std::string_view positions_accessor =
+    R"({"bufferView":0,"componentType":5126,"type":"VEC3","count":)";
+
+auto load_mesh_glb(const TempDir &dir, std::size_t vertices, std::string extra,
+                   std::string_view rest)
+    -> std::expected<gltf::Document, gltf::LoadError> {
+    std::string bin;
+    for (std::size_t i = 0; i < vertices; ++i) {
+        bin += le_bytes<float>({0.f, float(i), 0.f});
+    }
+    const auto positions_size = bin.size();
+    while (extra.size() % 4 != 0) { extra += '\0'; }
+    bin += extra;
+    return load_glb(
+        dir,
+        std::format(R"("buffers":[{{"byteLength":{}}}],)"
+                    R"("bufferViews":[{{"buffer":0,"byteLength":{}}})"
+                    R"({}],{})",
+                    bin.size(),
+                    positions_size,
+                    extra.empty()
+                        ? std::string()
+                        : std::format(R"(,{{"buffer":0,"byteOffset":{},"byteLength":{}}})",
+                                      positions_size,
+                                      extra.size()),
+                    rest),
+        bin);
+}
+
+auto triangles(const balsa::scene_graph::MeshGeometry &geometry)
+    -> std::vector<std::array<std::uint32_t, 3>> {
+    const auto t = geometry.triangle_indices();
+    return std::views::iota(std::size_t{0}, t.extent(1))
+           | std::views::transform([&](std::size_t i) {
+                 return std::array{t[0, i], t[1, i], t[2, i]};
+             })
+           | std::ranges::to<std::vector>();
+}
+
+auto edges(const balsa::scene_graph::MeshGeometry &geometry)
+    -> std::vector<std::array<std::uint32_t, 2>> {
+    const auto e = geometry.edge_indices();
+    return std::views::iota(std::size_t{0}, e.extent(1))
+           | std::views::transform([&](std::size_t i) {
+                 return std::array{e[0, i], e[1, i]};
+             })
+           | std::ranges::to<std::vector>();
+}
+} // namespace
+
+TEST_CASE("gltf_mesh_conversion", "[gltf][mesh]") {
+    TempDir dir;
+    namespace sg = balsa::scene_graph;
+    using Tri = std::array<std::uint32_t, 3>;
+    using Edge = std::array<std::uint32_t, 2>;
+
+    SECTION("indexed triangles with normalized colors") {
+        // 3 vertices; extra: 3 RGBA8 colors, then 3 uint16 indices.
+        auto extra = le_bytes<std::uint8_t>({255, 0, 0, 255, 0, 255, 0, 255,
+                                             0, 0, 255, 128});
+        extra += le_bytes<std::uint16_t>({2, 1, 0});
+        const auto doc = load_mesh_glb(
+            dir, 3, extra,
+            std::format(
+                R"("accessors":[{}3}},)"
+                R"({{"bufferView":1,"componentType":5121,"normalized":true,"type":"VEC4","count":3}},)"
+                R"({{"bufferView":1,"byteOffset":12,"componentType":5123,"type":"SCALAR","count":3}}],)"
+                R"("materials":[{{}}],)"
+                R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"COLOR_0":1}},)"
+                R"("indices":2,"material":0}}]}}])",
+                positions_accessor));
+        REQUIRE(doc);
+        const auto geometry = gltf::to_mesh_geometry(*doc, 0, 0);
+        REQUIRE(geometry);
+        CHECK(triangles(*geometry) == std::vector<Tri>{{2, 1, 0}});
+
+        const auto positions = geometry->find_attribute("vertex_positions");
+        REQUIRE(positions);
+        CHECK(positions->type() == sg::AttributeType::Float32);
+        CHECK((*positions->view<float, 3>())[1, 2] == 2.f);
+
+        const auto colors = geometry->find_attribute("COLOR_0");
+        REQUIRE(colors);
+        // Kept as normalized bytes.
+        CHECK(colors->type() == sg::AttributeType::UInt8);
+        CHECK(colors->normalized());
+        const auto c = *colors->view<std::uint8_t, 4>();
+        CHECK(c[0, 0] == 255);
+        CHECK(c[1, 1] == 255);
+        CHECK(c[3, 2] == 128);
+        CHECK_FALSE(positions->normalized());
+
+        // Tagged by their glTF semantics.
+        CHECK(geometry->attribute_for(sg::semantics::position()) == positions);
+        CHECK(geometry->attribute_for(sg::semantics::color(), 0) == colors);
+
+        const auto all = gltf::to_mesh_geometries(*doc, 0);
+        REQUIRE(all);
+        REQUIRE(all->size() == 1);
+        CHECK((*all)[0].mode == gltf::PrimitiveMode::TRIANGLES);
+        CHECK((*all)[0].material == 0);
+    }
+
+    SECTION("modes without indices") {
+        const auto convert = [&](int mode, std::size_t vertices) {
+            const auto doc = load_mesh_glb(
+                dir, vertices, "",
+                std::format(R"("accessors":[{}{}}}],)"
+                            R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}},)"
+                            R"("mode":{}}}]}}])",
+                            positions_accessor,
+                            vertices,
+                            mode));
+            REQUIRE(doc);
+            auto geometry = gltf::to_mesh_geometry(*doc, 0, 0);
+            REQUIRE(geometry);
+            return std::move(*geometry);
+        };
+        CHECK(triangles(convert(4, 6)) == std::vector<Tri>{{0, 1, 2}, {3, 4, 5}});
+        // Strips alternate winding: {0,1,2}, {1,3,2}, {2,3,4}.
+        CHECK(triangles(convert(5, 5))
+              == std::vector<Tri>{{0, 1, 2}, {1, 3, 2}, {2, 3, 4}});
+        CHECK(triangles(convert(6, 4)) == std::vector<Tri>{{1, 2, 0}, {2, 3, 0}});
+        CHECK(edges(convert(1, 4)) == std::vector<Edge>{{0, 1}, {2, 3}});
+        CHECK(edges(convert(3, 3)) == std::vector<Edge>{{0, 1}, {1, 2}});
+        CHECK(edges(convert(2, 3)) == std::vector<Edge>{{0, 1}, {1, 2}, {2, 0}});
+        const auto points = convert(0, 3);
+        CHECK_FALSE(points.has_triangle_indices());
+        CHECK_FALSE(points.has_edge_indices());
+        CHECK(points.find_attribute("vertex_positions"));
+    }
+
+    SECTION("invalid primitives fail conversion") {
+        const auto message = [&](std::size_t vertices, std::string extra,
+                                 std::string_view primitive) {
+            const auto doc = load_mesh_glb(
+                dir, vertices, std::move(extra),
+                std::format(R"("accessors":[{}{}}},)"
+                            R"({{"bufferView":1,"componentType":5121,"type":"SCALAR","count":4}}],)"
+                            R"("meshes":[{{"primitives":[{}]}}])",
+                            positions_accessor,
+                            vertices,
+                            primitive));
+            REQUIRE(doc);
+            const auto geometry = gltf::to_mesh_geometries(*doc, 0);
+            REQUIRE_FALSE(geometry);
+            return geometry.error().message;
+        };
+        CHECK_THAT(message(3, le_bytes<std::uint8_t>({0, 1, 2, 7}),
+                           R"({"attributes":{"POSITION":0},"indices":1,"mode":1})"),
+                   ContainsSubstring("has index 7 but 3 vertices"));
+        CHECK_THAT(message(3, le_bytes<std::uint8_t>({0, 1, 2, 0}),
+                           R"({"attributes":{"POSITION":0},"indices":1})"),
+                   ContainsSubstring("4 TRIANGLES indices, not a multiple of 3"));
+    }
+
+    SECTION("invalid meshes fail load") {
+        const auto message = [&](std::string_view meshes) {
+            const auto doc = load_mesh_glb(
+                dir, 3, le_bytes<float>({1}),
+                std::format(R"("accessors":[{}3}},)"
+                            R"({{"bufferView":1,"componentType":5126,"type":"SCALAR","count":1}}],)"
+                            R"("meshes":[{}])",
+                            positions_accessor,
+                            meshes));
+            REQUIRE_FALSE(doc);
+            return doc.error().message;
+        };
+        CHECK_THAT(message(R"({"primitives":[{"attributes":{"POSITION":9}}]})"),
+                   ContainsSubstring("attribute POSITION refers to missing accessor 9"));
+        CHECK_THAT(message(R"({"primitives":[{"attributes":{"POSITION":0,"_X":1}}]})"),
+                   ContainsSubstring("attribute _X has 1 values, but other attributes have 3"));
+        CHECK_THAT(message(R"({"primitives":[{"attributes":{"POSITION":0},"indices":1}]})"),
+                   ContainsSubstring("not an unsigned integer scalar"));
+        CHECK_THAT(message(R"({"primitives":[{"attributes":{"POSITION":0},"material":2}]})"),
+                   ContainsSubstring("missing material 2"));
+    }
+}
+
+TEST_CASE("gltf_scene_conversion", "[gltf][scene]") {
+    TempDir dir;
+    namespace sg = balsa::scene_graph;
+    // Accessor 0: 3 positions. Mesh 0: one triangle. Mesh 1: two primitives.
+    const auto load = [&](std::string_view nodes_and_scenes) {
+        return load_mesh_glb(
+            dir, 3, "",
+            std::format(R"("accessors":[{}3}}],)"
+                        R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}}}}]}},)"
+                        R"({{"primitives":[{{"attributes":{{"POSITION":0}}}},)"
+                        R"({{"attributes":{{"POSITION":0}},"mode":0}}]}}],{})",
+                        positions_accessor,
+                        nodes_and_scenes));
+    };
+    const auto mesh_of = [](const sg::Object &object) {
+        const auto *instance = object.find_feature<sg::MeshInstance>();
+        return instance ? instance->shared_geometry() : nullptr;
+    };
+
+    SECTION("hierarchy, transforms and shared meshes") {
+        const auto doc = load(
+            R"("nodes":[)"
+            R"({"name":"root","translation":[1,2,3],"children":[1,2]},)"
+            R"({"name":"a","mesh":0,"scale":[2,2,2],"rotation":[0,0,0.7071068,0.7071068]},)"
+            R"({"name":"b","mesh":0,"matrix":[1,0,0,0, 0,1,0,0, 0,0,1,0, 5,6,7,1]},)"
+            R"({"name":"multi","mesh":1}],)"
+            R"("scenes":[{"name":"other","nodes":[3]},{"name":"main","nodes":[0]}],)"
+            R"("scene":1)");
+        REQUIRE(doc);
+        const auto root = gltf::to_object(*doc);
+        REQUIRE(root);
+        const auto &scene = **root;
+        CHECK(scene.name == "main"); // the default scene
+        REQUIRE(scene.children_count() == 1);
+        const auto &node = *scene.children()[0];
+        CHECK(node.name == "root");
+        CHECK(node.translation() == sg::Vec3f{1.f, 2.f, 3.f});
+        CHECK_FALSE(mesh_of(node));
+        REQUIRE(node.children_count() == 2);
+
+        const auto &a = *node.children()[0];
+        CHECK(a.name == "a");
+        CHECK(a.scale_factors() == sg::Vec3f{2.f, 2.f, 2.f});
+        // glTF quaternions are [x, y, z, w]: 90 degrees about z.
+        CHECK(a.rotation().w() == Catch::Approx(0.7071068f));
+        CHECK(a.rotation().z() == Catch::Approx(0.7071068f));
+        // World transform: (1,0,0) -> scale 2 -> rotate to (0,2,0) -> +(1,2,3).
+        const auto p = (a.world_transform()
+                        * ::zipper::Vector<float, 3>{1.f, 0.f, 0.f}.homogeneous())
+                           .eval();
+        CHECK(p(0) == Catch::Approx(1.f).margin(1e-5f));
+        CHECK(p(1) == Catch::Approx(4.f).margin(1e-5f));
+        CHECK(p(2) == Catch::Approx(3.f).margin(1e-5f));
+
+        const auto &b = *node.children()[1];
+        CHECK(b.translation() == sg::Vec3f{5.f, 6.f, 7.f}); // from the matrix
+
+        // Both nodes show mesh 0's single primitive, on their own Object,
+        // through the same geometry.
+        REQUIRE(mesh_of(a));
+        CHECK(mesh_of(a) == mesh_of(b));
+        CHECK(mesh_of(a)->triangle_count() == 1);
+
+        const auto other = gltf::to_object(*doc, 0);
+        REQUIRE(other);
+        const auto &multi = *(*other)->children()[0];
+        CHECK(multi.name == "multi");
+        CHECK_FALSE(mesh_of(multi));
+        REQUIRE(multi.children_count() == 2);
+        CHECK(multi.children()[0]->name == "primitive 0");
+        CHECK(mesh_of(*multi.children()[0])->triangle_count() == 1);
+        CHECK(mesh_of(*multi.children()[1])->triangle_count() == 0); // POINTS
+
+        CHECK_FALSE(gltf::to_object(*doc, 5));
+    }
+
+    SECTION("without scenes, every root node") {
+        const auto doc = load(R"("nodes":[{"children":[1]},{},{"mesh":0}])");
+        REQUIRE(doc);
+        const auto root = gltf::to_object(*doc);
+        REQUIRE(root);
+        REQUIRE((*root)->children_count() == 2);
+        CHECK((*root)->children()[0]->name == "node 0");
+        CHECK((*root)->children()[0]->children_count() == 1);
+        CHECK((*root)->children()[1]->name == "node 2");
+    }
+
+    SECTION("invalid node graphs fail load") {
+        const auto message = [&](std::string_view json) {
+            const auto doc = load(json);
+            REQUIRE_FALSE(doc);
+            return doc.error().message;
+        };
+        CHECK_THAT(message(R"("nodes":[{"children":[2]},{"children":[2]},{}])"),
+                   ContainsSubstring("node 2 has more than one parent"));
+        CHECK_THAT(message(R"("nodes":[{},{"children":[2]},{"children":[1]}])"),
+                   ContainsSubstring("is part of a cycle"));
+        CHECK_THAT(message(R"("nodes":[{"children":[5]}])"),
+                   ContainsSubstring("refers to missing child node 5"));
+        CHECK_THAT(message(R"("nodes":[{"mesh":9}])"),
+                   ContainsSubstring("refers to missing mesh 9"));
+        CHECK_THAT(message(R"("nodes":[{"children":[1]},{}],"scenes":[{"nodes":[1]}])"),
+                   ContainsSubstring("not a root node"));
+        CHECK_THAT(message(R"("nodes":[{}],"scenes":[{"nodes":[0]}],"scene":3)"),
+                   ContainsSubstring("default scene 3 does not exist"));
+    }
+}
+
+TEST_CASE("load_into_mesh_scene", "[gltf][viewer]") {
+    TempDir dir;
+    namespace sg = balsa::scene_graph;
+    namespace vk = balsa::visualization::vulkan;
+    vk::MeshScene scene;
+    const auto loader = sg::SceneLoader::defaults();
+
+    const auto drawable_count = [](this const auto &self,
+                                   const sg::Object &object) -> std::size_t {
+        std::size_t n = object.find_feature<vk::VulkanMeshDrawable>() ? 1 : 0;
+        for (const auto &child : object.children()) { n += self(*child); }
+        return n;
+    };
+    const auto surface_enabled = [](const sg::Object &object) {
+        const auto *shading = object.find_feature<sg::BasicShading>();
+        REQUIRE(shading);
+        const auto *layer = shading->find_layer("balsa.phong_surface");
+        REQUIRE(layer);
+        return layer->enabled;
+    };
+
+    SECTION("glTF scene") {
+        // One triangle (0,0,0) (0,1,0) (0,2,0), shown by two nodes: one at
+        // the origin and one translated by (10, 0, 0).
+        std::string bin;
+        for (int i = 0; i < 3; ++i) { bin += le_bytes<float>({0.f, float(i), 0.f}); }
+        const auto path = dir.write(
+            "scene.glb",
+            make_glb(std::format(
+                         R"({{"asset":{{"version":"2.0"}},"buffers":[{{"byteLength":36}}],)"
+                         R"("bufferViews":[{{"buffer":0,"byteLength":36}}],)"
+                         R"("accessors":[{}3}}],)"
+                         R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}}}}]}}],)"
+                         R"("nodes":[{{"mesh":0}},{{"mesh":0,"translation":[10,0,0]}}],)"
+                         R"("scenes":[{{"nodes":[0,1]}}]}})",
+                         positions_accessor),
+                     bin));
+        auto loaded = loader.load(path);
+        REQUIRE(loaded);
+        CHECK((*loaded)->parent() == nullptr);
+        CHECK(drawable_count(**loaded) == 0); // until added to a scene
+        const auto &object = scene.add_object(std::move(*loaded));
+        CHECK(object.name == "scene.glb");
+        CHECK(object.parent() == &scene.root());
+        CHECK(object.children_count() == 2);
+        CHECK(drawable_count(object) == 2);
+        CHECK(surface_enabled(*object.children()[0]));
+
+        // Loaded as is: no rescaling, so the world box is the file's.
+        const auto box = balsa::visualization::world_bounding_box(object);
+        CHECK(box.min()(0) == Catch::Approx(0.f));
+        CHECK(box.max()(0) == Catch::Approx(10.f));
+        CHECK(box.max()(1) == Catch::Approx(2.f));
+    }
+
+    SECTION("OBJ mesh") {
+        const auto path = dir.write("tri.OBJ", "v 0 0 0\nv 2 0 0\nv 0 1 0\nf 1 2 3\n");
+        auto loaded = loader.load(path);
+        REQUIRE(loaded);
+        CHECK((*loaded)->name == "tri.OBJ");
+        {
+            const auto *instance = (*loaded)->find_feature<sg::MeshInstance>();
+            REQUIRE(instance);
+            const auto positions =
+                instance->geometry()->attribute_for(sg::semantics::position());
+            REQUIRE(positions);
+            CHECK(positions->name == "vertex_positions");
+        }
+        CHECK_FALSE((*loaded)->find_feature<sg::BasicShading>());
+        const auto *instance = (*loaded)->find_feature<sg::MeshInstance>();
+        REQUIRE(instance);
+        CHECK(instance->geometry()->triangle_count() == 1);
+        CHECK((*loaded)->scale_factors()(0) == Catch::Approx(1.f));
+        const auto &object = scene.add_object(std::move(*loaded));
+        CHECK(drawable_count(object) == 1);
+        CHECK(surface_enabled(object));
+    }
+
+    SECTION("edge-only meshes start as wireframe") {
+        auto object = std::make_unique<sg::Object>("edges");
+        auto geometry = std::make_shared<sg::MeshGeometry>();
+        const std::vector<uint32_t> edges{0, 1};
+        geometry->set_edge_indices(
+            ::zipper::mdspan<const uint32_t, ::zipper::dextents<2>,
+                             ::zipper::storage::col_major>(edges.data(), 2, 1));
+        object->emplace_feature<sg::MeshInstance>(geometry);
+        CHECK_FALSE(surface_enabled(scene.add_object(std::move(object))));
+    }
+
+    SECTION("errors") {
+        CHECK_THAT(loader.load(dir.path("missing.obj")).error(),
+                   ContainsSubstring("file not found"));
+        const auto bad = dir.write("bad.gltf", R"({"asset":{"version":"3.0"}})");
+        CHECK_THAT(loader.load(bad).error(),
+                   ContainsSubstring("only 2.0 is supported"));
+    }
+}
+
+TEST_CASE("orbit_camera_frames_box", "[viewer]") {
+    namespace vk = balsa::visualization::vulkan;
+    vk::MeshScene scene;
+    scene.set_perspective(1.0f, 1.5f, 0.01f, 100.f);
+    vk::OrbitCameraController camera(&scene);
+
+    // x in [0, 10], y in [0, 2], flat in z.
+    balsa::geometry::BoundingBox<float, 3> box;
+    box.expand(::zipper::Vector<float, 3>{0.f, 0.f, 0.f});
+    box.expand(::zipper::Vector<float, 3>{10.f, 2.f, 0.f});
+    camera.frame(box);
+
+    const float radius = 0.5f * std::sqrt(104.f);
+    CHECK(camera.center()(0) == Catch::Approx(5.f));
+    CHECK(camera.center()(1) == Catch::Approx(1.f));
+    CHECK(camera.distance()
+          == Catch::Approx(1.05f * radius / std::sin(0.5f)));
+    CHECK(scene.camera().fov_y() == Catch::Approx(1.0f));
+    CHECK(scene.camera().aspect() == Catch::Approx(1.5f));
+    CHECK(scene.camera().near_plane() == Catch::Approx(1e-3f * radius));
+    CHECK(scene.camera().far_plane() > camera.distance() + radius);
+
+    // Empty boxes leave the view alone.
+    const auto distance = camera.distance();
+    camera.frame({});
+    CHECK(camera.distance() == distance);
+}
+
+TEST_CASE("scene_loader", "[viewer]") {
+    TempDir dir;
+    namespace sg = balsa::scene_graph;
+
+    const auto defaults = sg::SceneLoader::defaults();
+    CHECK(defaults.handles(".obj"));
+    CHECK(defaults.handles(".OBJ"));
+    CHECK(defaults.handles(".glb"));
+    CHECK_FALSE(defaults.handles(".ply"));
+
+    // Extensions match case-insensitively; copies are independent.
+    int calls = 0;
+    auto custom = defaults;
+    custom.add(".PLY", [&](const std::filesystem::path &path) {
+        ++calls;
+        return sg::SceneLoader::result_type(
+            std::make_unique<sg::Object>(path.filename().string()));
+    });
+    CHECK(custom.handles(".ply"));
+    CHECK_FALSE(defaults.handles(".ply"));
+
+    const auto ply = dir.write("points.Ply", "ply\n");
+    const auto loaded = custom.load(ply);
+    REQUIRE(loaded);
+    CHECK((*loaded)->name == "points.Ply");
+    CHECK(calls == 1);
+
+    // Replacing a loader, chained on a temporary.
+    const auto copy = sg::SceneLoader(custom).add(
+        ".ply", [](const std::filesystem::path &) {
+            return sg::SceneLoader::result_type(std::unexpected("replaced"));
+        });
+    CHECK(copy.load(ply).error() == "replaced");
+    CHECK(custom.load(ply));
+    CHECK(calls == 2);
+
+    CHECK_THAT(defaults.load(ply).error(),
+               ContainsSubstring("unsupported file type"));
+    CHECK_THAT(defaults.load(dir.path("missing.obj")).error(),
+               ContainsSubstring("file not found"));
+}
+
+TEST_CASE("gltf_attribute_semantics", "[gltf]") {
+    namespace sg = balsa::scene_graph;
+    using S = gltf::AttributeSemanticSet;
+    CHECK(gltf::attribute_semantic("POSITION") == S{sg::semantics::position()});
+    CHECK(gltf::attribute_semantic("NORMAL") == S{sg::semantics::normal()});
+    CHECK(gltf::attribute_semantic("TANGENT") == S{sg::semantics::tangent()});
+    CHECK(gltf::attribute_semantic("TEXCOORD_0")
+          == S{sg::semantics::texture_coordinates(), 0});
+    CHECK(gltf::attribute_semantic("TEXCOORD_1")
+          == S{sg::semantics::texture_coordinates(), 1});
+    CHECK(gltf::attribute_semantic("COLOR_2") == S{sg::semantics::color(), 2});
+    // Untagged: skinning, application-specific and malformed semantics.
+    CHECK_FALSE(gltf::attribute_semantic("JOINTS_0"));
+    CHECK_FALSE(gltf::attribute_semantic("WEIGHTS_0"));
+    CHECK_FALSE(gltf::attribute_semantic("_TEMPERATURE"));
+    CHECK_FALSE(gltf::attribute_semantic("TEXCOORD_"));
+    CHECK_FALSE(gltf::attribute_semantic("TEXCOORD_x"));
+    CHECK_FALSE(gltf::attribute_semantic("COLOR_999"));
 }

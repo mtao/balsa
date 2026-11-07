@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "balsa/scene_graph/types.hpp"
+#include <balsa/geometry/BoundingBox.hpp>
 #include "balsa/visualization/input_handler.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 
@@ -50,6 +51,24 @@ class OrbitCameraController : public InputHandler {
     void set_angles(float theta, float phi) {
         _theta = theta;
         _phi = std::clamp(phi, -_max_phi, _max_phi);
+        apply();
+    }
+
+    // Switches to the default camera, centres it on `box` and backs off
+    // until the box fits the field of view.  The near and far planes follow
+    // the box's size.  Empty boxes are ignored.
+    void frame(const geometry::BoundingBox<float, 3> &box) {
+        if (!_scene || box.is_empty()) return;
+        _scene->set_active_camera(nullptr);
+        const auto &camera = _scene->camera();
+        const float radius = std::max(0.5f * box.range().norm(), 1e-6f);
+        _center = box.center();
+        _distance = std::max(
+            1.05f * radius / std::sin(0.5f * camera.fov_y()), _min_distance);
+        _scene->set_perspective(camera.fov_y(),
+                                camera.aspect(),
+                                1e-3f * radius,
+                                100.f * (_distance + radius));
         apply();
     }
 

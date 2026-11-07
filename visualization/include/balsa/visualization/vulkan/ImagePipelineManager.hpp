@@ -3,6 +3,7 @@
 
 #include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/shaders/shader_library.hpp"
+#include "balsa/visualization/vulkan/DescriptorAllocator.hpp"
 
 namespace balsa::visualization::vulkan {
 
@@ -103,7 +104,6 @@ class ImagePipelineManager {
 
     auto create_descriptor_set_layout() -> void;
     auto create_pipeline_layout() -> void;
-    auto create_descriptor_pool(uint32_t max_sets) -> void;
 
     vk::Device _device;
     Film *_film = nullptr;
@@ -112,7 +112,7 @@ class ImagePipelineManager {
 
     vk::DescriptorSetLayout _descriptor_set_layout;
     vk::PipelineLayout _pipeline_layout;
-    vk::DescriptorPool _descriptor_pool;
+    DescriptorAllocator _descriptor_allocator;
 
     // Pipeline key: (render_pass, msaa_samples, depth_test).
     // For simplicity we store a single cached pipeline and

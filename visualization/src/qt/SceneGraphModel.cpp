@@ -106,7 +106,7 @@ QVariant SceneGraphModel::data(const QModelIndex &index, int role) const {
 
     case ColVisible:
         if (role == Qt::CheckStateRole) {
-            return obj->visible ? Qt::Checked : Qt::Unchecked;
+            return obj->visible() ? Qt::Checked : Qt::Unchecked;
         }
         if (role == Qt::ToolTipRole) {
             return QStringLiteral("Visibility");
@@ -146,7 +146,7 @@ bool SceneGraphModel::setData(const QModelIndex &index,
 
     case ColVisible:
         if (role == Qt::CheckStateRole) {
-            obj->visible = (value.toInt() == Qt::Checked);
+            obj->set_visible(value.toInt() == Qt::Checked);
             emit dataChanged(index, index, { role });
             emit structure_changed();
             return true;
@@ -443,7 +443,7 @@ sg::Object *SceneGraphModel::duplicate_object(sg::Object *obj) {
     dup.set_translation(obj->translation());
     dup.set_rotation(obj->rotation());
     dup.set_scale_factors(obj->scale_factors());
-    dup.visible = obj->visible;
+    dup.set_visible(obj->visible());
     dup.selectable = obj->selectable;
     endInsertRows();
 

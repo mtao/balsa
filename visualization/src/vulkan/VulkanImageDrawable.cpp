@@ -76,7 +76,7 @@ auto VulkanImageDrawable::release() -> void {
 auto VulkanImageDrawable::draw(const scene_graph::Camera &cam, Film &film)
     -> void {
     if (!_initialized) return;
-    if (!object().visible) return;
+    if (!object().visible_in_hierarchy()) return;
 
     // Sync GPU texture from ImageData if dirty.
     sync_from_image_data(film);

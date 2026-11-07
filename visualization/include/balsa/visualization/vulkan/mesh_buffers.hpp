@@ -58,12 +58,13 @@ inline vk::DeviceSize material_ubo_aligned_size(vk::DeviceSize min_alignment) {
 
 // ── AttributeBuffer / MeshVertexInputs ──────────────────────────────
 
-// A vertex attribute uploaded as tightly packed floats, 1–4 components
-// per vertex.  Vulkan fills components the shader reads but the format
-// lacks with (0, 0, 0, 1).
+// A vertex attribute on the GPU, 1–4 components per vertex, in a format the
+// shader reads as float (see vertex_format).  Vulkan fills components the
+// shader reads but the format lacks with (0, 0, 0, 1).
 struct AttributeBuffer {
     VulkanBuffer buffer;
-    uint8_t components = 0;
+    vk::Format format = vk::Format::eUndefined;
+    uint8_t components = 0; // of the attribute (format may be padded to 4)
     uint32_t count = 0;
 };
 

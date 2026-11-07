@@ -117,12 +117,29 @@ scene_graph::Object &MeshScene::add_mesh(const std::string &name,
         name, std::make_shared<scene_graph::MeshGeometry>(std::move(geometry)));
 }
 
+scene_graph::Object &
+    MeshScene::add_object(std::unique_ptr<scene_graph::Object> object) {
+    auto &added = _scene_root.add_child(std::move(object));
+    ensure_drawables(added);
+    return added;
+}
+
+void MeshScene::ensure_drawables(scene_graph::Object &obj) {
+    ensure_drawable(obj);
+    for (auto &child : obj.children()) { ensure_drawables(*child); }
+}
+
 void MeshScene::ensure_drawable(scene_graph::Object &obj) {
     // If the Object shows a mesh but has no VulkanMeshDrawable, add one.
     if (!obj.find_feature<scene_graph::MeshInstance>()) return;
     if (obj.find_feature<VulkanMeshDrawable>()) return;
     if (!obj.find_feature<scene_graph::BasicShading>()) {
-        obj.emplace_feature<scene_graph::BasicShading>();
+        // Default layers for the mesh's dimension, fitted to it.
+        const auto *geometry = obj.find_feature<scene_graph::MeshInstance>()->geometry();
+        obj.emplace_feature<scene_graph::BasicShading>(
+               scene_graph::make_default_mesh_render_layers(
+                   geometry ? geometry->dimension() : 2))
+            .fit_to_geometry();
     }
 
     auto &vmd = obj.emplace_feature<VulkanMeshDrawable>(
@@ -149,9 +166,12 @@ bool MeshScene::remove_mesh(const scene_graph::Object *obj) {
         _film->device().waitIdle();
     }
 
-    // Release GPU resources before removing from scene graph.
-    auto *vmd = (*it)->find_feature<VulkanMeshDrawable>();
-    if (vmd) vmd->release();
+    // Release the subtree's GPU resources first.
+    const auto release = [](this const auto &self, scene_graph::Object &o) -> void {
+        if (auto *vmd = o.find_feature<VulkanMeshDrawable>()) vmd->release();
+        for (auto &child : o.children()) self(*child);
+    };
+    release(**it);
 
     // Remove from the scene graph.  The Object's destructor will
     // unregister its VulkanMeshDrawable from the DrawableGroup.

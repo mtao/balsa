@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "balsa/scene_graph/AttributeSemantic.hpp"
+#include "balsa/scene_graph/GeometryView.hpp"
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/BasicShading.hpp"
 #include "balsa/scene_graph/MeshGeometry.hpp"
@@ -37,7 +39,7 @@ auto is_lit(const sg::BasicShading &shading) -> bool {
 
 // Whether role of layer resolves to an attribute of the shading's geometry.
 auto has_role(const sg::BasicShading &shading, const sg::MeshRenderLayer &layer,
-              std::string_view role) -> bool {
+              sg::MeshRole role) -> bool {
     return shading.layer_attribute(layer, role).valid();
 }
 
@@ -97,35 +99,40 @@ auto button_property(std::string label, std::function<void()> run) -> Property {
 }
 
 // Role choices: option 0 is the renderer's default, option 1 "(none)",
-// option k + 2 the k-th user attribute of the shading's geometry
-// (reserved topology attributes are not offered).
+// option k + 2 the k-th candidate for the role (BasicShading::candidates).
 
-auto attribute_handles(const sg::BasicShading &shading)
-    -> std::vector<sg::MeshAttributeHandle> {
-    const auto *geometry = shading.geometry();
-    if (geometry == nullptr) return {};
-    return std::ranges::to<std::vector>(
-        geometry->attributes()
-        | std::views::filter([](const sg::MeshAttributeHandle &a) {
-              return !sg::MeshGeometry::is_reserved_name(a->name);
-          }));
+auto role_candidates(const sg::BasicShading &shading, sg::MeshLayerId layer_id,
+                     sg::MeshRole role) -> std::vector<sg::MeshAttributeHandle> {
+    const auto *layer = shading.find_layer(layer_id);
+    return layer ? shading.candidates(*layer, role)
+                 : std::vector<sg::MeshAttributeHandle>{};
 }
 
 auto role_property(sg::BasicShading &shading, sg::MeshLayerId layer_id,
                    const sg::MeshRoleRequirement &requirement) -> Property {
     auto *sh = &shading;
-    const std::string role = requirement.id;
-    const std::string default_label =
-        requirement.default_attribute.empty()
-            ? std::string("(default: none)")
-            : std::format("(default: {})", requirement.default_attribute);
+    const sg::MeshRole role = requirement.role;
+    const auto semantic = requirement.semantic;
+    // "(default: Normal: vertex_normals)", or "(default: none)".
+    const auto default_label = [sh, layer_id, semantic] {
+        if (!semantic) return std::string("(default: none)");
+        const auto *layer = sh->find_layer(layer_id);
+        const auto geometry = layer ? sh->layer_geometry(*layer) : nullptr;
+        const auto attribute =
+            geometry ? geometry->attribute_for(*semantic) : sg::MeshAttributeHandle{};
+        return std::format("(default: {}: {})",
+                           semantic->value().label,
+                           attribute ? attribute->name : "missing");
+    };
     auto property = make_property(
-        role,
+        std::string(role.id()),
         ChoiceInput{
             .options =
-                [sh, default_label] {
-                    std::vector<std::string> names{default_label, "(none)"};
-                    for (const auto &a : attribute_handles(*sh)) names.push_back(a->name);
+                [sh, layer_id, role, default_label] {
+                    std::vector<std::string> names{default_label(), "(none)"};
+                    for (const auto &a : role_candidates(*sh, layer_id, role)) {
+                        names.push_back(a->name);
+                    }
                     return names;
                 },
             .get_index =
@@ -134,7 +141,7 @@ auto role_property(sg::BasicShading &shading, sg::MeshLayerId layer_id,
                     const auto *binding = layer ? layer->binding(role) : nullptr;
                     if (binding == nullptr) return 0;
                     if (!binding->attribute) return 1;
-                    const auto handles = attribute_handles(*sh);
+                    const auto handles = role_candidates(*sh, layer_id, role);
                     const auto it = std::ranges::find(handles, binding->attribute->name,
                                                       [](const auto &a) { return a->name; });
                     return it == handles.end()
@@ -143,7 +150,7 @@ auto role_property(sg::BasicShading &shading, sg::MeshLayerId layer_id,
                 },
             .set_index =
                 [sh, layer_id, role](const int &i) {
-                    const auto handles = attribute_handles(*sh);
+                    const auto handles = role_candidates(*sh, layer_id, role);
                     if (i <= 0) {
                         sh->reset_layer_role(layer_id, role);
                     } else if (i == 1) {
@@ -152,22 +159,16 @@ auto role_property(sg::BasicShading &shading, sg::MeshLayerId layer_id,
                         sh->assign_layer_role(layer_id, role,
                                               handles[static_cast<std::size_t>(i - 2)]);
                     }
-                    auto *layer = sh->find_layer(layer_id);
-                    if (auto *renderer = surface_renderer(layer)) {
-                        renderer->state.constrain(has_role(*sh, *layer, sg::normal_role));
+                    // Let the renderer adapt to its new inputs.
+                    if (auto *layer = sh->find_layer(layer_id); layer && layer->renderer) {
+                        layer->renderer->fit_to({*sh, layer_id});
                     }
-                },
-            .option_enabled =
-                [sh, requirement](int i) {
-                    if (i < 2) return true;
-                    const auto handles = attribute_handles(*sh);
-                    const auto k = static_cast<std::size_t>(i - 2);
-                    return k < handles.size() && requirement.accepts(*handles[k]);
                 },
         });
     property.tooltip = std::format("{} attribute, {}-{} components",
                                    requirement.domain == sg::AttributeDomain::Vertex ? "vertex"
                                    : requirement.domain == sg::AttributeDomain::Edge ? "edge"
+                                   : requirement.domain == sg::AttributeDomain::Cell ? "cell"
                                                                                      : "face",
                                    requirement.min_components,
                                    requirement.max_components);
@@ -184,7 +185,10 @@ auto object_layout(sg::Object &object) -> Layout {
                                   .set = [obj](const std::string &s) {
                                       obj->name = s;
                                   } }));
-    layout.add_property(bool_property("Visible", obj->visible));
+    layout.add_property(make_property(
+        "Visible",
+        BoolInput{ .get = [obj] { return obj->visible(); },
+                   .set = [obj](const bool &v) { obj->set_visible(v); } }));
 
     auto &info = layout.add_column("Mesh");
     auto geometry_of = [obj]() -> const sg::MeshGeometry * {
@@ -202,7 +206,7 @@ auto object_layout(sg::Object &object) -> Layout {
         const auto *shading = obj->find_feature<sg::BasicShading>();
         if (shading == nullptr) return std::nullopt;
         for (const auto &layer : shading->render_layers()) {
-            if (auto p = shading->layer_attribute(layer, sg::position_role)) {
+            if (auto p = shading->layer_attribute(layer, sg::roles::position())) {
                 return p->count();
             }
         }
@@ -212,9 +216,16 @@ auto object_layout(sg::Object &object) -> Layout {
         const auto *g = geometry_of();
         return g ? std::optional(g->triangle_count()) : std::nullopt;
     }));
-    info.add_property(count("Edges", [geometry_of] {
+    info.add_property(count("Tetrahedra", [geometry_of] {
         const auto *g = geometry_of();
-        return g ? std::optional(g->edge_count()) : std::nullopt;
+        return g ? std::optional(g->simplex_count(3)) : std::nullopt;
+    }));
+    // Its own edges, else those of its highest dimension.
+    info.add_property(count("Edges", [obj]() -> std::optional<std::size_t> {
+        const auto *instance = obj->find_feature<sg::MeshInstance>();
+        if (instance == nullptr || instance->geometry() == nullptr) return std::nullopt;
+        const auto edges = instance->view(sg::views::edges());
+        return edges ? edges->edge_count() : 0;
     }));
     return layout;
 }
@@ -240,6 +251,62 @@ auto transform_layout(sg::Object &object) -> Layout {
 
 // ── Data tab ────────────────────────────────────────────────────────
 
+// Which registered geometry view a layer draws.  Views with nothing to
+// show for this mesh are disabled.
+auto view_property(sg::BasicShading &shading, sg::MeshLayerId layer_id) -> Property {
+    auto *sh = &shading;
+    // Sorted by label.
+    const auto views = [] {
+        auto all = sg::geometry_views().all();
+        std::ranges::sort(all, {}, [](sg::GeometryView v) { return v.value().label; });
+        return all;
+    };
+    auto property = make_property(
+        "View",
+        ChoiceInput{
+            .options =
+                [views] {
+                    return std::ranges::to<std::vector>(
+                        views() | std::views::transform([](sg::GeometryView v) {
+                            return v.value().label;
+                        }));
+                },
+            .get_index =
+                [sh, layer_id, views] {
+                    const auto *layer = sh->find_layer(layer_id);
+                    if (layer == nullptr) return 0;
+                    const auto all = views();
+                    return static_cast<int>(std::ranges::find(all, layer->view)
+                                            - all.begin());
+                },
+            .set_index =
+                [sh, layer_id, views](const int &i) {
+                    const auto all = views();
+                    auto *layer = sh->find_layer(layer_id);
+                    if (layer == nullptr || i < 0
+                        || static_cast<std::size_t>(i) >= all.size()) {
+                        return;
+                    }
+                    layer->view = all[static_cast<std::size_t>(i)];
+                    // Let the renderer adapt to the new geometry.
+                    if (layer->renderer) layer->renderer->fit_to({*sh, layer_id});
+                },
+            .option_enabled =
+                [sh, views](int i) {
+                    const auto all = views();
+                    if (i < 0 || static_cast<std::size_t>(i) >= all.size()
+                        || !sh->is_attached()) {
+                        return false;
+                    }
+                    const auto *instance = sh->object().find_feature<sg::MeshInstance>();
+                    return instance != nullptr
+                           && instance->view(all[static_cast<std::size_t>(i)]) != nullptr;
+                },
+        });
+    property.tooltip = "The form of the mesh this layer draws";
+    return property;
+}
+
 auto render_layers_layout(sg::BasicShading &shading) -> Layout {
     Layout layout;
     for (auto &layer : shading.render_layers()) {
@@ -247,6 +314,7 @@ auto render_layers_layout(sg::BasicShading &shading) -> Layout {
         auto renderer_layout =
             layer.renderer->build_controls(sg::MeshLayerContext(shading, layer.id));
         renderer_layout.add_property(bool_property("Enabled", layer.enabled));
+        renderer_layout.add_property(view_property(shading, layer.id));
         auto &bindings = renderer_layout.add_column("Bindings");
         for (const auto &requirement : layer.renderer->required_roles()) {
             bindings.add_property(role_property(shading, layer.id, requirement));
@@ -266,7 +334,7 @@ auto shading_layout(sg::BasicShading &shading) -> Layout {
     const sg::MeshLayerId layer_id = layer->id;
     auto has_normals = [sh, layer_id] {
         const auto *l = sh->find_layer(layer_id);
-        return l && has_role(*sh, *l, sg::normal_role);
+        return l && has_role(*sh, *l, sg::roles::normal());
     };
     auto constrain = [renderer, has_normals] { renderer->state.constrain(has_normals()); };
     constrain(); // state may have been set before normals were known

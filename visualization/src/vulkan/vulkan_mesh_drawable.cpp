@@ -65,7 +65,8 @@ void VulkanMeshDrawable::init(Film &film) {
 }
 
 void VulkanMeshDrawable::release() {
-    _buffers.release();
+    for (auto &view : _view_buffers) view->buffers.release();
+    _view_buffers.clear();
 
     for (auto &ubo : _transform_ubos) ubo.release();
     _transform_ubos.clear();
@@ -84,8 +85,6 @@ void VulkanMeshDrawable::release() {
     }
     _descriptor_sets.clear();
 
-    _synced_geometry = nullptr;
-    _synced_geometry_version = 0;
     _initialized = false;
 }
 
@@ -93,10 +92,7 @@ void VulkanMeshDrawable::release() {
 
 void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
     if (!_initialized) return;
-    if (!object().visible) return;
-
-    // Re-upload GPU buffers if the geometry changed.
-    sync_buffers(film);
+    if (!object().visible_in_hierarchy()) return;
 
     // Upload transforms once per frame (to current frame's UBO).
     update_transform_ubo(cam, film);
@@ -107,52 +103,57 @@ void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
 
 // ── Private: sync ───────────────────────────────────────────────────
 
-void VulkanMeshDrawable::sync_buffers(Film &film) {
-    const auto *shading = object().find_feature<scene_graph::BasicShading>();
-    const auto *geometry = shading ? shading->geometry() : nullptr;
-    if (!geometry) return;
-    if (geometry == _synced_geometry
-        && geometry->version() == _synced_geometry_version) {
-        return;
+auto VulkanMeshDrawable::buffers_for(Film &film,
+                                     const scene_graph::BasicShading &shading,
+                                     const scene_graph::MeshRenderLayer &layer)
+    -> MeshBuffers * {
+    const auto geometry = shading.layer_geometry(layer);
+    if (!geometry) return nullptr;
+    auto it = std::ranges::find(_view_buffers, layer.view,
+                                [](const auto &v) { return v->view; });
+    if (it == _view_buffers.end()) {
+        _view_buffers.push_back(std::make_unique<ViewBuffers>(layer.view));
+        it = std::prev(_view_buffers.end());
+    }
+    auto &view = **it;
+    if (view.geometry == geometry && view.version == geometry->version()) {
+        return &view.buffers;
     }
 
     // Attribute values may have changed in place; layers re-upload what
     // they bind on their next draw.
-    _buffers.clear_attributes();
-
-    // Upload triangle indices.
+    view.buffers.clear_attributes();
     if (geometry->has_triangle_indices()) {
         // Column per triangle, so the buffer is element-major.
         const auto triangles = geometry->triangle_indices();
-        _buffers.upload_triangle_indices(
+        view.buffers.upload_triangle_indices(
             film,
             std::span(triangles.data_handle(), triangles.size()),
             static_cast<uint32_t>(triangles.extent(1)));
     }
-
-    // Upload edge indices.
     if (geometry->has_edge_indices()) {
         const auto edges = geometry->edge_indices();
-        _buffers.upload_edge_indices(
+        view.buffers.upload_edge_indices(
             film,
             std::span(edges.data_handle(), edges.size()),
             static_cast<uint32_t>(edges.extent(1)));
     }
-
-    _synced_geometry = geometry;
-    _synced_geometry_version = geometry->version();
+    view.geometry = geometry;
+    view.version = geometry->version();
+    return &view.buffers;
 }
 
 auto VulkanMeshDrawable::layer_inputs(Film &film,
+                                      MeshBuffers &buffers,
                                       const scene_graph::BasicShading &shading,
                                       const scene_graph::MeshRenderLayer &layer)
     -> MeshVertexInputs {
-    auto input = [&](std::string_view role) {
-        return _buffers.attribute(film, shading.layer_attribute(layer, role));
+    auto input = [&](scene_graph::MeshRole role) {
+        return buffers.attribute(film, shading.layer_attribute(layer, role));
     };
-    return {.positions = input(scene_graph::position_role),
-            .normals = input(scene_graph::normal_role),
-            .scalars = input(scene_graph::scalar_role)};
+    return {.positions = input(scene_graph::roles::position()),
+            .normals = input(scene_graph::roles::normal()),
+            .scalars = input(scene_graph::roles::scalar())};
 }
 
 // ── Private: transform UBO ──────────────────────────────────────────
@@ -306,7 +307,9 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
     for (const auto &layer : shading->render_layers()) {
         if (!layer.enabled || !layer.renderer) continue;
         if (layer_slot == k_max_material_layers) break;
-        const auto inputs = layer_inputs(film, *shading, layer);
+        auto *buffers = buffers_for(film, *shading, layer);
+        if (buffers == nullptr) continue;
+        const auto inputs = layer_inputs(film, *buffers, *shading, layer);
         if (inputs.positions == nullptr) continue;
         const auto request = layer.renderer->draw_request();
         const auto topology = request.primitive == scene_graph::MeshPrimitive::Triangles
@@ -315,8 +318,8 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
                                   ? vk::PrimitiveTopology::eLineList
                                   : vk::PrimitiveTopology::ePointList;
         const bool available =
-            (request.primitive == scene_graph::MeshPrimitive::Triangles && _buffers.has_triangle_indices())
-            || (request.primitive == scene_graph::MeshPrimitive::Edges && _buffers.has_edge_indices())
+            (request.primitive == scene_graph::MeshPrimitive::Triangles && buffers->has_triangle_indices())
+            || (request.primitive == scene_graph::MeshPrimitive::Edges && buffers->has_edge_indices())
             || request.primitive == scene_graph::MeshPrimitive::Vertices;
         if (!available) continue;
         const auto pipeline = _manager->get_or_create(request.state, request.colormap, topology,
@@ -335,11 +338,11 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         cb.setLineWidth(layer.renderer->line_width());
         cb.setDepthBias(0.0f, 0.0f, 0.0f);
         if (request.primitive == scene_graph::MeshPrimitive::Triangles) {
-            cb.bindIndexBuffer(_buffers.triangle_index_buffer(), 0, vk::IndexType::eUint32);
-            cb.drawIndexed(_buffers.triangle_count() * 3, 1, 0, 0, 0);
+            cb.bindIndexBuffer(buffers->triangle_index_buffer(), 0, vk::IndexType::eUint32);
+            cb.drawIndexed(buffers->triangle_count() * 3, 1, 0, 0, 0);
         } else if (request.primitive == scene_graph::MeshPrimitive::Edges) {
-            cb.bindIndexBuffer(_buffers.edge_index_buffer(), 0, vk::IndexType::eUint32);
-            cb.drawIndexed(_buffers.edge_count() * 2, 1, 0, 0, 0);
+            cb.bindIndexBuffer(buffers->edge_index_buffer(), 0, vk::IndexType::eUint32);
+            cb.drawIndexed(buffers->edge_count() * 2, 1, 0, 0, 0);
         } else {
             cb.draw(inputs.positions->count, 1, 0, 0);
         }

@@ -1,4 +1,5 @@
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
+#include "balsa/visualization/vulkan/vertex_format.hpp"
 #include "balsa/scene_graph/embedding_traits.hpp"
 #include "balsa/visualization/shaders/mesh_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
@@ -24,9 +25,9 @@ std::size_t
     h = hash_combine(h,
                      std::hash<uint32_t>{}(static_cast<uint32_t>(k.topology)));
     h = hash_combine(h, std::hash<std::string>{}(k.colormap));
-    h = hash_combine(h, std::hash<uint8_t>{}(k.position_components));
-    h = hash_combine(h, std::hash<uint8_t>{}(k.normal_components));
-    h = hash_combine(h, std::hash<uint8_t>{}(k.scalar_components));
+    h = hash_combine(h, std::hash<vk::Format>{}(k.position_format));
+    h = hash_combine(h, std::hash<vk::Format>{}(k.normal_format));
+    h = hash_combine(h, std::hash<vk::Format>{}(k.scalar_format));
     h = hash_combine(h,
                      std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
     h = hash_combine(h, std::hash<bool>{}(k.wireframe_overlay));
@@ -49,17 +50,17 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
     key.normal_source = state.normal_source;
     key.topology = topology;
 
-    auto components = [](const AttributeBuffer *b) -> uint8_t {
-        return b ? b->components : 0;
+    auto format = [](const AttributeBuffer *b) {
+        return b ? b->format : vk::Format::eUndefined;
     };
-    key.position_components = components(inputs.positions);
-    key.normal_components = components(inputs.normals);
-    key.scalar_components = components(inputs.scalars);
+    key.position_format = format(inputs.positions);
+    key.normal_format = format(inputs.normals);
+    key.scalar_format = format(inputs.scalars);
 
     // A colormap needs a scalar to map; without one, draw uniform colour.
-    if (key.scalar_components != 0) key.colormap = colormap;
+    if (key.scalar_format != vk::Format::eUndefined) key.colormap = colormap;
     if (key.colormap.empty()) {
-        key.scalar_components = 0; // unused: keep keys equal
+        key.scalar_format = vk::Format::eUndefined; // unused: keep keys equal
     }
 
     // ── Safety net: enforce normal constraints ──────────────────────
@@ -67,11 +68,11 @@ MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
     // MeshRenderState::constrain(), but clamp here as a last resort
     // to prevent shader/vertex-layout mismatches.
     if (key.normal_source == NormalSource::FromAttribute
-        && key.normal_components == 0) {
+        && key.normal_format == vk::Format::eUndefined) {
         key.normal_source = NormalSource::ComputedInShader;
     }
     if (key.normal_source != NormalSource::FromAttribute) {
-        key.normal_components = 0; // unused: keep keys equal
+        key.normal_format = vk::Format::eUndefined; // unused: keep keys equal
     }
     if (key.normal_source == NormalSource::ComputedInShader
         && (key.shading == ShadingModel::Phong
@@ -98,13 +99,13 @@ MeshPipelineManager::MeshPipelineManager(MeshPipelineManager &&o) noexcept
   : _device(o._device), _film(o._film), _shader_library(o._shader_library),
     _shader_revision(o._shader_revision),
     _descriptor_set_layout(o._descriptor_set_layout),
-    _pipeline_layout(o._pipeline_layout), _descriptor_pool(o._descriptor_pool),
+    _pipeline_layout(o._pipeline_layout),
+    _descriptor_allocator(std::move(o._descriptor_allocator)),
     _cache(std::move(o._cache)), _initialized(o._initialized) {
     o._device = vk::Device{};
     o._film = nullptr;
     o._descriptor_set_layout = vk::DescriptorSetLayout{};
     o._pipeline_layout = vk::PipelineLayout{};
-    o._descriptor_pool = vk::DescriptorPool{};
     o._initialized = false;
 }
 
@@ -118,14 +119,13 @@ MeshPipelineManager &
         _shader_revision = o._shader_revision;
         _descriptor_set_layout = o._descriptor_set_layout;
         _pipeline_layout = o._pipeline_layout;
-        _descriptor_pool = o._descriptor_pool;
+        _descriptor_allocator = std::move(o._descriptor_allocator);
         _cache = std::move(o._cache);
         _initialized = o._initialized;
         o._device = vk::Device{};
         o._film = nullptr;
         o._descriptor_set_layout = vk::DescriptorSetLayout{};
         o._pipeline_layout = vk::PipelineLayout{};
-        o._descriptor_pool = vk::DescriptorPool{};
         o._initialized = false;
     }
     return *this;
@@ -138,7 +138,13 @@ void MeshPipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
 
     create_descriptor_set_layout();
     create_pipeline_layout();
-    create_descriptor_pool(max_descriptor_sets);
+    // Each set has 1 static uniform buffer (TransformUBO) and 1 dynamic
+    // uniform buffer (MaterialUBO).
+    _descriptor_allocator.init(
+        _device,
+        {{vk::DescriptorType::eUniformBuffer, 1},
+         {vk::DescriptorType::eUniformBufferDynamic, 1}},
+        max_descriptor_sets);
 
     _initialized = true;
     _shader_revision = _shader_library.revision();
@@ -156,10 +162,7 @@ void MeshPipelineManager::release() {
         }
         _cache.clear();
 
-        if (_descriptor_pool) {
-            _device.destroyDescriptorPool(_descriptor_pool);
-            _descriptor_pool = vk::DescriptorPool{};
-        }
+        _descriptor_allocator.release();
         if (_pipeline_layout) {
             _device.destroyPipelineLayout(_pipeline_layout);
             _pipeline_layout = vk::PipelineLayout{};
@@ -221,33 +224,13 @@ void MeshPipelineManager::create_pipeline_layout() {
     _pipeline_layout = _device.createPipelineLayout(ci);
 }
 
-void MeshPipelineManager::create_descriptor_pool(uint32_t max_sets) {
-    // Each set has 1 static uniform buffer (TransformUBO) and
-    // 1 dynamic uniform buffer (MaterialUBO).
-    std::array<vk::DescriptorPoolSize, 2> pool_sizes;
-    pool_sizes[0].setType(vk::DescriptorType::eUniformBuffer);
-    pool_sizes[0].setDescriptorCount(max_sets); // 1 per set
-    pool_sizes[1].setType(vk::DescriptorType::eUniformBufferDynamic);
-    pool_sizes[1].setDescriptorCount(max_sets); // 1 per set
-
-    vk::DescriptorPoolCreateInfo ci;
-    ci.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
-    ci.setMaxSets(max_sets);
-    ci.setPoolSizes(pool_sizes);
-    _descriptor_pool = _device.createDescriptorPool(ci);
-}
-
 // ── Descriptor set allocation / writing / freeing ────────────────────
 
 vk::DescriptorSet MeshPipelineManager::allocate_descriptor_set() {
     if (!_initialized) {
         throw std::runtime_error("MeshPipelineManager: not initialized");
     }
-    vk::DescriptorSetAllocateInfo ai;
-    ai.setDescriptorPool(_descriptor_pool);
-    ai.setSetLayouts(_descriptor_set_layout);
-    auto sets = _device.allocateDescriptorSets(ai);
-    return sets[0];
+    return _descriptor_allocator.allocate(_descriptor_set_layout);
 }
 
 void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
@@ -291,7 +274,7 @@ void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
 
 void MeshPipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
     if (!_initialized || !ds) return;
-    _device.freeDescriptorSets(_descriptor_pool, {ds});
+    _descriptor_allocator.free(ds);
 }
 
 // ── Pipeline access ──────────────────────────────────────────────────
@@ -377,38 +360,22 @@ vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
 
     // ── Vertex input ────────────────────────────────────────────────
     //
-    // One binding per stream, matching mesh.vert; formats follow the
-    // key's component counts (Vulkan fills missing components):
+    // One binding per stream, matching mesh.vert, in the key's formats
+    // (all read as float; Vulkan fills missing components):
     //   binding 0: position (location 0)
-    //   binding 1: normal   (location 1)  — if normal_components > 0
-    //   binding 3: scalar   (location 3)  — if scalar_components > 0
-
-    auto float_format = [](uint8_t components) -> vk::Format {
-        switch (components) {
-        case 1:
-            return vk::Format::eR32Sfloat;
-        case 2:
-            return vk::Format::eR32G32Sfloat;
-        case 3:
-            return vk::Format::eR32G32B32Sfloat;
-        default:
-            return vk::Format::eR32G32B32A32Sfloat;
-        }
-    };
-
+    //   binding 1: normal   (location 1)  — if normal_format is set
+    //   binding 3: scalar   (location 3)  — if scalar_format is set
     std::vector<vk::VertexInputBindingDescription> binding_descs;
     std::vector<vk::VertexInputAttributeDescription> attrib_descs;
-    auto add_stream = [&](uint32_t location, uint8_t components) {
-        if (components == 0) return;
+    auto add_stream = [&](uint32_t location, vk::Format format) {
+        if (format == vk::Format::eUndefined) return;
         binding_descs.push_back(
-            {location,
-             static_cast<uint32_t>(sizeof(float) * components),
-             vk::VertexInputRate::eVertex});
-        attrib_descs.push_back({location, location, float_format(components), 0});
+            {location, vertex_format_size(format), vk::VertexInputRate::eVertex});
+        attrib_descs.push_back({location, location, format, 0});
     };
-    add_stream(0, key.position_components);
-    add_stream(1, key.normal_components);
-    add_stream(3, key.scalar_components);
+    add_stream(0, key.position_format);
+    add_stream(1, key.normal_format);
+    add_stream(3, key.scalar_format);
 
     vk::PipelineVertexInputStateCreateInfo vertex_input;
     vertex_input.setVertexBindingDescriptions(binding_descs);

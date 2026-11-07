@@ -19,7 +19,12 @@ auto ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) -> voi
 
     create_descriptor_set_layout();
     create_pipeline_layout();
-    create_descriptor_pool(max_descriptor_sets);
+    // Each set has 2 uniform buffers + 1 combined image sampler.
+    _descriptor_allocator.init(
+        _device,
+        {{vk::DescriptorType::eUniformBuffer, 2},
+         {vk::DescriptorType::eCombinedImageSampler, 1}},
+        max_descriptor_sets);
 
     _initialized = true;
     _shader_revision = _shader_library.revision();
@@ -36,10 +41,7 @@ auto ImagePipelineManager::release() -> void {
             _pipeline = vk::Pipeline{};
         }
 
-        if (_descriptor_pool) {
-            _device.destroyDescriptorPool(_descriptor_pool);
-            _descriptor_pool = vk::DescriptorPool{};
-        }
+        _descriptor_allocator.release();
         if (_pipeline_layout) {
             _device.destroyPipelineLayout(_pipeline_layout);
             _pipeline_layout = vk::PipelineLayout{};
@@ -106,32 +108,13 @@ auto ImagePipelineManager::create_pipeline_layout() -> void {
     _pipeline_layout = _device.createPipelineLayout(ci);
 }
 
-auto ImagePipelineManager::create_descriptor_pool(uint32_t max_sets) -> void {
-    // Each set has 2 uniform buffers + 1 combined image sampler.
-    std::array<vk::DescriptorPoolSize, 2> pool_sizes;
-    pool_sizes[0].setType(vk::DescriptorType::eUniformBuffer);
-    pool_sizes[0].setDescriptorCount(max_sets * 2); // 2 UBOs per set
-    pool_sizes[1].setType(vk::DescriptorType::eCombinedImageSampler);
-    pool_sizes[1].setDescriptorCount(max_sets); // 1 sampler per set
-
-    vk::DescriptorPoolCreateInfo ci;
-    ci.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
-    ci.setMaxSets(max_sets);
-    ci.setPoolSizes(pool_sizes);
-    _descriptor_pool = _device.createDescriptorPool(ci);
-}
-
 // ── Descriptor set allocation / writing / freeing ────────────────────
 
 auto ImagePipelineManager::allocate_descriptor_set() -> vk::DescriptorSet {
     if (!_initialized) {
         throw std::runtime_error("ImagePipelineManager: not initialized");
     }
-    vk::DescriptorSetAllocateInfo ai;
-    ai.setDescriptorPool(_descriptor_pool);
-    ai.setSetLayouts(_descriptor_set_layout);
-    auto sets = _device.allocateDescriptorSets(ai);
-    return sets[0];
+    return _descriptor_allocator.allocate(_descriptor_set_layout);
 }
 
 auto ImagePipelineManager::write_descriptor_set(vk::DescriptorSet ds,
@@ -187,7 +170,7 @@ auto ImagePipelineManager::write_descriptor_set(vk::DescriptorSet ds,
 
 auto ImagePipelineManager::free_descriptor_set(vk::DescriptorSet ds) -> void {
     if (!_initialized || !ds) return;
-    _device.freeDescriptorSets(_descriptor_pool, {ds});
+    _descriptor_allocator.free(ds);
 }
 
 // ── Pipeline access ─────────────────────────────────────────────────

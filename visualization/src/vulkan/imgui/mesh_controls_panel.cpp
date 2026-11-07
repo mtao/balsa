@@ -39,7 +39,7 @@ static bool is_ancestor_of(const scene_graph::Object *candidate,
 static std::unique_ptr<scene_graph::Object>
     deep_duplicate(const scene_graph::Object &src) {
     auto copy = std::make_unique<scene_graph::Object>(src.name + " Copy");
-    copy->visible = src.visible;
+    copy->set_visible(src.visible());
     copy->selectable = src.selectable;
     copy->set_translation(src.translation());
     copy->set_rotation(src.rotation());
@@ -63,12 +63,6 @@ static std::unique_ptr<scene_graph::Object>
     return copy;
 }
 
-// Give obj and its descendants the drawables their mesh features need.
-static void ensure_drawables(scene_graph::Object &obj, MeshScene &scene) {
-    scene.ensure_drawable(obj);
-    for (auto &child : obj.children()) ensure_drawables(*child, scene);
-}
-
 
 static bool draw_object_node(scene_graph::Object &obj,
                              MeshScene &scene,
@@ -80,7 +74,10 @@ static bool draw_object_node(scene_graph::Object &obj,
     // ── Visibility checkbox ─────────────────────────────────────────
     // Compact checkbox before the tree node.
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-    if (ImGui::Checkbox("##vis", &obj.visible)) { changed = true; }
+    if (bool visible = obj.visible(); ImGui::Checkbox("##vis", &visible)) {
+        obj.set_visible(visible);
+        changed = true;
+    }
     ImGui::PopStyleVar();
     ImGui::SameLine();
 
@@ -222,8 +219,7 @@ static bool draw_object_node(scene_graph::Object &obj,
         if (!obj.permanent && ImGui::MenuItem("Duplicate")) {
             auto *parent = obj.parent();
             if (parent) {
-                ensure_drawables(parent->add_child(deep_duplicate(obj)),
-                                 scene);
+                scene.ensure_drawables(parent->add_child(deep_duplicate(obj)));
                 changed = true;
             }
         }

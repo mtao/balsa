@@ -1,8 +1,12 @@
 #pragma once
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+#include "balsa/scene_graph/GeometryView.hpp"
+#include "balsa/scene_graph/MeshRole.hpp"
 #include "balsa/visualization/vulkan/buffer.hpp"
 #include "balsa/visualization/vulkan/drawable.hpp"
 #include "balsa/visualization/vulkan/mesh_buffers.hpp"
@@ -89,13 +93,25 @@ class VulkanMeshDrawable : public VulkanDrawable {
     }
 
   private:
-    // Re-upload index buffers and drop uploaded attributes if the shown
-    // MeshGeometry changed since the last sync.
-    void sync_buffers(Film &film);
+    // GPU buffers for one view, re-synced when its geometry changes.
+    struct ViewBuffers {
+        explicit ViewBuffers(scene_graph::GeometryView view) : view(view) {}
+        scene_graph::GeometryView view;
+        // Owned so a rebuilt view cannot reuse its address.
+        std::shared_ptr<const scene_graph::MeshGeometry> geometry;
+        uint64_t version = 0;
+        MeshBuffers buffers;
+    };
+
+    // Synced buffers for the layer's view; nullptr if it is empty.
+    auto buffers_for(Film &film,
+                     const scene_graph::BasicShading &shading,
+                     const scene_graph::MeshRenderLayer &layer) -> MeshBuffers *;
 
     // The vertex streams layer's role bindings resolve to, uploading
     // attributes on first use.
     auto layer_inputs(Film &film,
+                      MeshBuffers &buffers,
                       const scene_graph::BasicShading &shading,
                       const scene_graph::MeshRenderLayer &layer)
         -> MeshVertexInputs;
@@ -129,7 +145,8 @@ class VulkanMeshDrawable : public VulkanDrawable {
     void record_draw_commands(Film &film);
 
     MeshPipelineManager *_manager;
-    MeshBuffers _buffers;
+    // One per view drawn.
+    std::vector<std::unique_ptr<ViewBuffers>> _view_buffers;
 
     // Per-frame UBO buffers and descriptor sets — one per concurrent
     // frame slot — so the CPU can upload data for the current frame
@@ -141,8 +158,6 @@ class VulkanMeshDrawable : public VulkanDrawable {
     vk::DeviceSize _material_ubo_stride = 0;// aligned size per layer slot
 
     ResolvedLightState _scene_light_state;
-    const scene_graph::MeshGeometry *_synced_geometry = nullptr;
-    uint64_t _synced_geometry_version = 0;
     bool _initialized = false;
 };
 

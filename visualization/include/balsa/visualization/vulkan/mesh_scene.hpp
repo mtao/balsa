@@ -80,9 +80,13 @@ class MeshScene : public SceneBase {
     scene_graph::Object &add_mesh(const std::string &name,
                                   scene_graph::MeshGeometry geometry);
 
-    // Remove a mesh Object from the scene by pointer.  Releases its
-    // VulkanMeshDrawable GPU resources and removes it from the scene
-    // graph.  Returns true if found and removed.
+    // Adds an Object tree (e.g. a glTF scene) under the root, with drawables
+    // for its meshes.
+    scene_graph::Object &add_object(std::unique_ptr<scene_graph::Object> object);
+
+    // Remove a mesh Object (and its descendants) from the scene by
+    // pointer, releasing their GPU resources.  Returns true if found and
+    // removed.
     bool remove_mesh(const scene_graph::Object *obj);
 
     // Number of mesh Objects in the scene.
@@ -148,6 +152,8 @@ class MeshScene : public SceneBase {
     // initialized).  No-op if the Object already has a VulkanMeshDrawable
     // or has no MeshInstance.
     void ensure_drawable(scene_graph::Object &obj);
+    // ensure_drawable for obj and its descendants.
+    void ensure_drawables(scene_graph::Object &obj);
 
     // ── Pipeline manager access (for advanced use) ──────────────────
 
