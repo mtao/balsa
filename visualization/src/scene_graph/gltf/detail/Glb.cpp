@@ -1,6 +1,6 @@
 #include "balsa/visualization/scene_graph/gltf/detail/Glb.hpp"
 
-#include "balsa/visualization/scene_graph/gltf/detail/read_le.hpp"
+#include "balsa/visualization/scene_graph/gltf/detail/little_endian.hpp"
 
 #include <format>
 
@@ -14,12 +14,12 @@ namespace {
 } // namespace
 
 auto GlbContents::is_glb(std::span<const std::byte> bytes) -> bool {
-    return read_le<std::uint32_t>(bytes) == GLBHeader::glTF;
+    return read_little_endian<std::uint32_t>(bytes) == GLBHeader::glTF;
 }
 
 auto GlbContents::parse(std::span<const std::byte> bytes)
     -> std::expected<GlbContents, LoadError> {
-    const auto header = read_le<GLBHeader>(bytes);
+    const auto header = read_little_endian<GLBHeader>(bytes);
     if (!header) {
         return error(LoadError::Code::InvalidGlb, "truncated GLB header");
     }
@@ -43,7 +43,7 @@ auto GlbContents::parse(std::span<const std::byte> bytes)
     std::optional<GlbChunk> bin;
     std::vector<GlbChunk> extra;
     while (!rest.empty()) {
-        const auto chunk_header = read_le<GLBChunkHeader>(rest);
+        const auto chunk_header = read_little_endian<GLBChunkHeader>(rest);
         if (!chunk_header) {
             return error(LoadError::Code::InvalidGlb,
                          "truncated GLB chunk header");

@@ -1,5 +1,9 @@
 #pragma once
+#include <algorithm>
+#include <array>
 #include <bit>
+#include <cassert>
+#include <cstddef>
 #include <cstring>
 #include <meta>
 #include <optional>
@@ -13,7 +17,7 @@ namespace balsa::visualization::scene_graph::gltf::detail {
 template <typename T>
     requires std::is_trivially_copyable_v<T>
              && std::has_unique_object_representations_v<T>
-auto read_le(std::span<const std::byte> bytes) -> std::optional<T> {
+auto read_little_endian(std::span<const std::byte> bytes) -> std::optional<T> {
     if (bytes.size() < sizeof(T)) { return std::nullopt; }
     T value;
     std::memcpy(&value, bytes.data(), sizeof(T));
@@ -28,6 +32,18 @@ auto read_le(std::span<const std::byte> bytes) -> std::optional<T> {
         }
     }
     return value;
+}
+
+// Writes `value` little-endian at the start of `bytes`.
+template <typename T>
+    requires std::is_arithmetic_v<T>
+void write_little_endian(std::span<std::byte> bytes, T value) {
+    assert(bytes.size() >= sizeof(T));
+    auto representation = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
+    if constexpr (std::endian::native == std::endian::big) {
+        std::ranges::reverse(representation);
+    }
+    std::ranges::copy(representation, bytes.begin());
 }
 
 } // namespace balsa::visualization::scene_graph::gltf::detail

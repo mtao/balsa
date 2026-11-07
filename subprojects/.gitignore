@@ -16,6 +16,7 @@
 !draco-src.wrap
 !fmt.wrap
 !imgui.wrap
+!meshoptimizer.wrap
 !mshio.wrap
 !nlohmann_json.wrap
 !partio.wrap

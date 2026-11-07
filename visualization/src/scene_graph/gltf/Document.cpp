@@ -3,12 +3,19 @@
 #include "balsa/visualization/scene_graph/gltf/detail/LoadErrors.hpp"
 #include "balsa/visualization/scene_graph/gltf/detail/accessors.hpp"
 #include "balsa/visualization/scene_graph/gltf/detail/meshes.hpp"
+#if defined(BALSA_VISUALIZATION_DRACO)
+#include "balsa/visualization/scene_graph/gltf/detail/draco.hpp"
+#endif
+#if defined(BALSA_VISUALIZATION_MESHOPT)
+#include "balsa/visualization/scene_graph/gltf/detail/meshopt.hpp"
+#endif
 #include "balsa/visualization/scene_graph/gltf/detail/nodes.hpp"
 #include <balsa/json/reflection.hpp>
 #include <balsa/uri/DataUri.hpp>
 #include <balsa/uri/Uri.hpp>
 #include <balsa/string/capitalization.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <format>
@@ -137,16 +144,31 @@ namespace {
         return {};
     }
 
+    // Extensions this build can load.
+    constexpr std::array supported_extensions{
+        std::string_view("KHR_mesh_quantization"),
+#if defined(BALSA_VISUALIZATION_MESHOPT)
+        std::string_view("EXT_meshopt_compression"),
+        std::string_view("KHR_meshopt_compression"),
+#endif
+#if defined(BALSA_VISUALIZATION_DRACO)
+        std::string_view("KHR_draco_mesh_compression"),
+#endif
+    };
+
     auto check_extensions(const glTF &manifest)
         -> std::expected<void, LoadError> {
-        // No extensions are supported yet.
-        if (!manifest.extensionsRequired.empty()) {
-            const auto names = manifest.extensionsRequired
-                               | std::views::join_with(std::string_view(", "))
-                               | std::ranges::to<std::string>();
-            return error(
-                LoadError::Code::UnsupportedExtension,
-                std::format("unsupported required extensions: {}", names));
+        const auto unsupported =
+            manifest.extensionsRequired
+            | std::views::filter([](const std::string &name) {
+                  return !std::ranges::contains(supported_extensions, name);
+              })
+            | std::views::join_with(std::string_view(", "))
+            | std::ranges::to<std::string>();
+        if (!unsupported.empty()) {
+            return error(LoadError::Code::UnsupportedExtension,
+                         std::format("unsupported required extensions: {}",
+                                     unsupported));
         }
         return {};
     }
@@ -266,6 +288,11 @@ auto load(const std::filesystem::path &path, const LoadOptions &options)
               } else if (i == 0 && !asset->glb_bin.empty()) {
                   // Only the first buffer may refer to the GLB binary chunk.
                   bytes.assign(asset->glb_bin.begin(), asset->glb_bin.end());
+#if defined(BALSA_VISUALIZATION_MESHOPT)
+              } else if (detail::is_meshopt_fallback(buffer)) {
+                  // Only read through compressed views.
+                  return {};
+#endif
               } else {
                   errors.add(LoadError::Code::MissingData,
                              std::format("buffer {} has no uri and no GLB "
@@ -286,6 +313,31 @@ auto load(const std::filesystem::path &path, const LoadOptions &options)
         | std::ranges::to<std::vector>();
 
     check_buffer_views(manifest, errors);
+    // Compressed views are decoded into their own range of their buffer.
+    std::vector<bool> decoded(manifest.bufferViews.size(), false);
+#if defined(BALSA_VISUALIZATION_MESHOPT)
+    for (auto &[v, bytes] : detail::decode_meshopt_views(manifest, document.m_buffers, errors)) {
+        const auto &view = manifest.bufferViews[v];
+        auto &buffer = document.m_buffers[static_cast<std::size_t>(view.buffer)];
+        buffer.resize(std::max(buffer.size(),
+                               static_cast<std::size_t>(manifest.buffers[view.buffer].byteLength)));
+        std::ranges::copy(bytes, buffer.begin() + view.byteOffset);
+        decoded[v] = true;
+    }
+#endif
+    // Other views must lie within their buffer's data (fallback buffers have
+    // none).
+    for (const auto &[i, view] : std::views::enumerate(manifest.bufferViews)) {
+        const auto b = static_cast<std::size_t>(view.buffer);
+        if (decoded[static_cast<std::size_t>(i)] || b >= document.m_buffers.size()) {
+            continue;
+        }
+        if (static_cast<std::size_t>(view.byteOffset + view.byteLength)
+            > document.m_buffers[b].size()) {
+            errors.add(LoadError::Code::MissingData,
+                       std::format("bufferView {} reads past buffer {}'s data", i, b));
+        }
+    }
 
     document.m_uri_images =
         std::views::enumerate(manifest.images)
@@ -330,6 +382,13 @@ auto load(const std::filesystem::path &path, const LoadOptions &options)
             | std::ranges::to<std::vector>();
         document.m_accessors =
             detail::materialize_accessors(manifest, views, errors);
+#if defined(BALSA_VISUALIZATION_DRACO)
+        for (auto &&[values, decoded] :
+             std::views::zip(document.m_accessors,
+                             detail::decode_draco_accessors(manifest, views, errors))) {
+            if (decoded) values = std::move(*decoded);
+        }
+#endif
     }
 
     if (!errors.empty()) { return std::unexpected(std::move(errors).combined()); }

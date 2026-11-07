@@ -1,0 +1,4 @@
+[wrap-git]
+url = https://github.com/zeux/meshoptimizer.git
+revision = v0.25
+depth = 1

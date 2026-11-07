@@ -1008,3 +1008,145 @@ TEST_CASE("gltf_attribute_semantics", "[gltf]") {
     CHECK_FALSE(gltf::attribute_semantic("TEXCOORD_x"));
     CHECK_FALSE(gltf::attribute_semantic("COLOR_999"));
 }
+
+#if defined(BALSA_VISUALIZATION_MESHOPT)
+#include <meshoptimizer.h>
+
+TEST_CASE("gltf_meshopt_compression", "[gltf]") {
+    TempDir dir;
+    namespace sg = balsa::scene_graph;
+    // A quad: 4 positions, 2 triangles.
+    const std::array<float, 12> positions{0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+    const std::array<unsigned, 6> indices{0, 1, 2, 0, 2, 3};
+
+    std::vector<unsigned char> vertices(meshopt_encodeVertexBufferBound(4, 12));
+    vertices.resize(meshopt_encodeVertexBuffer(vertices.data(), vertices.size(),
+                                               positions.data(), 4, 12));
+    std::vector<unsigned char> triangles_data(meshopt_encodeIndexBufferBound(6, 4));
+    triangles_data.resize(meshopt_encodeIndexBuffer(triangles_data.data(),
+                                                    triangles_data.size(),
+                                                    indices.data(), 6));
+    std::string bin(reinterpret_cast<const char *>(vertices.data()), vertices.size());
+    while (bin.size() % 4 != 0) bin += '\0';
+    const auto index_offset = bin.size();
+    bin.append(reinterpret_cast<const char *>(triangles_data.data()), triangles_data.size());
+
+    // Buffer 1 is the uncompressed fallback, absent from the file.
+    const auto json = [&](std::size_t vertex_bytes) {
+        return std::format(
+            R"("extensionsUsed":["EXT_meshopt_compression"],)"
+            R"("extensionsRequired":["EXT_meshopt_compression"],)"
+            R"("buffers":[{{"byteLength":{}}},)"
+            R"({{"byteLength":72,"extensions":{{"EXT_meshopt_compression":{{"fallback":true}}}}}}],)"
+            R"("bufferViews":[)"
+            R"({{"buffer":1,"byteLength":48,"byteStride":12,"extensions":{{"EXT_meshopt_compression":)"
+            R"({{"buffer":0,"byteLength":{},"byteStride":12,"count":4,"mode":"ATTRIBUTES"}}}}}},)"
+            R"({{"buffer":1,"byteOffset":48,"byteLength":24,"extensions":{{"EXT_meshopt_compression":)"
+            R"({{"buffer":0,"byteOffset":{},"byteLength":{},"byteStride":4,"count":6,"mode":"TRIANGLES"}}}}}}],)"
+            R"("accessors":[{{"bufferView":0,"componentType":5126,"type":"VEC3","count":4}},)"
+            R"({{"bufferView":1,"componentType":5125,"type":"SCALAR","count":6}}],)"
+            R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}},"indices":1}}]}}])",
+            bin.size(), vertex_bytes, index_offset, triangles_data.size());
+    };
+
+    const auto doc = load_glb(dir, json(vertices.size()), bin);
+    REQUIRE(doc);
+    const auto geometry = gltf::to_mesh_geometry(*doc, 0, 0);
+    REQUIRE(geometry);
+    using Tri = std::array<std::uint32_t, 3>;
+    CHECK(triangles(*geometry) == std::vector<Tri>{{0, 1, 2}, {0, 2, 3}});
+    const auto p = *geometry->attribute_for(sg::semantics::position())->view<float, 3>();
+    for (std::size_t v = 0; v < 4; ++v) {
+        for (std::size_t c = 0; c < 3; ++c) CHECK(p[c, v] == positions[3 * v + c]);
+    }
+
+    // Truncated compressed data is reported.
+    const auto broken = load_glb(dir, json(vertices.size() / 2), bin);
+    REQUIRE_FALSE(broken);
+    CHECK_THAT(broken.error().message, ContainsSubstring("ATTRIBUTES data is corrupt"));
+
+    // A malformed extension is reported, not defaulted.
+    auto bad_mode = json(vertices.size());
+    bad_mode.replace(bad_mode.find("ATTRIBUTES"), std::string_view("ATTRIBUTES").size(), "VERTICES");
+    const auto malformed = load_glb(dir, bad_mode, bin);
+    REQUIRE_FALSE(malformed);
+    CHECK_THAT(malformed.error().message,
+               ContainsSubstring("invalid EXT_meshopt_compression"));
+}
+#endif
+
+#if defined(BALSA_VISUALIZATION_DRACO)
+#include <draco/compression/decode.h>
+#include <draco/compression/encode.h>
+#include <draco/mesh/triangle_soup_mesh_builder.h>
+
+TEST_CASE("gltf_draco_compression", "[gltf]") {
+    TempDir dir;
+    namespace sg = balsa::scene_graph;
+    using Point = std::array<float, 3>;
+    // A quad as two triangles.
+    const std::array<std::array<Point, 3>, 2> quad{{
+        {{{0, 0, 0}, {1, 0, 0}, {1, 1, 0}}},
+        {{{0, 0, 0}, {1, 1, 0}, {0, 1, 0}}},
+    }};
+
+    draco::TriangleSoupMeshBuilder builder;
+    builder.Start(2);
+    const int position = builder.AddAttribute(draco::GeometryAttribute::POSITION, 3,
+                                              draco::DT_FLOAT32);
+    for (int f = 0; f < 2; ++f) {
+        builder.SetAttributeValuesForFace(position, draco::FaceIndex(f), quad[f][0].data(),
+                                          quad[f][1].data(), quad[f][2].data());
+    }
+    const auto mesh = builder.Finalize();
+    REQUIRE(mesh);
+    draco::EncoderBuffer encoded;
+    draco::Encoder encoder;
+    REQUIRE(encoder.EncodeMeshToBuffer(*mesh, &encoded).ok());
+    const std::string bin(encoded.data(), encoded.size());
+
+    // The accessor counts must match the decoded mesh.
+    draco::DecoderBuffer buffer;
+    buffer.Init(encoded.data(), encoded.size());
+    const auto decoded = draco::Decoder().DecodeMeshFromBuffer(&buffer);
+    REQUIRE(decoded.ok());
+    const auto points = decoded.value()->num_points();
+    const auto id = decoded.value()->GetNamedAttribute(draco::GeometryAttribute::POSITION)
+                        ->unique_id();
+
+    const auto doc = load_glb(
+        dir,
+        std::format(R"("extensionsUsed":["KHR_draco_mesh_compression"],)"
+                    R"("extensionsRequired":["KHR_draco_mesh_compression"],)"
+                    R"("buffers":[{{"byteLength":{}}}],)"
+                    R"("bufferViews":[{{"buffer":0,"byteLength":{}}}],)"
+                    R"("accessors":[{{"componentType":5126,"type":"VEC3","count":{}}},)"
+                    R"({{"componentType":5125,"type":"SCALAR","count":6}}],)"
+                    R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}},"indices":1,)"
+                    R"("extensions":{{"KHR_draco_mesh_compression":{{"bufferView":0,)"
+                    R"("attributes":{{"POSITION":{}}}}}}}}}]}}])",
+                    bin.size(), bin.size(), points, id),
+        bin);
+    REQUIRE(doc);
+    const auto geometry = gltf::to_mesh_geometry(*doc, 0, 0);
+    REQUIRE(geometry);
+    REQUIRE(geometry->triangle_count() == 2);
+
+    // Each triangle's corners, rotated to start at the smallest, match.
+    const auto p = *geometry->attribute_for(sg::semantics::position())->view<float, 3>();
+    std::vector<std::array<Point, 3>> found;
+    for (const auto &[a, b, c] : triangles(*geometry)) {
+        std::array<Point, 3> corners{};
+        for (const auto &[k, v] : std::views::enumerate(std::array{a, b, c})) {
+            corners[static_cast<std::size_t>(k)] = {p[0, v], p[1, v], p[2, v]};
+        }
+        std::ranges::rotate(corners, std::ranges::min_element(corners));
+        found.push_back(corners);
+    }
+    auto expected = std::vector(quad.begin(), quad.end());
+    for (auto &corners : expected) std::ranges::rotate(corners, std::ranges::min_element(corners));
+    std::ranges::sort(found);
+    std::ranges::sort(expected);
+    CHECK(found == expected);
+}
+#endif

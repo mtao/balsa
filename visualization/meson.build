@@ -10,9 +10,34 @@ if get_option('imgui') and not get_option('glfw')
   error('The ImGui frontend currently requires GLFW; enable -Dglfw=true or disable -Dimgui')
 endif
 
-if get_option('draco')
-  draco_dep = dependency('draco')
-  geometry_required_deps += draco_dep
+# glTF compression extensions (only with glTF support, -Djson=true).
+# meshoptimizer falls back to its wrap; Draco, a heavier build, only does so
+# when explicitly enabled.
+draco_dep = dependency('', required: false)
+# Draco with its encoder, for tests that compress meshes.
+draco_encoder_dep = dependency('', required: false)
+meshopt_dep = dependency('', required: false)
+if get_option('json')
+  if not get_option('draco').disabled()
+    # The subprojects/draco wrapper builds the draco-src wrap.
+    draco_dep = dependency('draco', method: 'cmake', required: false)
+    draco_encoder_dep = draco_dep
+    if not draco_dep.found() and get_option('draco').enabled()
+      draco_proj = subproject('draco')
+      draco_dep = draco_proj.get_variable('draco_dep')
+      draco_encoder_dep = draco_proj.get_variable('draco_encoder_dep')
+    endif
+  endif
+  if not get_option('meshopt').disabled()
+    meshopt_dep = dependency('meshoptimizer', method: 'cmake', required: false)
+    if not meshopt_dep.found()
+      meshopt_opts = cmake.subproject_options()
+      meshopt_opts.add_cmake_defines({'BUILD_SHARED_LIBS': false,
+                                      'CMAKE_POSITION_INDEPENDENT_CODE': true})
+      meshopt_opts.set_install(false)
+      meshopt_dep = cmake.subproject('meshoptimizer', options: meshopt_opts).dependency('meshoptimizer')
+    endif
+  endif
 endif
 
 # Shader source files are part of the dependency contract, so a binary system
@@ -134,6 +159,16 @@ visualization_sources = [
 # (core checks for reflection and propagates -freflection).
 # BALSA_VISUALIZATION_GLTF marks support.
 visualization_public_args = []
+if draco_dep.found()
+  visualization_private_deps += draco_dep
+  visualization_public_args += ['-DBALSA_VISUALIZATION_DRACO']
+  visualization_sources += 'src/scene_graph/gltf/detail/draco.cpp'
+endif
+if meshopt_dep.found()
+  visualization_private_deps += meshopt_dep
+  visualization_public_args += ['-DBALSA_VISUALIZATION_MESHOPT']
+  visualization_sources += 'src/scene_graph/gltf/detail/meshopt.cpp'
+endif
 if get_option('json')
   visualization_public_args += ['-DBALSA_VISUALIZATION_GLTF']
   visualization_sources += [
