@@ -30,6 +30,7 @@ enum class AttributeDomain : int8_t {
     Vertex = 0,
     Edge = 1,
     Face = 2,
+    Cell = 3, // tetrahedra
 };
 
 // ── MeshAttribute ───────────────────────────────────────────────────
