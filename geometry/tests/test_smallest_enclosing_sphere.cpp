@@ -23,7 +23,7 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
         auto v = m.col(j);
         v = v - C;
     }
-    auto rads = m.colwise().template norm_powered<2>().eval();
+    auto rads = ::zipper::as_vector(m.colwise().template norm_powered<2>()).eval();
     const bool res = (rads.as_array() < (r2)).all();
     return res;
 }
@@ -173,7 +173,7 @@ TEST_CASE("sphere_sampling_test", "[testing_internal]") {
             auto v = m.col(j);
             v = v - C;
         }
-        auto V = m.colwise().template norm_powered<2>().eval();
+        auto V = ::zipper::as_vector(m.colwise().template norm_powered<2>()).eval();
         CHECK((V.as_array() >= min * min).all());
         CHECK_FALSE(valid_circle_rad2(std::make_tuple(C, min * min), pts));
         if (max != 0) {
@@ -236,7 +236,7 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
                 auto v = m.col(j);
                 v = v - c;
             }
-            auto V = m.colwise().norm().eval();
+            auto V = ::zipper::as_vector(m.colwise().norm()).eval();
             CHECK((V.as_array() <= (r + 1e-8)).all());
         }
     };
@@ -266,7 +266,7 @@ TEST_CASE("welzl_base_cases", "[geometry,point_cloud]") {
             auto v = m.col(j);
             v = v - C;
         }
-        auto Ds = ::zipper::as_vector(m.colwise().norm().as_array() - r).eval();
+        auto Ds = ::zipper::as_vector(::zipper::as_array(m.colwise().norm()) - r).eval();
 
         // maxCoeff(Ds) should be ≈ 0: the tightest sphere has at least one
         // boundary point. Allow small floating-point slack in both directions.

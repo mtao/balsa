@@ -68,7 +68,8 @@ class BoundingBox {
     template <::zipper::concepts::Matrix Mat>
     explicit BoundingBox(const Mat &points) : m_aabb(aabb_type::empty()) {
         if (points.extent(1) == 0) { return; }
-        *this = BoundingBox(points.rowwise().min(), points.rowwise().max());
+        *this = BoundingBox(::zipper::as_vector(points.rowwise().min()),
+                            ::zipper::as_vector(points.rowwise().max()));
     }
 
     /// From explicit min/max values (for integral types like uint32_t).
