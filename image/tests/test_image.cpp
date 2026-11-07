@@ -78,8 +78,8 @@ TEST_CASE("image_decode_png", "[image]") {
         const auto array = decoded->array<uint8_t, 4>();
         REQUIRE(array);
         CHECK((*array)(1, 2, 1) == 100);
-        // Coefficient-wise operations.
-        CHECK((*array == uint8_t{7}).any());
+        // Coefficient-wise: the 7s are the six blue values.
+        CHECK((*array == uint8_t{7}).select(1, 0).sum() == 6);
         CHECK_FALSE((*array == uint8_t{42}).any());
     }
 
