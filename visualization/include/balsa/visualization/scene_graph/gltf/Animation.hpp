@@ -18,6 +18,8 @@ enum class AnimationPath {
     rotation,
     scale,
     weights,
+    // KHR_animation_pointer: the target is a JSON pointer in the extension.
+    pointer,
 };
 
 // Interpolation algorithm.
