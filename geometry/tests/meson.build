@@ -10,6 +10,7 @@ geometry_test_sources = [
   'test_circumcenter.cpp',
   'test_volume.cpp',
   'test_bounding_box.cpp',
+  'test_simplicial_complex.cpp',
 ]
 
 
