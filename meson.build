@@ -59,6 +59,8 @@ endif
 
 subdir('core')
 
+subdir('image')
+
 subdir('geometry')
 
 if get_option('visualization')

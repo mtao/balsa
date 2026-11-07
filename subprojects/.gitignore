@@ -3,6 +3,8 @@
 !packagefiles/
 !packagefiles/colormap_shaders/
 !packagefiles/colormap_shaders/meson.build
+!packagefiles/stb/
+!packagefiles/stb/meson.build
 !draco/
 !draco/meson.build
 
@@ -22,4 +24,5 @@
 !partio.wrap
 !simdutf.wrap
 !spdlog.wrap
+!stb.wrap
 !zipper.wrap
