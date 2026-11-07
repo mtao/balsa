@@ -50,7 +50,7 @@ class MeshInstance : public AbstractFeature {
         GeometryView view;
         bool derived = false;
         uint64_t version = 0;
-        std::shared_ptr<const MeshGeometry> geometry;
+        std::shared_ptr<const MeshGeometry> geometry{};
     };
 
     std::shared_ptr<MeshGeometry> _geometry;

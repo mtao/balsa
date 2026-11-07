@@ -17,7 +17,7 @@ struct AttributeSemanticDefinition {
     std::string label;
     AttributeDomain domain = AttributeDomain::Vertex;
     // Shape / type check for attributes in `domain`; null accepts any.
-    std::function<bool(const MeshAttribute &)> accepts;
+    std::function<bool(const MeshAttribute &)> accepts{};
 
     [[nodiscard]] auto admits(const MeshAttribute &attribute) const -> bool {
         return attribute.domain == domain && (!accepts || accepts(attribute));
