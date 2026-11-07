@@ -28,7 +28,7 @@ struct [[=object]] MaterialNormalTextureInfo {
     // mapping.
     [[=json::skip_default]] int64_t texCoord = 0;
     // The scalar parameter applied to each normal vector of the normal texture.
-    [[=json::skip_default]] double scale = 1.0;
+    [[=json::skip_default]] float scale = 1.0f;
     // JSON object with extension-specific objects.
     Extension extensions;
     // Application-specific data.
@@ -43,7 +43,7 @@ struct [[=object]] MaterialOcclusionTextureInfo {
     // mapping.
     [[=json::skip_default]] int64_t texCoord = 0;
     // A scalar multiplier controlling the amount of occlusion applied.
-    [[=json::skip_default]] double strength = 1.0;
+    [[=json::skip_default]] float strength = 1.0f;
     // JSON object with extension-specific objects.
     Extension extensions;
     // Application-specific data.
@@ -54,13 +54,13 @@ struct [[=object]] MaterialOcclusionTextureInfo {
 // material model from Physically-Based Rendering (PBR) methodology.
 struct [[=object]] MaterialPBRMetallicRoughness {
     // The factors for the base color of the material.
-    [[=json::skip_default]] std::array<double, 4> baseColorFactor = {1.0, 1.0, 1.0, 1.0};
+    [[=json::skip_default]] std::array<float, 4> baseColorFactor = {1.0f, 1.0f, 1.0f, 1.0f};
     // The base color texture.
     std::optional<TextureInfo> baseColorTexture;
     // The factor for the metalness of the material.
-    [[=json::skip_default]] double metallicFactor = 1.0;
+    [[=json::skip_default]] float metallicFactor = 1.0f;
     // The factor for the roughness of the material.
-    [[=json::skip_default]] double roughnessFactor = 1.0;
+    [[=json::skip_default]] float roughnessFactor = 1.0f;
     // The metallic-roughness texture.
     std::optional<TextureInfo> metallicRoughnessTexture;
     // JSON object with extension-specific objects.
@@ -95,11 +95,11 @@ struct [[=object]] Material {
     // The emissive texture.
     std::optional<TextureInfo> emissiveTexture;
     // The factors for the emissive color of the material.
-    [[=json::skip_default]] std::array<double, 3> emissiveFactor = {0.0, 0.0, 0.0};
+    [[=json::skip_default]] std::array<float, 3> emissiveFactor = {0.0f, 0.0f, 0.0f};
     // The alpha rendering mode of the material.
     [[=json::skip_default]] AlphaMode alphaMode = AlphaMode::OPAQUE;
     // The alpha cutoff value of the material.
-    [[=json::manual_write]] double alphaCutoff = 0.5;
+    [[=json::manual_write]] float alphaCutoff = 0.5f;
     // Specifies whether the material is double sided.
     [[=json::skip_default]] bool doubleSided = false;
 };

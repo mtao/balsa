@@ -185,6 +185,7 @@ if get_option('json')
     'src/scene_graph/gltf/detail/nodes.cpp',
     'src/scene_graph/gltf/scene_conversion.cpp',
     'src/scene_graph/gltf/mesh_conversion.cpp',
+    'src/scene_graph/gltf/material_conversion.cpp',
     'src/scene_graph/gltf/AccessorView.cpp',
     'src/scene_graph/gltf/glTF.cpp',
     'src/scene_graph/gltf/Image.cpp',
@@ -245,6 +246,7 @@ endif
 
 visualization_public_deps += core_dep
 visualization_public_deps += geometry_dep
+visualization_public_deps += image_dep
 include_dir = [include_directories('include')]
 
 visualization_lib = library('balsaVisualization', visualization_sources,

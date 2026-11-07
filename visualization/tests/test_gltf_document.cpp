@@ -11,6 +11,7 @@
 #include <balsa/visualization/vulkan/vulkan_mesh_drawable.hpp>
 #include <balsa/scene_graph/MeshAttribute.hpp>
 #include <balsa/visualization/scene_graph/gltf/Document.hpp>
+#include <balsa/visualization/scene_graph/gltf/material_conversion.hpp>
 #include <balsa/visualization/scene_graph/gltf/mesh_conversion.hpp>
 #include <balsa/visualization/scene_graph/gltf/scene_conversion.hpp>
 #include <balsa/scene_graph/MeshInstance.hpp>
@@ -1150,3 +1151,121 @@ TEST_CASE("gltf_draco_compression", "[gltf]") {
     CHECK(found == expected);
 }
 #endif
+
+#define STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+#include <stb_image_write.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+namespace {
+// A 2 x 1 RGB PNG: red, then green.
+auto two_pixel_png() -> std::string {
+    const std::array<uint8_t, 6> pixels{255, 0, 0, 0, 255, 0};
+    std::string png;
+    stbi_write_png_to_func(
+        [](void *context, void *data, int size) {
+            static_cast<std::string *>(context)->append(static_cast<const char *>(data),
+                                                        static_cast<std::size_t>(size));
+        },
+        &png, 2, 1, 3, pixels.data(), 6);
+    return png;
+}
+} // namespace
+
+TEST_CASE("gltf_materials", "[gltf][material]") {
+    namespace sg = balsa::scene_graph;
+    TempDir dir;
+    dir.write("texture.png", two_pixel_png());
+    const auto load_materials = [&](std::string_view json) {
+        auto document = gltf::load(dir.write(
+            "materials.gltf", std::format(R"({{"asset":{{"version":"2.0"}},{}}})", json)));
+        REQUIRE(document);
+        return gltf::to_materials(*document);
+    };
+
+    const auto materials = load_materials(R"(
+        "images": [{"uri": "texture.png"}],
+        "samplers": [{"magFilter": 9728, "minFilter": 9986, "wrapS": 33071}],
+        "textures": [{"source": 0, "sampler": 0, "name": "sampled"}, {"source": 0}],
+        "materials": [
+            {"name": "full",
+             "pbrMetallicRoughness": {
+                 "baseColorFactor": [0.5, 0.25, 1, 0.75], "metallicFactor": 0.2,
+                 "baseColorTexture": {"index": 0, "texCoord": 1},
+                 "metallicRoughnessTexture": {"index": 1}},
+             "normalTexture": {"index": 0, "scale": 2},
+             "occlusionTexture": {"index": 1, "strength": 0.5},
+             "emissiveFactor": [1, 0, 0],
+             "alphaMode": "MASK", "alphaCutoff": 0.3, "doubleSided": true},
+            {"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}},
+            {}
+        ])");
+    REQUIRE(materials);
+    REQUIRE(materials->size() == 3);
+
+    const auto &full = *(*materials)[0];
+    CHECK(full.name == "full");
+    CHECK(full.base_color(1) == 0.25f);
+    CHECK(full.base_color(3) == 0.75f);
+    CHECK(full.metallic == 0.2f);
+    CHECK(full.roughness == 1.0f);
+    CHECK(full.normal_scale == 2.0f);
+    CHECK(full.occlusion_strength == 0.5f);
+    CHECK(full.emissive(0) == 1.0f);
+    CHECK(full.alpha_mode == sg::AlphaMode::Mask);
+    CHECK(full.alpha_cutoff == 0.3f);
+    CHECK(full.double_sided);
+    CHECK_FALSE(full.emissive_texture);
+
+    // Texture 0: the decoded image and its sampler.
+    REQUIRE(full.base_color_texture);
+    CHECK(full.base_color_texture->set == 1);
+    const auto &sampled = *full.base_color_texture->texture;
+    CHECK(sampled.name == "sampled");
+    REQUIRE(sampled.image);
+    CHECK(sampled.image->width() == 2);
+    CHECK(sampled.image->channels() == 3);
+    CHECK((*sampled.image->view<uint8_t>())[0, 1, 1] == 255);
+    CHECK(sampled.sampler == sg::Sampler{.magnification = sg::TextureFilter::Nearest,
+                                         .minification = sg::TextureFilter::Nearest,
+                                         .mipmap = sg::TextureFilter::Linear,
+                                         .wrap_u = sg::TextureWrap::ClampToEdge,
+                                         .wrap_v = sg::TextureWrap::Repeat});
+
+    // Textures and images are shared, not converted again.
+    CHECK(full.normal_texture->texture == full.base_color_texture->texture);
+    CHECK((*materials)[1]->base_color_texture->texture == full.base_color_texture->texture);
+    const auto &plain = *full.metallic_roughness_texture->texture;
+    CHECK(&plain != &sampled);
+    CHECK(plain.image == sampled.image);
+    CHECK(plain.sampler == sg::Sampler{});
+
+    // A material without properties has glTF's defaults.
+    const auto &empty = *(*materials)[2];
+    CHECK(empty.base_color(0) == 1.0f);
+    CHECK(empty.alpha_mode == sg::AlphaMode::Opaque);
+    CHECK_FALSE(empty.base_color_texture);
+
+    SECTION("errors") {
+        const auto missing = load_materials(R"(
+            "materials": [{"normalTexture": {"index": 4}}])");
+        REQUIRE_FALSE(missing);
+        CHECK_THAT(missing.error().message, ContainsSubstring("material 0: no texture 4"));
+
+        dir.write("broken.png", "not a png");
+        const auto broken = load_materials(R"(
+            "images": [{"uri": "broken.png"}],
+            "textures": [{"source": 0}],
+            "materials": [{"emissiveTexture": {"index": 0}}])");
+        REQUIRE_FALSE(broken);
+        CHECK_THAT(broken.error().message, ContainsSubstring("image 0"));
+    }
+}

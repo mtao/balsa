@@ -16,8 +16,8 @@ if get_option('json')
   test_gltf_document = executable(
     'test_gltf_document',
     'test_gltf_document.cpp',
-    # Encoders, to compress test meshes.
-    dependencies: [visualization_dep, catch2_with_main_dep, draco_encoder_dep, meshopt_dep],
+    # Encoders, to compress test meshes and write test images.
+    dependencies: [visualization_dep, catch2_with_main_dep, draco_encoder_dep, meshopt_dep, stb_dep],
   )
   test('gltf document test', test_gltf_document)
 endif
