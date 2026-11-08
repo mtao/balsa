@@ -93,9 +93,9 @@ auto scalar_extents(const MeshAttribute &attribute, ScalarReduction reduction)
             return extents_of(data.row(reduction.value));
         }
         switch (reduction.value) {
-        case 1: return extents_of(data.colwise().template norm<1>());
-        case 3: return extents_of(data.colwise().template norm<3>());
-        default: return extents_of(data.colwise().template norm<2>());
+        case 1: return extents_of(::zipper::as_vector(data.colwise().template norm<1>()));
+        case 3: return extents_of(::zipper::as_vector(data.colwise().template norm<3>()));
+        default: return extents_of(::zipper::as_vector(data.colwise().template norm<2>()));
         }
     });
 }
