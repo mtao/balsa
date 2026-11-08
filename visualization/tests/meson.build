@@ -12,6 +12,13 @@ test_embedded_shaders = executable(
 )
 test('embedded shader test', test_embedded_shaders)
 
+test_textures = executable(
+  'test_textures',
+  'test_textures.cpp',
+  dependencies: [visualization_dep, catch2_with_main_dep],
+)
+test('texture test', test_textures)
+
 if get_option('json')
   test_gltf_document = executable(
     'test_gltf_document',
