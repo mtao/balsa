@@ -1,7 +1,6 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <span>
 #include <vulkan/vulkan.hpp>
 
@@ -74,11 +73,6 @@ class VulkanTexture {
     auto transition_layout(vk::CommandBuffer cmd,
                            vk::ImageLayout old_layout,
                            vk::ImageLayout new_layout) -> void;
-
-    // Execute a one-shot command buffer (record -> submit -> waitIdle).
-    // The callback receives the command buffer to record into.
-    auto one_shot_command(std::function<void(vk::CommandBuffer)> record_fn)
-        -> void;
 
     // Return the VkFormat corresponding to our Format enum.
     auto vk_format() const -> vk::Format;

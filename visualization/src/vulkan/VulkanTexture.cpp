@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/VulkanTexture.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/one_shot_command.hpp"
 
 #include <cstring>
 #include <limits>
@@ -286,41 +287,6 @@ auto VulkanTexture::transition_layout(vk::CommandBuffer cmd,
     cmd.pipelineBarrier(src_stage, dst_stage, {}, {}, {}, {barrier});
 }
 
-// ── One-shot command buffer ─────────────────────────────────────────
-
-auto VulkanTexture::one_shot_command(
-    std::function<void(vk::CommandBuffer)> record_fn) -> void {
-    if (!_film) {
-        throw std::runtime_error("VulkanTexture: texture not created");
-    }
-    auto &film = *_film;
-    vk::CommandBufferAllocateInfo cmd_alloc;
-    cmd_alloc.setCommandPool(film.graphics_command_pool());
-    cmd_alloc.setLevel(vk::CommandBufferLevel::ePrimary);
-    cmd_alloc.setCommandBufferCount(1);
-
-    auto cmd_buffers = _device.allocateCommandBuffers(cmd_alloc);
-    vk::CommandBuffer cmd = cmd_buffers[0];
-
-    vk::CommandBufferBeginInfo begin_info;
-    begin_info.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-    cmd.begin(begin_info);
-
-    record_fn(cmd);
-
-    cmd.end();
-
-    vk::SubmitInfo submit_info;
-    submit_info.setCommandBufferCount(1);
-    submit_info.setPCommandBuffers(&cmd);
-
-    vk::Queue queue = film.graphics_queue();
-    queue.submit(submit_info);
-    queue.waitIdle();
-
-    _device.freeCommandBuffers(film.graphics_command_pool(), cmd);
-}
-
 // ── Full upload ─────────────────────────────────────────────────────
 
 auto VulkanTexture::upload(std::span<const std::byte> pixels) -> void {
@@ -339,7 +305,7 @@ auto VulkanTexture::upload(std::span<const std::byte> pixels) -> void {
     _device.unmapMemory(_staging_memory);
 
     // Record one-shot commands: transition, copy, transition.
-    one_shot_command([&](vk::CommandBuffer cmd) {
+    one_shot_command(*_film, [&](vk::CommandBuffer cmd) {
         transition_layout(cmd,
                            _layout,
                            vk::ImageLayout::eTransferDstOptimal);
@@ -408,7 +374,7 @@ auto VulkanTexture::update_region(uint32_t x,
     std::memcpy(mapped, pixels.data(), expected);
     _device.unmapMemory(_staging_memory);
 
-    one_shot_command([&](vk::CommandBuffer cmd) {
+    one_shot_command(*_film, [&](vk::CommandBuffer cmd) {
         // SHADER_READ_ONLY -> TRANSFER_DST
         transition_layout(cmd,
                           vk::ImageLayout::eShaderReadOnlyOptimal,
