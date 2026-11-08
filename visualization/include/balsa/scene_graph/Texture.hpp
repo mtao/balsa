@@ -8,6 +8,10 @@
 
 namespace balsa::scene_graph {
 
+// How a texture's colour values are encoded; set by the material slot
+// using it (e.g. glTF base colour is sRGB, normals linear).
+enum class ColorSpace : uint8_t { Linear, Srgb };
+
 enum class TextureFilter : uint8_t { Nearest, Linear };
 enum class TextureWrap : uint8_t { Repeat, MirroredRepeat, ClampToEdge };
 
