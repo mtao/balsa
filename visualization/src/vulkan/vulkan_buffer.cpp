@@ -1,6 +1,7 @@
 
 #include "balsa/visualization/vulkan/buffer.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/one_shot_command.hpp"
 #include <stdexcept>
 #include <cstring>
 
@@ -122,36 +123,14 @@ void VulkanBuffer::upload_staged(Film &film, const void *data, vk::DeviceSize si
     std::memcpy(mapped, data, static_cast<size_t>(size));
     _device.unmapMemory(staging_memory);
 
-    // 3. Record and submit a copy command
-    vk::CommandBufferAllocateInfo cmd_alloc{};
-    cmd_alloc.commandPool = film.graphics_command_pool();
-    cmd_alloc.level = vk::CommandBufferLevel::ePrimary;
-    cmd_alloc.commandBufferCount = 1;
+    // 3. Copy into this buffer
+    one_shot_command(film, [&](vk::CommandBuffer cmd) {
+        vk::BufferCopy copy_region{};
+        copy_region.size = size;
+        cmd.copyBuffer(staging_buffer, _buffer, copy_region);
+    });
 
-    auto cmd_buffers = _device.allocateCommandBuffers(cmd_alloc);
-    vk::CommandBuffer cmd = cmd_buffers[0];
-
-    vk::CommandBufferBeginInfo begin_info{};
-    begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-    cmd.begin(begin_info);
-
-    vk::BufferCopy copy_region{};
-    copy_region.size = size;
-    cmd.copyBuffer(staging_buffer, _buffer, copy_region);
-
-    cmd.end();
-
-    // 4. Submit and wait
-    vk::SubmitInfo submit_info{};
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cmd;
-
-    vk::Queue queue = film.graphics_queue();
-    queue.submit(submit_info);
-    queue.waitIdle();
-
-    // 5. Clean up staging resources
-    _device.freeCommandBuffers(film.graphics_command_pool(), cmd);
+    // 4. Clean up staging resources
     _device.destroyBuffer(staging_buffer);
     _device.freeMemory(staging_memory);
 }
