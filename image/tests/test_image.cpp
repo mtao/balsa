@@ -1,6 +1,9 @@
 #include <balsa/image/convert.hpp>
 #include <balsa/image/decode.hpp>
 
+#include <zipper/TensorBase.hpp>
+#include <zipper/as.hpp>
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -205,4 +208,49 @@ TEST_CASE("image_convert", "[image]") {
                                  grey.bytes()));
         CHECK(std::ranges::equal(image::convert_component(grey, UInt8).bytes(), grey.bytes()));
     }
+}
+
+TEST_CASE("image_typed_pixels", "[image]") {
+    // 2 x 3 RGB, 16-bit: pixel (row, column) = (row, column, 7).
+    image::Pixels<uint16_t> pixels(2, 3, 3);
+    for (zipper::index_type r = 0; r < 2; ++r) {
+        for (zipper::index_type c = 0; c < 3; ++c) {
+            pixels(r, c, 0) = static_cast<uint16_t>(r);
+            pixels(r, c, 1) = static_cast<uint16_t>(c);
+            pixels(r, c, 2) = 7;
+        }
+    }
+    image::Image image(std::move(pixels), image::Channels::Rgb);
+    CHECK(image.component() == image::ComponentType::UInt16);
+    CHECK(image.height() == 2);
+    CHECK(image.width() == 3);
+    CHECK(image.bytes().size() == 2 * 3 * 3 * sizeof(uint16_t));
+
+    // Typed access is a zipper array; the wrong type gives nothing.
+    CHECK_FALSE(image.pixels<float>());
+    const auto *typed = image.pixels<uint16_t>();
+    REQUIRE(typed);
+    CHECK((*typed)(1, 2, 1) == 2);
+    CHECK(zipper::as_array(typed->over<0, 1>().sum())(2) == 6 * 7);
+
+    // A channel's plane.
+    const auto green = image.channel<uint16_t>(1);
+    REQUIRE(green);
+    CHECK((*green)(0, 2) == 2);
+    CHECK(green->sum() == 2 * (0 + 1 + 2));
+
+    // visit dispatches on the stored type.
+    const auto total = image.visit([](const auto &p) { return static_cast<double>(p.sum()); });
+    CHECK(total == (0 + 0 + 1 + 1 + 1 + 0) + 2 * (0 + 1 + 2) + 6 * 7);
+
+    // Writes through pixels<T>() are seen by the views.
+    (*image.pixels<uint16_t>())(0, 0, 2) = 9;
+    CHECK((*image.view<uint16_t, 3>())[0, 0, 2] == 9);
+
+    // New images are zero-filled.
+    const image::Image blank(2, 2, image::Channels::GreyAlpha, image::ComponentType::Float32);
+    CHECK(blank.pixels<float>()->sum() == 0.0f);
+
+    CHECK_THROWS_AS(image::Image(image::Pixels<float>(1, 1, 3), image::Channels::Rgba),
+                    std::invalid_argument);
 }

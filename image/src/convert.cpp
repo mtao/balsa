@@ -5,12 +5,9 @@
 #include <zipper/Matrix.hpp>
 #include <zipper/Vector.hpp>
 #include <zipper/as.hpp>
-#include <zipper/expression/nullary/StaticConstant.hpp>
 #include <zipper/expression/nullary/Zero.hpp>
 
 #include <array>
-#include <concepts>
-#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
@@ -18,10 +15,6 @@
 namespace balsa::image {
 
 namespace {
-    template <typename T>
-    concept Component = std::same_as<T, uint8_t> || std::same_as<T, uint16_t>
-                        || std::same_as<T, float>;
-
     // The value of T meaning 1: its maximum for integers.
     template <Component T>
     constexpr float unit =
@@ -75,10 +68,11 @@ namespace {
         return A;
     }
 
+    // `source`'s pixels mapped from layout `from` to `to`.
     template <Component T>
-    void rearrange(const Image &image, Image &result) {
-        const auto A = channel_map(*image.layout(), *result.layout(), unit<T>);
-        const auto source = *image.array<T>();
+    auto rearrange(const Pixels<T> &source, Channels from, Channels to)
+        -> Pixels<T> {
+        const auto A = channel_map(from, to, unit<T>);
         const auto mapped =
             ::zipper::as_array(source.template over<2>().template map<2>(
                 [&](const auto &pixel) {
@@ -87,35 +81,11 @@ namespace {
                                  .template cast<float>()
                                  .homogeneous();
                 },
-                ::zipper::dextents<1>(result.channels())));
-        auto target = *result.array<T>();
+                ::zipper::dextents<1>(channel_count(to))));
         if constexpr (std::is_integral_v<T>) {
-            target = mapped.round().template cast<T>();
+            return Pixels<T>(mapped.round().template cast<T>());
         } else {
-            target = mapped.template cast<T>();
-        }
-    }
-
-    template <Component From, Component To>
-    void recast(const Image &image, Image &result) {
-        const auto source = *image.array<From>();
-        auto target = *result.array<To>();
-        target = from_unit<To>(source.template cast<float>() / unit<From>);
-    }
-
-    // Calls f.template operator()<T>() with T the C++ type of `component`.
-    template <typename F>
-    void with_type(ComponentType component, F &&f) {
-        switch (component) {
-        case ComponentType::UInt8:
-            f.template operator()<uint8_t>();
-            break;
-        case ComponentType::UInt16:
-            f.template operator()<uint16_t>();
-            break;
-        case ComponentType::Float32:
-            f.template operator()<float>();
-            break;
+            return Pixels<T>(mapped.template cast<T>());
         }
     }
 } // namespace
@@ -126,20 +96,20 @@ auto convert_channels(const Image &image, Channels layout) -> Image {
             "image::convert_channels: the image's layout is unknown");
     }
     if (image.layout() == layout) return image;
-    Image result(image.height(), image.width(), layout, image.component());
-    with_type(image.component(),
-              [&]<Component T>() { rearrange<T>(image, result); });
-    return result;
+    return image.visit([&]<Component T>(const Pixels<T> &pixels) {
+        return Image(rearrange(pixels, *image.layout(), layout), layout);
+    });
 }
 
 auto convert_component(const Image &image, ComponentType component) -> Image {
     if (image.component() == component) return image;
-    Image result(image.extents(), component, image.layout());
-    with_type(image.component(), [&]<Component From>() {
-        with_type(component,
-                  [&]<Component To>() { recast<From, To>(image, result); });
+    return image.visit([&]<Component From>(const Pixels<From> &pixels) {
+        return with_component(component, [&]<Component To>() {
+            return Image(
+                Pixels<To>(from_unit<To>(pixels.template cast<float>() / unit<From>)),
+                image.layout());
+        });
     });
-    return result;
 }
 
 } // namespace balsa::image

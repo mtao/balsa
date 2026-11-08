@@ -7,30 +7,61 @@
 
 namespace balsa::image {
 
-namespace detail {
-    template <typename T>
-    constexpr auto component_of() -> std::optional<ComponentType> {
-        if constexpr (std::is_same_v<T, uint8_t>) return ComponentType::UInt8;
-        else if constexpr (std::is_same_v<T, uint16_t>) return ComponentType::UInt16;
-        else if constexpr (std::is_same_v<T, float>) return ComponentType::Float32;
-        else return std::nullopt;
-    }
-} // namespace detail
+template <Component T>
+Image::Image(Pixels<T> pixels, std::optional<Channels> layout) : m_pixels(std::move(pixels)) {
+    set_layout(layout);
+}
+
+template <Component T>
+auto Image::pixels() const -> const Pixels<T> * {
+    return std::get_if<Pixels<T>>(&m_pixels);
+}
+
+template <Component T>
+auto Image::pixels() -> Pixels<T> * {
+    return std::get_if<Pixels<T>>(&m_pixels);
+}
+
+template <typename F>
+auto Image::visit(F &&f) const -> decltype(auto) {
+    return std::visit(std::forward<F>(f), m_pixels);
+}
+
+template <typename F>
+auto Image::visit(F &&f) -> decltype(auto) {
+    return std::visit(std::forward<F>(f), m_pixels);
+}
+
+template <Component T>
+auto Image::channel(std::size_t c) const -> std::optional<ChannelView<T>> {
+    const auto *p = pixels<T>();
+    if (p == nullptr) return std::nullopt;
+    return p->slice(::zipper::full_extent_t{}, ::zipper::full_extent_t{},
+                    static_cast<::zipper::index_type>(c));
+}
 
 template <typename T, std::size_t Channels>
 auto Image::view() const -> std::optional<View<const T, Channels>> {
-    if (detail::component_of<T>() != m_component) return std::nullopt;
-    if (Channels != any_channels && Channels != channels()) return std::nullopt;
-    return View<const T, Channels>(reinterpret_cast<const T *>(m_pixels.data()),
-                                   ExtentsOf<Channels>(m_extents));
+    if constexpr (!Component<T>) {
+        return std::nullopt;
+    } else {
+        const auto *p = pixels<T>();
+        if (p == nullptr) return std::nullopt;
+        if (Channels != any_channels && Channels != channels()) return std::nullopt;
+        return View<const T, Channels>(p->expression().data(), ExtentsOf<Channels>(extents()));
+    }
 }
 
 template <typename T, std::size_t Channels>
 auto Image::view() -> std::optional<View<T, Channels>> {
-    if (detail::component_of<T>() != m_component) return std::nullopt;
-    if (Channels != any_channels && Channels != channels()) return std::nullopt;
-    return View<T, Channels>(reinterpret_cast<T *>(m_pixels.data()),
-                             ExtentsOf<Channels>(m_extents));
+    if constexpr (!Component<T>) {
+        return std::nullopt;
+    } else {
+        auto *p = pixels<T>();
+        if (p == nullptr) return std::nullopt;
+        if (Channels != any_channels && Channels != channels()) return std::nullopt;
+        return View<T, Channels>(p->expression().data(), ExtentsOf<Channels>(extents()));
+    }
 }
 
 template <typename T, std::size_t Channels>
