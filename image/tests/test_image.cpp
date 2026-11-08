@@ -1,3 +1,4 @@
+#include <balsa/image/convert.hpp>
 #include <balsa/image/decode.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -59,6 +60,7 @@ TEST_CASE("image_decode_png", "[image]") {
     CHECK(decoded->height() == 2);
     CHECK(decoded->channels() == 4);
     CHECK(decoded->component() == image::ComponentType::UInt8);
+    CHECK(decoded->layout() == image::Channels::Rgba);
     CHECK_FALSE(decoded->view<float>());
     const auto view = *decoded->view<uint8_t>();
     CHECK(view[1, 2, 0] == 20);
@@ -84,12 +86,11 @@ TEST_CASE("image_decode_png", "[image]") {
     }
 
     SECTION("converting channels") {
-        const auto rgb = image::decode(png, {.channels = 3});
+        const auto rgb = image::decode(png, {.channels = image::Channels::Rgb});
         REQUIRE(rgb);
         CHECK(rgb->channels() == 3);
         CHECK((*rgb->view<uint8_t>())[1, 2, 0] == 20);
 
-        CHECK_FALSE(image::decode(png, {.channels = 5}));
     }
 }
 
@@ -113,7 +114,7 @@ TEST_CASE("image_decode_jpeg", "[image]") {
     REQUIRE(stbi_write_jpg_to_func(append, &jpeg, 8, 8, 1, grey.data(), 95));
 
     // stb_image_write stores colour even for grey input.
-    const auto decoded = image::decode(jpeg, {.channels = 1});
+    const auto decoded = image::decode(jpeg, {.channels = image::Channels::Grey});
     REQUIRE(decoded);
     CHECK(decoded->channels() == 1);
     const auto value = (*decoded->view<uint8_t>())[4, 4, 0];
@@ -136,4 +137,72 @@ TEST_CASE("image_decode_errors", "[image]") {
     REQUIRE_FALSE(truncated);
     CHECK(truncated.error().code == image::DecodeError::Code::Corrupt);
     CHECK_THAT(truncated.error().message, ContainsSubstring("corrupt"));
+}
+
+TEST_CASE("image_convert", "[image]") {
+    using enum image::ComponentType;
+    // 2 x 1 grey + alpha, 8-bit: (51, 255), (255, 0).
+    image::Image grey(1, 2, image::Channels::GreyAlpha, UInt8);
+    auto g = *grey.view<uint8_t>();
+    g[0, 0, 0] = 51;
+    g[0, 0, 1] = 255;
+    g[0, 1, 0] = 255;
+    g[0, 1, 1] = 0;
+    CHECK(grey.layout() == image::Channels::GreyAlpha);
+
+    SECTION("channels: grey to RGBA keeps values and alpha") {
+        const auto rgba = image::convert_channels(grey, image::Channels::Rgba);
+        CHECK(rgba.component() == UInt8);
+        const auto v = *rgba.view<uint8_t, 4>();
+        CHECK(v[0, 0, 0] == 51);
+        CHECK(v[0, 0, 2] == 51);
+        CHECK(v[0, 0, 3] == 255);
+        CHECK(v[0, 1, 3] == 0);
+    }
+    SECTION("channels: RGB to grey by luminance, opaque alpha") {
+        image::Image rgb(1, 1, image::Channels::Rgb, UInt16);
+        auto c = *rgb.view<uint16_t>();
+        c[0, 0, 0] = 0;
+        c[0, 0, 1] = 65535;
+        c[0, 0, 2] = 0;
+        const auto ga = image::convert_channels(rgb, image::Channels::GreyAlpha);
+        const auto v = *ga.view<uint16_t, 2>();
+        CHECK(v[0, 0, 0] == 46871); // 0.7152 * 65535
+        CHECK(v[0, 0, 1] == 65535);
+    }
+    SECTION("components keep normalised values and channels") {
+        const auto wide = image::convert_component(grey, UInt16);
+        CHECK(wide.channels() == 2);
+        CHECK((*wide.view<uint16_t>())[0, 0, 0] == 51 * 257);
+        const auto real = image::convert_component(grey, Float32);
+        CHECK((*real.view<float>())[0, 0, 0] == 0.2f);
+        CHECK(image::convert_component(real, UInt8).bytes()[0] == std::byte{51});
+    }
+    SECTION("components: floats clamp to integer range") {
+        image::Image hdr(1, 1, image::Channels::Rgb, Float32);
+        auto h = *hdr.view<float>();
+        h[0, 0, 0] = 2.0f;
+        h[0, 0, 1] = -1.0f;
+        h[0, 0, 2] = 0.5f;
+        const auto ldr = image::convert_component(hdr, UInt8);
+        const auto v = *ldr.view<uint8_t, 3>();
+        CHECK(v[0, 0, 0] == 255);
+        CHECK(v[0, 0, 1] == 0);
+        CHECK(v[0, 0, 2] == 128);
+    }
+    SECTION("layouts are explicit") {
+        CHECK(image::convert_component(grey, Float32).layout() == image::Channels::GreyAlpha);
+        // Two channels of plain data (e.g. a normal map's XY) are not grey + alpha.
+        image::Image data(image::Image::Extents(1, 1, 2), UInt8);
+        CHECK_FALSE(data.layout());
+        CHECK_THROWS_AS(image::convert_channels(data, image::Channels::Rgba), std::invalid_argument);
+        CHECK_THROWS_AS(data.set_layout(image::Channels::Rgb), std::invalid_argument);
+        data.set_layout(image::Channels::GreyAlpha);
+        CHECK(image::convert_channels(data, image::Channels::Rgba).channels() == 4);
+    }
+    SECTION("unchanged formats copy") {
+        CHECK(std::ranges::equal(image::convert_channels(grey, image::Channels::GreyAlpha).bytes(),
+                                 grey.bytes()));
+        CHECK(std::ranges::equal(image::convert_component(grey, UInt8).bytes(), grey.bytes()));
+    }
 }

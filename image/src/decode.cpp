@@ -38,11 +38,6 @@ namespace {
 
 auto decode(std::span<const std::byte> bytes, const DecodeOptions &options)
     -> std::expected<Image, DecodeError> {
-    if (options.channels > 4) {
-        return std::unexpected(DecodeError{DecodeError::Code::UnsupportedFormat,
-                                           std::format("cannot decode to {} channels",
-                                                       options.channels)});
-    }
     if (bytes.size() > static_cast<std::size_t>(INT_MAX)) {
         return std::unexpected(
             DecodeError{DecodeError::Code::UnsupportedFormat, "encoded image exceeds 2 GiB"});
@@ -54,7 +49,7 @@ auto decode(std::span<const std::byte> bytes, const DecodeOptions &options)
     if (!stbi_info_from_memory(data, length, &width, &height, &stored)) {
         return failure(DecodeError::Code::UnsupportedFormat, "unrecognised image format");
     }
-    const auto requested = static_cast<int>(options.channels);
+    const auto requested = options.channels ? static_cast<int>(*options.channels) : 0;
     const auto component = stbi_is_hdr_from_memory(data, length)  ? ComponentType::Float32
                            : stbi_is_16_bit_from_memory(data, length) ? ComponentType::UInt16
                                                                      : ComponentType::UInt8;
@@ -73,7 +68,9 @@ auto decode(std::span<const std::byte> bytes, const DecodeOptions &options)
     }
     if (!pixels) return failure(DecodeError::Code::Corrupt, "corrupt image");
 
-    Image image(Image::Extents(height, width, requested ? requested : stored), component);
+    // stb's channel counts mean grey, grey + alpha, RGB and RGBA.
+    const auto layout = static_cast<Channels>(requested ? requested : stored);
+    Image image(static_cast<std::size_t>(height), static_cast<std::size_t>(width), layout, component);
     const auto *source = static_cast<const std::byte *>(pixels.get());
     std::ranges::copy(std::span(source, image.bytes().size()), image.bytes().begin());
     return image;

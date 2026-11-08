@@ -27,9 +27,23 @@ enum class ComponentType : uint8_t {
     return 0;
 }
 
-// Pixels with interleaved channels, rows top to bottom.  Colour space is
-// not recorded: it depends on how the image is used (e.g. a glTF base
-// colour texture is sRGB, a normal map linear).
+// What an image's channels hold; the value is the channel count.
+enum class Channels : uint8_t {
+    Grey = 1,
+    GreyAlpha = 2,
+    Rgb = 3,
+    Rgba = 4,
+};
+
+[[nodiscard]] constexpr auto channel_count(Channels layout) -> std::size_t {
+    return static_cast<std::size_t>(layout);
+}
+
+// Pixels with interleaved channels, rows top to bottom.  What the channels
+// hold (layout()) is recorded when known, e.g. by decode(); otherwise they
+// are plain data (e.g. a two-channel normal map is not grey + alpha).
+// Colour space is not recorded: it depends on how the image is used (e.g. a
+// glTF base colour texture is sRGB, a normal map linear).
 class Image {
   public:
     static constexpr std::size_t any_channels = ::zipper::dynamic_extent;
@@ -45,14 +59,22 @@ class Image {
     using ArrayView = decltype(::zipper::ArrayBase(std::declval<View<T, Channels>>()));
 
     Image() = default;
-    // Zero-filled.
-    Image(Extents extents, ComponentType component);
+    // Zero-filled; throws std::invalid_argument if `layout` does not have
+    // extents' channel count.
+    Image(Extents extents, ComponentType component, std::optional<Channels> layout = std::nullopt);
+    // Zero-filled, with layout's channel count.
+    Image(std::size_t height, std::size_t width, Channels layout, ComponentType component);
 
     [[nodiscard]] auto extents() const -> const Extents & { return m_extents; }
     [[nodiscard]] auto width() const -> std::size_t { return m_extents.extent(1); }
     [[nodiscard]] auto height() const -> std::size_t { return m_extents.extent(0); }
     [[nodiscard]] auto channels() const -> std::size_t { return m_extents.extent(2); }
     [[nodiscard]] auto component() const -> ComponentType { return m_component; }
+    // What the channels hold; nullopt if unknown (plain data).
+    [[nodiscard]] auto layout() const -> std::optional<Channels> { return m_layout; }
+    // Throws std::invalid_argument if `layout` does not have channels()
+    // channels.
+    auto set_layout(std::optional<Channels> layout) -> void;
     [[nodiscard]] auto empty() const -> bool { return m_pixels.empty(); }
 
     [[nodiscard]] auto bytes() const -> std::span<const std::byte> { return m_pixels; }
@@ -73,6 +95,7 @@ class Image {
   private:
     Extents m_extents{0, 0, 0};
     ComponentType m_component = ComponentType::UInt8;
+    std::optional<Channels> m_layout;
     std::vector<std::byte> m_pixels;
 };
 
