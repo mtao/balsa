@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 // Collects load problems into one LoadError.
 class LoadErrors {
@@ -41,4 +41,4 @@ class LoadErrors {
     std::vector<LoadError> m_errors;
 };
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

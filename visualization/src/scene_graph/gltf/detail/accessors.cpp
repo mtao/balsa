@@ -7,7 +7,7 @@
 #include <optional>
 #include <ranges>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 namespace {
     auto rows_and_columns(AccessorType type)
@@ -251,4 +251,4 @@ auto materialize_accessors(
     return storage;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

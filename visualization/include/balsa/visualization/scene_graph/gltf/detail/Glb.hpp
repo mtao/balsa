@@ -10,7 +10,7 @@
 #include <span>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 struct GLBHeader {
     static constexpr std::uint32_t glTF = 0x46546C67; // "glTF"
@@ -51,4 +51,4 @@ struct GlbContents {
         -> std::expected<GlbContents, LoadError>;
 };
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

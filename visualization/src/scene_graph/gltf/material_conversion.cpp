@@ -8,7 +8,7 @@
 #include <format>
 #include <ranges>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 namespace sg = balsa::scene_graph;
 
@@ -177,4 +177,4 @@ auto to_materials(const Document &document)
     return materials;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

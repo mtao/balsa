@@ -5,7 +5,7 @@
 #include <optional>
 #include <ranges>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 void check_meshes(const glTF &manifest, LoadErrors &errors) {
     const auto accessor = [&](std::int64_t index) -> const Accessor * {
@@ -86,4 +86,4 @@ void check_meshes(const glTF &manifest, LoadErrors &errors) {
     }
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

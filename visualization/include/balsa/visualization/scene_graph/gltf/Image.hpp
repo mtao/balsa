@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // Image data used to create a texture. Image MAY be referenced by an URI (or
 // IRI) or a buffer view index.
@@ -28,4 +28,4 @@ struct [[=object]] Image {
 auto to_json(nlohmann::json &j, const Image &v) -> void;
 auto from_json(const nlohmann::json &j, Image &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

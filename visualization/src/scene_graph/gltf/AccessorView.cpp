@@ -1,6 +1,6 @@
 #include "balsa/visualization/scene_graph/gltf/AccessorView.hpp"
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 auto AccessorView::type() const -> AccessorType {
     if (columns() == 1) {
@@ -18,4 +18,4 @@ auto AccessorView::type() const -> AccessorType {
     }
 }
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

@@ -13,7 +13,7 @@
 #include <ranges>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 namespace {
     // A primitive's Draco extension: its compressed data and the Draco
@@ -159,4 +159,4 @@ auto decode_draco_accessors(const glTF &manifest,
     return accessors;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

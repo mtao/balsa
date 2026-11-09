@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // A node in the node hierarchy. When the node contains skin, all
 // mesh.primitives MUST contain JOINTS_0 and WEIGHTS_0 attributes. A node MAY
@@ -55,4 +55,4 @@ struct [[=object]] Node {
 auto to_json(nlohmann::json &j, const Node &v) -> void;
 auto from_json(const nlohmann::json &j, Node &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

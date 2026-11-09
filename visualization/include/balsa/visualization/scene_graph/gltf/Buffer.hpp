@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // A buffer points to binary geometry, animation, or skins.
 struct [[=object]] Buffer {
@@ -23,4 +23,4 @@ struct [[=object]] Buffer {
 auto to_json(nlohmann::json &j, const Buffer &v) -> void;
 auto from_json(const nlohmann::json &j, Buffer &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

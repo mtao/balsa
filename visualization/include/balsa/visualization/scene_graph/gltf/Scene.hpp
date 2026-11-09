@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // The root nodes of a scene.
 struct [[=object]] Scene {
@@ -22,4 +22,4 @@ struct [[=object]] Scene {
 auto to_json(nlohmann::json &j, const Scene &v) -> void;
 auto from_json(const nlohmann::json &j, Scene &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

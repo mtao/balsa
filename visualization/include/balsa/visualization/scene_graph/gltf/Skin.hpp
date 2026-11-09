@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // Joints and matrices defining a skin.
 struct [[=object]] Skin {
@@ -27,4 +27,4 @@ struct [[=object]] Skin {
 auto to_json(nlohmann::json &j, const Skin &v) -> void;
 auto from_json(const nlohmann::json &j, Skin &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

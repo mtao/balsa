@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // Metadata about the glTF asset.
 struct [[=object]] Asset {
@@ -25,4 +25,4 @@ struct [[=object]] Asset {
 auto to_json(nlohmann::json &j, const Asset &v) -> void;
 auto from_json(const nlohmann::json &j, Asset &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

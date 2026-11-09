@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // A texture and its sampler.
 struct [[=object]] Texture {
@@ -26,4 +26,4 @@ struct [[=object]] Texture {
 auto to_json(nlohmann::json &j, const Texture &v) -> void;
 auto from_json(const nlohmann::json &j, Texture &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

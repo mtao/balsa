@@ -11,7 +11,7 @@
 #include <span>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 struct LoadOptions {
     // Fetches the asset's buffer and image URIs. The default handles data:
@@ -70,4 +70,4 @@ class Document {
     std::vector<std::vector<std::byte>> m_accessors;
 };
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

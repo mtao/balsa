@@ -4,7 +4,7 @@
 
 #include <format>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 namespace {
     auto error(LoadError::Code code, std::string message)
@@ -75,4 +75,4 @@ auto GlbContents::parse(std::span<const std::byte> bytes)
     return GlbContents{*header, *json, bin, std::move(extra)};
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

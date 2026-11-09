@@ -25,7 +25,7 @@
 #include <span>
 #include <string_view>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 namespace {
 
@@ -467,4 +467,4 @@ auto Document::accessor(std::size_t i) const -> AccessorView {
     return AccessorView{.data = std::move(values), .normalized = entry.normalized};
 }
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

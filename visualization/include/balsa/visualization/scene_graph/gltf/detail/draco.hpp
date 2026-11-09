@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 inline constexpr std::string_view draco_extension = "KHR_draco_mesh_compression";
 
@@ -19,4 +19,4 @@ auto decode_draco_accessors(const glTF &manifest,
                             LoadErrors &errors)
     -> std::vector<std::optional<std::vector<std::byte>>>;
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

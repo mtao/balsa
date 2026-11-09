@@ -1,7 +1,7 @@
 #include "balsa/visualization/scene_graph/gltf/Animation.hpp"
 #include <balsa/json/reflection.hpp>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 auto to_json(nlohmann::json &j, const AnimationPath &v) -> void {
     json::enum_to_json(j, v);
@@ -45,4 +45,4 @@ auto from_json(const nlohmann::json &j, Animation &v) -> void {
     json::from_json_members(j, v);
 }
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

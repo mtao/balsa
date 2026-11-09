@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 // Whether `buffer` is a meshopt fallback buffer, whose data may be absent.
 auto is_meshopt_fallback(const Buffer &buffer) -> bool;
@@ -24,4 +24,4 @@ auto decode_meshopt_views(const glTF &manifest,
                           std::span<const std::vector<std::byte>> buffers,
                           LoadErrors &errors) -> std::vector<DecodedView>;
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

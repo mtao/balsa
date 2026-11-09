@@ -1,7 +1,10 @@
 #include "balsa/visualization/scene_graph/gltf/scene_conversion.hpp"
 
 #include "balsa/visualization/scene_graph/gltf/detail/LoadErrors.hpp"
+#include "balsa/visualization/scene_graph/gltf/material_conversion.hpp"
 #include "balsa/visualization/scene_graph/gltf/mesh_conversion.hpp"
+#include <balsa/scene_graph/BasicShading.hpp>
+#include <balsa/scene_graph/MeshRenderer.hpp>
 
 #include <balsa/scene_graph/MeshInstance.hpp>
 
@@ -12,11 +15,35 @@
 #include <ranges>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 namespace {
     namespace sg = balsa::scene_graph;
-    using Geometries = std::vector<std::shared_ptr<sg::MeshGeometry>>;
+    // A converted primitive and its material.
+    struct Primitive {
+        std::shared_ptr<sg::MeshGeometry> geometry;
+        std::shared_ptr<sg::Material> material;
+    };
+    using Primitives = std::vector<Primitive>;
+
+    // A primitive's MeshInstance and shading: triangles are drawn with
+    // their material (wireframe and points off); lines and points keep the
+    // default layers.
+    void show(sg::Object &object, const Primitive &primitive) {
+        object.emplace_feature<sg::MeshInstance>(primitive.geometry);
+        const auto dimension = primitive.geometry->dimension();
+        auto layers = sg::make_default_mesh_render_layers(dimension);
+        if (dimension >= 2) {
+            for (auto &layer : layers) {
+                if (layer.renderer && layer.renderer->id() == "balsa.phong_surface") {
+                    layer.renderer = std::make_unique<sg::PbrSurfaceRenderer>(primitive.material);
+                } else {
+                    layer.enabled = false;
+                }
+            }
+        }
+        object.emplace_feature<sg::BasicShading>(std::move(layers)).fit_to_geometry();
+    }
 
     auto is_identity(const std::array<double, 16> &matrix) -> bool {
         return std::ranges::equal(
@@ -46,8 +73,10 @@ namespace {
     // Builds node trees, converting each mesh once.
     class SceneBuilder {
       public:
-        explicit SceneBuilder(const Document &document)
+        SceneBuilder(const Document &document,
+                     std::vector<std::shared_ptr<sg::Material>> materials)
           : m_document(document),
+            m_materials(std::move(materials)),
             m_meshes(document.manifest().meshes.size()) {}
 
         void add_node(sg::Object &parent, std::size_t index) {
@@ -57,14 +86,13 @@ namespace {
             set_transform(object, node);
 
             if (node.mesh) {
-                const auto &geometries =
+                const auto &primitives =
                     mesh(static_cast<std::size_t>(*node.mesh));
-                if (geometries.size() == 1) {
-                    object.emplace_feature<sg::MeshInstance>(geometries.front());
+                if (primitives.size() == 1) {
+                    show(object, primitives.front());
                 } else {
-                    for (const auto &[k, geometry] : std::views::enumerate(geometries)) {
-                        object.add_child(std::format("primitive {}", k))
-                            .emplace_feature<sg::MeshInstance>(geometry);
+                    for (const auto &[k, primitive] : std::views::enumerate(primitives)) {
+                        show(object.add_child(std::format("primitive {}", k)), primitive);
                     }
                 }
             }
@@ -76,14 +104,15 @@ namespace {
         auto errors() && -> detail::LoadErrors { return std::move(m_errors); }
 
       private:
-        auto mesh(std::size_t index) -> const Geometries & {
+        auto mesh(std::size_t index) -> const Primitives & {
             auto &cached = m_meshes[index];
             if (!cached) {
                 cached.emplace();
                 if (auto primitives = to_mesh_geometries(m_document, index)) {
                     for (auto &primitive : *primitives) {
-                        cached->push_back(std::make_shared<sg::MeshGeometry>(
-                            std::move(primitive.geometry)));
+                        cached->push_back(
+                            {std::make_shared<sg::MeshGeometry>(std::move(primitive.geometry)),
+                             material(primitive.material)});
                     }
                 } else {
                     m_errors.add(std::move(primitives.error()));
@@ -92,8 +121,17 @@ namespace {
             return *cached;
         }
 
+        // glTF's default material when a primitive has none.
+        auto material(std::optional<std::size_t> index) -> std::shared_ptr<sg::Material> {
+            if (index && *index < m_materials.size()) return m_materials[*index];
+            if (!m_default_material) m_default_material = std::make_shared<sg::Material>();
+            return m_default_material;
+        }
+
         const Document &m_document;
-        std::vector<std::optional<Geometries>> m_meshes;
+        std::vector<std::shared_ptr<sg::Material>> m_materials;
+        std::shared_ptr<sg::Material> m_default_material;
+        std::vector<std::optional<Primitives>> m_meshes;
         detail::LoadErrors m_errors;
     };
 
@@ -136,7 +174,9 @@ auto to_object(const Document &document, std::optional<std::size_t> scene)
                     | std::ranges::to<std::vector>()
               : root_nodes(manifest);
 
-    SceneBuilder builder(document);
+    auto materials = to_materials(document);
+    if (!materials) return std::unexpected(std::move(materials.error()));
+    SceneBuilder builder(document, std::move(*materials));
     for (const auto node : nodes) { builder.add_node(*root, node); }
     if (auto errors = std::move(builder).errors(); !errors.empty()) {
         return std::unexpected(std::move(errors).combined());
@@ -144,4 +184,4 @@ auto to_object(const Document &document, std::optional<std::size_t> scene)
     return root;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

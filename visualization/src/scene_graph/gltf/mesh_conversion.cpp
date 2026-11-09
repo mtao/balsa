@@ -12,7 +12,7 @@
 #include <ranges>
 #include <type_traits>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 namespace {
     namespace sg = balsa::scene_graph;
@@ -239,4 +239,4 @@ auto to_mesh_geometries(const Document &document, std::size_t mesh)
     return primitives;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

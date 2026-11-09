@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // The root object for a glTF asset.
 struct [[=object]] glTF {
@@ -66,4 +66,4 @@ struct [[=object]] glTF {
 auto to_json(nlohmann::json &j, const glTF &v) -> void;
 auto from_json(const nlohmann::json &j, glTF &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

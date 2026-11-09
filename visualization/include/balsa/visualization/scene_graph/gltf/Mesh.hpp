@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // The topology type of primitives to render.
 enum class PrimitiveMode : int64_t {
@@ -60,4 +60,4 @@ auto from_json(const nlohmann::json &j, MeshPrimitive &v) -> void;
 auto to_json(nlohmann::json &j, const Mesh &v) -> void;
 auto from_json(const nlohmann::json &j, Mesh &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

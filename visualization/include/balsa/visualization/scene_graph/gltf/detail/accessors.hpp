@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 // Byte layout of one accessor element.
 struct AccessorLayout {
@@ -33,4 +33,4 @@ auto materialize_accessors(
     const std::vector<std::span<const std::byte>> &buffer_views,
     LoadErrors &errors) -> std::vector<std::vector<std::byte>>;
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

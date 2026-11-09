@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // The name of the node’s TRS property to animate, or the "weights" of the Morph
 // Targets it instantiates. For the "translation" property, the values that are
@@ -106,4 +106,4 @@ auto from_json(const nlohmann::json &j, AnimationSampler &v) -> void;
 auto to_json(nlohmann::json &j, const Animation &v) -> void;
 auto from_json(const nlohmann::json &j, Animation &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

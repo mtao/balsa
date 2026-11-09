@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // Magnification filter.
 enum class MagFilter : int64_t {
@@ -50,4 +50,4 @@ struct [[=object]] Sampler {
 auto to_json(nlohmann::json &j, const Sampler &v) -> void;
 auto from_json(const nlohmann::json &j, Sampler &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

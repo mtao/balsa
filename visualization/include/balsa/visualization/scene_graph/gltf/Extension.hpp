@@ -5,7 +5,7 @@
 #include <balsa/json/raw_json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // glTF objects: properties are optional unless marked Required, arrays have
 // minItems 1, and an absent property means its default. So unannotated
@@ -17,4 +17,4 @@ using Extension = json::RawJson;
 // Application-specific data.
 using Extras = json::RawJson;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

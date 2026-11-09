@@ -10,7 +10,7 @@
 #include <span>
 #include <type_traits>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 // Little-endian, padding-free POD at the start of `bytes`; nullopt if
 // `bytes` is too short.
@@ -46,4 +46,4 @@ void write_little_endian(std::span<std::byte> bytes, T value) {
     std::ranges::copy(representation, bytes.begin());
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

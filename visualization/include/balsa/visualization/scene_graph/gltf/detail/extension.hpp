@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 // The first of `names` present in `extensions`, parsed as T (which has a
 // from_json); nullopt if none is present, an error message if malformed.
@@ -34,4 +34,4 @@ auto parse_extension(const Extension &extensions,
     return std::nullopt;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

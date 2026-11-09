@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 struct LoadError {
     enum class Code {
@@ -25,4 +25,4 @@ struct LoadError {
     std::string message;
 };
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

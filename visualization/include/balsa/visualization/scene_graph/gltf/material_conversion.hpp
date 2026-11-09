@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // glTF's sampler; undefined filters are linear, with linear mipmapping.
 auto to_sampler(const Sampler &sampler) -> balsa::scene_graph::Sampler;
@@ -21,4 +21,4 @@ auto to_sampler(const Sampler &sampler) -> balsa::scene_graph::Sampler;
 auto to_materials(const Document &document)
     -> std::expected<std::vector<std::shared_ptr<balsa::scene_graph::Material>>, LoadError>;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

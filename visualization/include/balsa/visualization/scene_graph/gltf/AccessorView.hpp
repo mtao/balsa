@@ -11,7 +11,7 @@
 #include <zipper/storage/layout_types.hpp>
 #include <zipper/types.hpp>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 namespace detail {
     // mdspan accessor policy reading little-endian T from raw bytes.
@@ -81,4 +81,4 @@ struct AccessorView {
     }
 };
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

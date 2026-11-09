@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // MeshGeometry name for a glTF attribute semantic; POSITION and NORMAL
 // map to balsa's "vertex_positions" / "vertex_normals".
@@ -50,4 +50,4 @@ struct MeshPrimitiveGeometry {
 auto to_mesh_geometries(const Document &document, std::size_t mesh)
     -> std::expected<std::vector<MeshPrimitiveGeometry>, LoadError>;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

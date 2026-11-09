@@ -3,7 +3,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // An orthographic camera containing properties to create an orthographic
 // projection matrix.
@@ -79,4 +79,4 @@ auto from_json(const nlohmann::json &j, CameraPerspective &v) -> void;
 auto to_json(nlohmann::json &j, const Camera &v) -> void;
 auto from_json(const nlohmann::json &j, Camera &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

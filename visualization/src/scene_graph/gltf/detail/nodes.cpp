@@ -6,7 +6,7 @@
 #include <ranges>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 namespace {
     auto in_range(std::int64_t index, std::size_t size) -> bool {
@@ -87,4 +87,4 @@ void check_nodes(const glTF &manifest, LoadErrors &errors) {
     }
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

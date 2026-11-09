@@ -8,7 +8,7 @@
 #include <ranges>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf::detail {
+namespace balsa::visualization::gltf::detail {
 
 namespace {
     enum class Mode { ATTRIBUTES, TRIANGLES, INDICES };
@@ -123,4 +123,4 @@ auto decode_meshopt_views(const glTF &manifest,
     return decoded;
 }
 
-} // namespace balsa::visualization::scene_graph::gltf::detail
+} // namespace balsa::visualization::gltf::detail

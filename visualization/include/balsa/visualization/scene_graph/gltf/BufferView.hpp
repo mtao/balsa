@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // The hint representing the intended GPU buffer type to use with this buffer
 // view.
@@ -37,4 +37,4 @@ struct [[=object]] BufferView {
 auto to_json(nlohmann::json &j, const BufferView &v) -> void;
 auto from_json(const nlohmann::json &j, BufferView &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

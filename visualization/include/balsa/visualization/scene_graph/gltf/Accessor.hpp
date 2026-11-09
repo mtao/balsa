@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // The datatype of the accessor’s components.
 enum class ComponentType : int64_t {
@@ -121,4 +121,4 @@ auto from_json(const nlohmann::json &j, AccessorSparse &v) -> void;
 auto to_json(nlohmann::json &j, const Accessor &v) -> void;
 auto from_json(const nlohmann::json &j, Accessor &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf

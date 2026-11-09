@@ -5,7 +5,7 @@
 #include <optional>
 #include <string>
 
-namespace balsa::visualization::scene_graph::gltf {
+namespace balsa::visualization::gltf {
 
 // Reference to a texture.
 struct [[=object]] TextureInfo {
@@ -117,4 +117,4 @@ auto from_json(const nlohmann::json &j, MaterialPBRMetallicRoughness &v) -> void
 auto to_json(nlohmann::json &j, const Material &v) -> void;
 auto from_json(const nlohmann::json &j, Material &v) -> void;
 
-} // namespace balsa::visualization::scene_graph::gltf
+} // namespace balsa::visualization::gltf
