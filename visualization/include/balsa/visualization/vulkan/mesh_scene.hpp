@@ -186,6 +186,7 @@ class MeshScene : public SceneBase {
     MeshPipelineManager _pipeline_manager;
     Film *_film = nullptr;
     bool _initialized = false;
+    std::size_t _last_drawable_count = 0;
 };
 
 }// namespace balsa::visualization::vulkan

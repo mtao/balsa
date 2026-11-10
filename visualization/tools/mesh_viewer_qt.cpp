@@ -10,6 +10,7 @@
 // Camera: left-drag orbit, right-drag pan, scroll zoom.
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -38,12 +39,13 @@
 #undef emit
 
 #include <balsa/scene_graph/Object.hpp>
-#include <balsa/visualization/qt/SceneGraphWidget.hpp>
-#include <balsa/visualization/qt/ControlsWidget.hpp>
-#include <balsa/visualization/qt/vulkan/window.hpp>
-#include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/scene_graph/SceneLoader.hpp>
 #include <balsa/visualization/normalize_mesh.hpp>
+#include <balsa/visualization/qt/ControlsWidget.hpp>
+#include <balsa/visualization/qt/SceneGraphWidget.hpp>
+#include <balsa/visualization/qt/vulkan/window.hpp>
+#include <balsa/visualization/vulkan/BufferAllocator.hpp>
+#include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
 
@@ -229,20 +231,47 @@ namespace {
 
         void load_mesh(const std::filesystem::path &path) {
             spdlog::info("Loading mesh: {}", path.string());
+            using Clock = std::chrono::steady_clock;
+            const auto start = Clock::now();
+            const auto seconds = [](auto duration) {
+                return std::chrono::duration<double>(duration).count();
+            };
             static const auto loader = balsa::scene_graph::SceneLoader::defaults();
             auto loaded = loader.load(path);
             if (!loaded) {
                 spdlog::error("Failed to load mesh: {}", loaded.error());
                 return;
             }
+            const auto decoded = Clock::now();
+            spdlog::info(
+                "  CPU scene load (parse, codecs, conversion): {:.3f}s",
+                seconds(decoded - start));
             auto &object = _scene->add_object(std::move(*loaded));
-            spdlog::info("  Loaded '{}'", object.name);
+            const auto initialized = Clock::now();
+            spdlog::info("  Initialized '{}' in {:.3f}s",
+                         object.name,
+                         seconds(initialized - decoded));
+            const auto memory =
+                _vk_window->film().buffer_allocator()->statistics();
+            spdlog::info(
+                "  Buffers: {} suballocations in {} memory blocks ({:.1f} MiB "
+                "reserved)",
+                memory.allocations,
+                memory.memory_blocks,
+                memory.reserved_bytes / (1024.0 * 1024.0));
             _camera->frame(viz::world_bounding_box(_scene->root()));
+            const auto framed = Clock::now();
+            spdlog::info("  Framed scene in {:.3f}s",
+                         seconds(framed - initialized));
 
             // Refresh the outliner and select the new mesh (this also
             // updates the properties panel via the object_selected signal).
             _outliner->refresh();
             _outliner->select_object(&object);
+            const auto finished = Clock::now();
+            spdlog::info("  Updated outliner in {:.3f}s; total load {:.3f}s",
+                         seconds(finished - framed),
+                         seconds(finished - start));
 
             // Request a redraw
             _vk_window->requestUpdate();

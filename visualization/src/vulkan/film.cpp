@@ -1,9 +1,20 @@
 #include "balsa/visualization//vulkan/film.hpp"
+#include "balsa/visualization/vulkan/BufferAllocator.hpp"
 #include <stdexcept>
 
 
 namespace balsa::visualization::vulkan {
 Film::~Film() { release_retired(); }
+
+auto Film::buffer_allocator() -> std::shared_ptr<BufferAllocator> {
+    if (!_buffer_allocator) {
+        _buffer_allocator = std::make_shared<BufferAllocator>(
+            instance(), physical_device(), device());
+    }
+    return _buffer_allocator;
+}
+
+void Film::release_buffer_allocator() { _buffer_allocator.reset(); }
 
 void Film::release_retired() { _retired.clear(); }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -23,6 +24,7 @@ class DescriptorAllocator {
     auto operator=(DescriptorAllocator &&other) noexcept -> DescriptorAllocator &;
 
     // Sets the descriptors per set and the first pool's capacity.
+    // Each allocated layout must fit within these per-set descriptor counts.
     void init(vk::Device device,
               std::vector<Descriptors> per_set,
               uint32_t initial_sets);
@@ -37,14 +39,20 @@ class DescriptorAllocator {
     [[nodiscard]] auto pool_count() const -> std::size_t { return m_pools.size(); }
 
   private:
+    struct Pool {
+        vk::DescriptorPool handle;
+        uint32_t capacity;
+        uint32_t live_sets = 0;
+    };
+
     void add_pool(uint32_t sets);
 
     vk::Device m_device;
     std::vector<Descriptors> m_per_set;
     uint32_t m_next_pool_sets = 0;
-    std::vector<vk::DescriptorPool> m_pools;
-    // Pool of each live set.
-    std::unordered_map<VkDescriptorSet, vk::DescriptorPool> m_owners;
+    std::vector<Pool> m_pools;
+    // Pool index of each live set.
+    std::unordered_map<VkDescriptorSet, std::size_t> m_owners;
 };
 
 } // namespace balsa::visualization::vulkan

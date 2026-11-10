@@ -75,6 +75,7 @@ NativeFilm::NativeFilm(std::nullptr_t) {}
 NativeFilm::~NativeFilm() {
     if (*_device_raii) _device_raii.waitIdle();
     release_retired();
+    release_buffer_allocator();
 }
 
 void NativeFilm::initialize() {

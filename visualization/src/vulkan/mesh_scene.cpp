@@ -1,11 +1,13 @@
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
-#include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
-#include "balsa/visualization/vulkan/film.hpp"
 #include "balsa/scene_graph/Light.hpp"
+#include "balsa/visualization/vulkan/BufferUploadBatch.hpp"
+#include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 
-#include <zipper/transform/view.hpp>
 #include <algorithm>
+#include <chrono>
 #include <spdlog/spdlog.h>
+#include <zipper/transform/view.hpp>
 
 namespace balsa::visualization::vulkan {
 
@@ -55,6 +57,8 @@ void MeshScene::initialize(Film &film) {
 
 void MeshScene::draw(Film &film) {
     if (!_initialized) return;
+    const auto start = std::chrono::steady_clock::now();
+    BufferUploadBatch uploads(film);
 
     // Resolve scene-level lighting once per frame.
     auto light_state = resolve_scene_lights();
@@ -68,6 +72,15 @@ void MeshScene::draw(Film &film) {
         if (!vmd) continue;
         vmd->set_scene_light_state(light_state);
         vmd->draw(*active_cam, film);
+    }
+    uploads.submit();
+    if (_drawable_group.size() != _last_drawable_count) {
+        spdlog::info("MeshScene: prepared frame for {} drawables in {:.3f}s",
+                     _drawable_group.size(),
+                     std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() - start)
+                         .count());
+        _last_drawable_count = _drawable_group.size();
     }
 }
 
@@ -89,6 +102,7 @@ void MeshScene::release_vulkan_resources() {
 
     _film = nullptr;
     _initialized = false;
+    _last_drawable_count = 0;
 }
 
 // ── Mesh management ──────────────────────────────────────────────────
