@@ -35,7 +35,8 @@ auto BasicShading::layer_geometry(const MeshRenderLayer &layer) const
 auto BasicShading::fit_to_geometry() -> void {
     if (geometry() == nullptr) return;
     for (auto &layer : _render_layers) {
-        if (layer.renderer && !layer.renderer->fit_to({*this, layer.id})) {
+        if (layer.enabled && layer.renderer
+            && !layer.renderer->fit_to({*this, layer.id})) {
             layer.enabled = false;
         }
     }

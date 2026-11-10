@@ -48,7 +48,7 @@ class BasicShading : public AbstractFeature {
     // which re-target to same-named attributes of this geometry.
     auto copy_from(const BasicShading &other) -> void;
 
-    // Runs MeshRenderer::fit_to per layer, disabling (never enabling)
+    // Runs MeshRenderer::fit_to per enabled layer, disabling (never enabling)
     // layers with nothing to draw.
     auto fit_to_geometry() -> void;
 
