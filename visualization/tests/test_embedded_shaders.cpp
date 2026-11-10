@@ -82,8 +82,8 @@ TEST_CASE("embedded_shader_sources_are_available", "[visualization][shaders]") {
         "phong/fragment",
         "unlit/vertex",
         "unlit/fragment",
-        "pbr/vertex",
-        "pbr/fragment",
+        "gltf_metallic_roughness/vertex",
+        "gltf_metallic_roughness/fragment",
         "image/vertex",
         "image/fragment",
     };
@@ -166,7 +166,9 @@ TEST_CASE("shader_program_permutations_compile", "[visualization][shaders][progr
         return defines;
     };
     for (unsigned mask = 0; mask < 32; ++mask) {
-        compiles(programs::pbr(), {.defines = stream_defines(programs::pbr(), mask)});
+        compiles(programs::gltf_metallic_roughness(),
+                 {.defines = stream_defines(programs::gltf_metallic_roughness(),
+                                            mask)});
     }
     for (const auto *shading : {"SHADING_FLAT", "SHADING_GOURAUD", "SHADING_PHONG", "SHADING_UNLIT"}) {
         for (unsigned mask = 0; mask < 4; ++mask) {

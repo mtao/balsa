@@ -1,11 +1,12 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
-// glTF metallic-roughness surfaces ("balsa.pbr"): the BRDF of glTF 2.0, Appendix B
+// glTF metallic-roughness surfaces ("balsa.gltf_metallic_roughness"):
+// glTF 2.0's BRDF, Appendix B
 // (GGX distribution, height-correlated Smith visibility, Schlick Fresnel),
 // lit by the scene light plus a small ambient term.  Texture and normal-map
 // conventions follow the Khronos glTF Sample Viewer (Apache-2.0).
 //
-// Defines: as pbr.vert.
+// Defines: as gltf_metallic_roughness.vert.
 
 layout(location = 0) in vec3 v_world_pos;
 layout(location = 1) in vec3 v_normal;

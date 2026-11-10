@@ -23,25 +23,33 @@ namespace {
                         {.role = roles::scalar(), .location = 2, .define = "HAS_SCALARS"}},
             .material_size = 64,
         });
-        ShaderProgram pbr = catalog.add({
-            .id = "balsa.pbr",
-            .label = "PBR (metallic-roughness)",
-            .vertex_shader = "pbr/vertex",
-            .fragment_shader = "pbr/fragment",
+        ShaderProgram gltf_metallic_roughness = catalog.add({
+            .id = "balsa.gltf_metallic_roughness",
+            .label = "glTF Metallic-Roughness",
+            .vertex_shader = "gltf_metallic_roughness/vertex",
+            .fragment_shader = "gltf_metallic_roughness/fragment",
             .streams = {position_stream(),
-                        {.role = roles::normal(), .location = 1, .define = "HAS_NORMALS"},
-                        {.role = roles::tangent(), .location = 2, .define = "HAS_TANGENTS"},
+                        {.role = roles::normal(),
+                         .location = 1,
+                         .define = "HAS_NORMALS"},
+                        {.role = roles::tangent(),
+                         .location = 2,
+                         .define = "HAS_TANGENTS"},
                         {.role = roles::texture_coordinates(0),
                          .location = 3,
                          .define = "HAS_TEXTURE_COORDINATES_0"},
                         {.role = roles::texture_coordinates(1),
                          .location = 4,
                          .define = "HAS_TEXTURE_COORDINATES_1"},
-                        {.role = roles::color(), .location = 5, .define = "HAS_COLORS"}},
+                        {.role = roles::color(),
+                         .location = 5,
+                         .define = "HAS_COLORS"}},
             .material_size = 80,
             .textures = {{"base_color", ColorSpace::Srgb},
                          {"metallic_roughness"},
-                         {"normal", ColorSpace::Linear, TextureFallback::FlatNormal},
+                         {"normal",
+                          ColorSpace::Linear,
+                          TextureFallback::FlatNormal},
                          {"occlusion"},
                          {"emissive", ColorSpace::Srgb}},
         });
@@ -75,7 +83,9 @@ auto shader_programs() -> catalog::Catalog<ShaderProgramDefinition> & {
 
 namespace programs {
     auto phong() -> ShaderProgram { return defaults().phong; }
-    auto pbr() -> ShaderProgram { return defaults().pbr; }
+    auto gltf_metallic_roughness() -> ShaderProgram {
+        return defaults().gltf_metallic_roughness;
+    }
     auto unlit_lines() -> ShaderProgram { return defaults().unlit_lines; }
     auto unlit_points() -> ShaderProgram { return defaults().unlit_points; }
 } // namespace programs

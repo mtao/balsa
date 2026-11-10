@@ -33,11 +33,11 @@ constexpr unsigned char unlit_vertex[] = {
 constexpr unsigned char unlit_fragment[] = {
 #embed "unlit.frag"
 };
-constexpr unsigned char pbr_vertex[] = {
-#embed "pbr.vert"
+constexpr unsigned char gltf_metallic_roughness_vertex[] = {
+#embed "gltf_metallic_roughness.vert"
 };
-constexpr unsigned char pbr_fragment[] = {
-#embed "pbr.frag"
+constexpr unsigned char gltf_metallic_roughness_fragment[] = {
+#embed "gltf_metallic_roughness.frag"
 };
 constexpr unsigned char image_vertex[] = {
 #embed "image.vert"
@@ -69,8 +69,12 @@ auto builtin_shader_library() -> const ShaderLibrary & {
         (void)library.add_shader("phong/fragment", std::string{as_string_view(phong_fragment)});
         (void)library.add_shader("unlit/vertex", std::string{as_string_view(unlit_vertex)});
         (void)library.add_shader("unlit/fragment", std::string{as_string_view(unlit_fragment)});
-        (void)library.add_shader("pbr/vertex", std::string{as_string_view(pbr_vertex)});
-        (void)library.add_shader("pbr/fragment", std::string{as_string_view(pbr_fragment)});
+        (void)library.add_shader(
+            "gltf_metallic_roughness/vertex",
+            std::string{as_string_view(gltf_metallic_roughness_vertex)});
+        (void)library.add_shader(
+            "gltf_metallic_roughness/fragment",
+            std::string{as_string_view(gltf_metallic_roughness_fragment)});
         (void)library.add_shader("image/vertex", std::string{as_string_view(image_vertex)});
         (void)library.add_shader("image/fragment", std::string{as_string_view(image_fragment)});
         library.make_read_only();

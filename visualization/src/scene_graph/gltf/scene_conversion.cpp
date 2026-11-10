@@ -27,8 +27,8 @@ namespace {
     using Primitives = std::vector<Primitive>;
 
     // A primitive's MeshInstance and shading: triangles are drawn with
-    // their material (wireframe and points off); lines and points keep the
-    // default layers.
+    // their material, or the default Phong surface without one (wireframe
+    // and points off); lines and points keep the default layers.
     void show(sg::Object &object, const Primitive &primitive) {
         object.emplace_feature<sg::MeshInstance>(primitive.geometry);
         const auto dimension = primitive.geometry->dimension();
@@ -36,7 +36,11 @@ namespace {
         if (dimension >= 2) {
             for (auto &layer : layers) {
                 if (layer.renderer && layer.renderer->id() == "balsa.phong_surface") {
-                    layer.renderer = std::make_unique<sg::PbrSurfaceRenderer>(primitive.material);
+                    if (primitive.material) {
+                        layer.renderer =
+                            std::make_unique<sg::GltfMetallicRoughnessRenderer>(
+                                primitive.material);
+                    }
                 } else {
                     layer.enabled = false;
                 }
@@ -121,16 +125,13 @@ namespace {
             return *cached;
         }
 
-        // glTF's default material when a primitive has none.
+        // A missing material preserves the viewer's default surface renderer.
         auto material(std::optional<std::size_t> index) -> std::shared_ptr<sg::Material> {
-            if (index && *index < m_materials.size()) return m_materials[*index];
-            if (!m_default_material) m_default_material = std::make_shared<sg::Material>();
-            return m_default_material;
+            return index ? m_materials[*index] : nullptr;
         }
 
         const Document &m_document;
         std::vector<std::shared_ptr<sg::Material>> m_materials;
-        std::shared_ptr<sg::Material> m_default_material;
         std::vector<std::optional<Primitives>> m_meshes;
         detail::LoadErrors m_errors;
     };

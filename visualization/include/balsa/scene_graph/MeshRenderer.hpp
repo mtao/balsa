@@ -289,11 +289,11 @@ class UnlitPointsRenderer final : public MeshRenderer {
 /// A metallic-roughness (glTF) surface: Material's factors and textures,
 /// lit by the scene light plus a small ambient term until image-based
 /// lighting exists.
-class PbrSurfaceRenderer final : public MeshRenderer {
+class GltfMetallicRoughnessRenderer final : public MeshRenderer {
   public:
-    PbrSurfaceRenderer() = default;
-    explicit PbrSurfaceRenderer(std::shared_ptr<Material> material)
-        : material(std::move(material)) {}
+    GltfMetallicRoughnessRenderer() = default;
+    explicit GltfMetallicRoughnessRenderer(std::shared_ptr<Material> material)
+      : material(std::move(material)) {}
 
     [[nodiscard]] auto clone() const -> std::unique_ptr<MeshRenderer> override;
     [[nodiscard]] auto id() const -> std::string_view override;

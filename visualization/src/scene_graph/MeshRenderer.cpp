@@ -392,11 +392,15 @@ auto create_mesh_renderer(std::string_view id) -> std::unique_ptr<MeshRenderer> 
     return it == definitions().end() ? nullptr : it->create();
 }
 
-auto PbrSurfaceRenderer::clone() const -> std::unique_ptr<MeshRenderer> {
-    return std::make_unique<PbrSurfaceRenderer>(*this);
+auto GltfMetallicRoughnessRenderer::clone() const
+    -> std::unique_ptr<MeshRenderer> {
+    return std::make_unique<GltfMetallicRoughnessRenderer>(*this);
 }
-auto PbrSurfaceRenderer::id() const -> std::string_view { return "balsa.pbr_surface"; }
-auto PbrSurfaceRenderer::required_roles() const -> std::span<const MeshRoleRequirement> {
+auto GltfMetallicRoughnessRenderer::id() const -> std::string_view {
+    return "balsa.gltf_metallic_roughness_surface";
+}
+auto GltfMetallicRoughnessRenderer::required_roles() const
+    -> std::span<const MeshRoleRequirement> {
     static const std::array requirements{
         position_requirement(),
         // Without normals the shader uses face normals.
@@ -433,16 +437,18 @@ auto PbrSurfaceRenderer::required_roles() const -> std::span<const MeshRoleRequi
     };
     return requirements;
 }
-auto PbrSurfaceRenderer::draw_request() const -> MeshDrawRequest {
+auto GltfMetallicRoughnessRenderer::draw_request() const -> MeshDrawRequest {
     using visualization::vulkan::CullMode;
-    return {.program = visualization::shaders::programs::pbr(),
-            .primitive = MeshPrimitive::Triangles,
-            .cull_mode = material->double_sided ? CullMode::None : CullMode::Back,
-            .depth_write = material->alpha_mode != AlphaMode::Blend};
+    return {
+        .program = visualization::shaders::programs::gltf_metallic_roughness(),
+        .primitive = MeshPrimitive::Triangles,
+        .cull_mode = material->double_sided ? CullMode::None : CullMode::Back,
+        .depth_write = material->alpha_mode != AlphaMode::Blend};
 }
-auto PbrSurfaceRenderer::write_material(MeshMaterial &out, const MeshLayerContext &) const
-    -> void {
-    // "balsa.pbr"'s std140 material block.
+auto GltfMetallicRoughnessRenderer::write_material(
+    MeshMaterial &out,
+    const MeshLayerContext &) const -> void {
+    // "balsa.gltf_metallic_roughness"'s std140 material block.
     struct Block {
         Vec4f base_color;
         Vec4f emissive;                    // rgb, alpha cutoff
@@ -468,7 +474,7 @@ auto PbrSurfaceRenderer::write_material(MeshMaterial &out, const MeshLayerContex
     out.textures = {m.base_color_texture, m.metallic_roughness_texture, m.normal_texture,
                     m.occlusion_texture, m.emissive_texture};
 }
-auto PbrSurfaceRenderer::build_controls(const MeshLayerContext &)
+auto GltfMetallicRoughnessRenderer::build_controls(const MeshLayerContext &)
     -> visualization::controls::Layout {
     using namespace visualization::controls;
     Layout layout;
@@ -494,9 +500,10 @@ auto register_builtin_mesh_renderers() -> void {
         register_mesh_renderer({"balsa.phong_surface", "Phong Surface", [] {
                                     return std::make_unique<PhongSurfaceRenderer>();
                                 }});
-        register_mesh_renderer({"balsa.pbr_surface", "PBR Surface", [] {
-                                    return std::make_unique<PbrSurfaceRenderer>();
-                                }});
+        register_mesh_renderer(
+            {"balsa.gltf_metallic_roughness_surface",
+             "glTF Metallic-Roughness",
+             [] { return std::make_unique<GltfMetallicRoughnessRenderer>(); }});
         register_mesh_renderer({"balsa.unlit_wireframe", "Unlit Wireframe", [] {
                                     return std::make_unique<UnlitWireframeRenderer>();
                                 }});

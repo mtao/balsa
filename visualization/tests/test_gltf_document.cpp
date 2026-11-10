@@ -835,8 +835,7 @@ TEST_CASE("load_into_mesh_scene", "[gltf][viewer]") {
         for (const auto &child : object.children()) { n += self(*child); }
         return n;
     };
-    // glTF primitives are drawn with their material, other meshes with
-    // the default Phong surface.
+    // Primitives without explicit materials use the default Phong surface.
     const auto surface_enabled = [](const sg::Object &object,
                                     std::string_view renderer = "balsa.phong_surface") {
         const auto *shading = object.find_feature<sg::BasicShading>();
@@ -871,13 +870,84 @@ TEST_CASE("load_into_mesh_scene", "[gltf][viewer]") {
         CHECK(object.parent() == &scene.root());
         CHECK(object.children_count() == 2);
         CHECK(drawable_count(object) == 2);
-        CHECK(surface_enabled(*object.children()[0], "balsa.pbr_surface"));
+        CHECK(surface_enabled(*object.children()[0]));
 
         // Loaded as is: no rescaling, so the world box is the file's.
         const auto box = balsa::visualization::world_bounding_box(object);
         CHECK(box.min()(0) == Catch::Approx(0.f));
         CHECK(box.max()(0) == Catch::Approx(10.f));
         CHECK(box.max()(1) == Catch::Approx(2.f));
+    }
+
+    SECTION("only explicitly specified glTF materials use metallic-roughness") {
+        std::string bin;
+        for (int i = 0; i < 3; ++i) {
+            bin += le_bytes<float>({0.f, float(i), 0.f});
+        }
+        const auto path = dir.write(
+            "materials.glb",
+            make_glb(
+                std::format(
+                    R"({{"asset":{{"version":"2.0"}},"buffers":[{{"byteLength":36}}],)"
+                    R"("bufferViews":[{{"buffer":0,"byteLength":36}}],)"
+                    R"("accessors":[{}3}}],)"
+                    R"("materials":[{{}},{{"pbrMetallicRoughness":{{"baseColorFactor":[0.2,0.3,0.4,1],"metallicFactor":0.25,"roughnessFactor":0.5}}}}],)"
+                    R"("meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}}}},{{"attributes":{{"POSITION":0}},"material":0}},{{"attributes":{{"POSITION":0}},"material":1}}]}}],)"
+                    R"("nodes":[{{"mesh":0}}]}})",
+                    positions_accessor),
+                bin));
+        auto loaded = loader.load(path);
+        REQUIRE(loaded);
+        REQUIRE((*loaded)->children_count() == 1);
+        const auto &primitives = (*loaded)->children()[0]->children();
+        REQUIRE(primitives.size() == 3);
+
+        const auto *shading = primitives[0]->find_feature<sg::BasicShading>();
+        REQUIRE(shading);
+        const auto *surface = shading->find_layer("balsa.phong_surface");
+        REQUIRE(surface);
+        const auto *phong = dynamic_cast<const sg::PhongSurfaceRenderer *>(
+            surface->renderer.get());
+        REQUIRE(phong);
+        CHECK(surface->enabled);
+        const sg::PhongSurfaceRenderer defaults;
+        for (int i = 0; i < 4; ++i) {
+            CHECK(phong->state.uniform_color(i)
+                  == defaults.state.uniform_color(i));
+        }
+        CHECK(phong->state.material.ambient_strength
+              == defaults.state.material.ambient_strength);
+        CHECK(phong->state.material.diffuse_strength
+              == defaults.state.material.diffuse_strength);
+        CHECK(phong->state.material.specular_strength
+              == defaults.state.material.specular_strength);
+        CHECK(phong->state.material.shininess
+              == defaults.state.material.shininess);
+
+        const auto material = [&](std::size_t index) {
+            const auto *shading =
+                primitives[index]->find_feature<sg::BasicShading>();
+            REQUIRE(shading);
+            const auto *layer =
+                shading->find_layer("balsa.gltf_metallic_roughness_surface");
+            REQUIRE(layer);
+            CHECK(layer->enabled);
+            const auto *renderer =
+                dynamic_cast<const sg::GltfMetallicRoughnessRenderer *>(
+                    layer->renderer.get());
+            REQUIRE(renderer);
+            return renderer->material;
+        };
+        const auto empty = material(1);
+        for (int i = 0; i < 4; ++i) { CHECK(empty->base_color(i) == 1.0f); }
+        CHECK(empty->metallic == 1.0f);
+        CHECK(empty->roughness == 1.0f);
+        const auto colored = material(2);
+        CHECK(colored->base_color(0) == Catch::Approx(0.2f));
+        CHECK(colored->base_color(1) == Catch::Approx(0.3f));
+        CHECK(colored->base_color(2) == Catch::Approx(0.4f));
+        CHECK(colored->metallic == 0.25f);
+        CHECK(colored->roughness == 0.5f);
     }
 
     SECTION("OBJ mesh") {
