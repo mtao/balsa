@@ -21,7 +21,8 @@ layout(set = 1, binding = 0) uniform Material {
     vec4 u_emissive;           // xyz = linear rgb, w = alpha cutoff
     vec4 u_factors;            // metallic, roughness, normal scale, occlusion strength
     vec4 u_texture_coordinate_sets; // of base colour, metallic-roughness, normal, occlusion
-    vec4 u_options;            // x = emissive set, y = alpha mode, z = double sided
+    vec4 u_options;            // x = emissive set, y = alpha mode, z = double sided,
+                               // w = debug channel (PbrDebugChannel)
 };
 
 // Empty slots hold white (normal: a flat normal) placeholders.
@@ -60,6 +61,29 @@ float V_GGX(float NdotL, float NdotV, float alpha) {
 vec3 F_Schlick(vec3 f0, float VdotH) {
     return f0 + (vec3(1.0) - f0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
 }
+
+// The swapchain encodes to sRGB; decoding first shows data values as is.
+vec3 srgb_to_linear(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
+vec4 show_data(vec3 value) { return vec4(srgb_to_linear(value), 1.0); }
+vec4 show_vector(vec3 value) { return show_data(value * 0.5 + 0.5); }
+
+// Debug channels, matching PbrDebugChannel.
+const int DEBUG_FINAL = 0;
+const int DEBUG_BASE_COLOR = 1;
+const int DEBUG_ALPHA = 2;
+const int DEBUG_METALLIC = 3;
+const int DEBUG_ROUGHNESS = 4;
+const int DEBUG_OCCLUSION = 5;
+const int DEBUG_EMISSIVE = 6;
+const int DEBUG_SHADING_NORMAL = 7;
+const int DEBUG_GEOMETRY_NORMAL = 8;
+const int DEBUG_TANGENT = 9;
+const int DEBUG_BITANGENT = 10;
+const int DEBUG_TEXTURE_COORDINATES0 = 11;
+const int DEBUG_TEXTURE_COORDINATES1 = 12;
 
 void main() {
     // ── Base colour and alpha ──
@@ -134,6 +158,22 @@ void main() {
 
     vec3 emissive = u_emissive.rgb
                   * texture(u_emissive_texture, texture_coordinates(u_options.x)).rgb;
+
+    switch (int(u_options.w + 0.5)) {
+    case DEBUG_BASE_COLOR: outColor = vec4(base.rgb, 1.0); return;
+    case DEBUG_ALPHA: outColor = show_data(vec3(base.a)); return;
+    case DEBUG_METALLIC: outColor = show_data(vec3(metallic)); return;
+    case DEBUG_ROUGHNESS: outColor = show_data(vec3(roughness)); return;
+    case DEBUG_OCCLUSION: outColor = show_data(vec3(occlusion)); return;
+    case DEBUG_EMISSIVE: outColor = vec4(emissive, 1.0); return;
+    case DEBUG_SHADING_NORMAL: outColor = show_vector(n); return;
+    case DEBUG_GEOMETRY_NORMAL: outColor = show_vector(ng); return;
+    case DEBUG_TANGENT: outColor = show_vector(t); return;
+    case DEBUG_BITANGENT: outColor = show_vector(b); return;
+    case DEBUG_TEXTURE_COORDINATES0: outColor = show_data(vec3(fract(v_texture_coordinates0), 0.0)); return;
+    case DEBUG_TEXTURE_COORDINATES1: outColor = show_data(vec3(fract(v_texture_coordinates1), 0.0)); return;
+    default: break;
+    }
 
     // Linear; an sRGB swapchain encodes it.
     outColor = vec4(direct + ambient + emissive, base.a);

@@ -286,6 +286,29 @@ class UnlitPointsRenderer final : public MeshRenderer {
     float size = 3.0f;
 };
 
+/// What a PBR surface shows: the lit result or one input of the shading,
+/// as in the Khronos glTF Sample Viewer's debug views.  Colours are shown
+/// as colours; data (normals, factors, coordinates) as raw values, vectors
+/// mapped from [-1, 1] to [0, 1].
+enum class PbrDebugChannel : uint8_t {
+    Final,
+    BaseColor,
+    Alpha,
+    Metallic,
+    Roughness,
+    Occlusion,
+    Emissive,
+    ShadingNormal,
+    GeometryNormal,
+    Tangent,
+    Bitangent,
+    TextureCoordinates0,
+    TextureCoordinates1,
+};
+
+/// Labels of the PbrDebugChannel values, in order.
+[[nodiscard]] auto pbr_debug_channel_names() -> std::span<const std::string_view>;
+
 /// A metallic-roughness (glTF) surface: Material's factors and textures,
 /// lit by the scene light plus a small ambient term until image-based
 /// lighting exists.
@@ -308,6 +331,9 @@ class PbrSurfaceRenderer final : public MeshRenderer {
     // Shared with other layers drawing the same material; clones share it
     // too.  Never null.
     std::shared_ptr<Material> material = std::make_shared<Material>();
+    // Per renderer, not per material: debugging one layer leaves others
+    // sharing its material alone.
+    PbrDebugChannel debug_channel = PbrDebugChannel::Final;
 };
 
 auto register_builtin_mesh_renderers() -> void;

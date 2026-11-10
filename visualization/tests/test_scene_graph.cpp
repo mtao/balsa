@@ -2045,6 +2045,48 @@ TEST_CASE("phong_surface_scalar_colormap", "[scene_graph][renderer]") {
     find("Color", [&](const ctl::Property &p) { CHECK(p.visible_when()); });
 }
 
+TEST_CASE("pbr_surface_debug_channel", "[scene_graph][renderer][pbr]") {
+    namespace sg = balsa::scene_graph;
+    namespace ctl = balsa::visualization::controls;
+    auto material = std::make_shared<sg::Material>();
+    sg::PbrSurfaceRenderer renderer(material);
+    sg::PbrSurfaceRenderer other(material);
+
+    // The channel is the w of the block's fifth vec4 (options).
+    const auto channel = [](const sg::PbrSurfaceRenderer &r) {
+        sg::MeshMaterial out;
+        r.write_material(out, {});
+        REQUIRE(out.uniform.size() == 5 * sizeof(sg::Vec4f));
+        float value = -1.0f;
+        std::memcpy(&value, out.uniform.data() + 4 * sizeof(sg::Vec4f) + 3 * sizeof(float),
+                    sizeof(value));
+        return value;
+    };
+    CHECK(channel(renderer) == 0.0f);
+
+    const ctl::Layout layout = renderer.build_controls({});
+    int seen = 0;
+    layout.for_each_property([&](const ctl::Property &p) {
+        if (p.label != "Debug View") return;
+        ++seen;
+        const auto &choice = std::get<ctl::ChoiceInput>(p.widget);
+        CHECK(choice.options().size() == sg::pbr_debug_channel_names().size());
+        CHECK(choice.options().front() == "Final");
+        choice.set_index(static_cast<int>(sg::PbrDebugChannel::ShadingNormal));
+        CHECK(choice.get_index() == static_cast<int>(sg::PbrDebugChannel::ShadingNormal));
+        // Out of range is ignored.
+        choice.set_index(99);
+    });
+    CHECK(seen == 1);
+    CHECK(renderer.debug_channel == sg::PbrDebugChannel::ShadingNormal);
+    CHECK(channel(renderer) == static_cast<float>(sg::PbrDebugChannel::ShadingNormal));
+
+    // Per renderer: a layer sharing the material is unaffected; clones copy it.
+    CHECK(channel(other) == 0.0f);
+    CHECK(dynamic_cast<const sg::PbrSurfaceRenderer &>(*renderer.clone()).debug_channel
+          == sg::PbrDebugChannel::ShadingNormal);
+}
+
 #include <balsa/visualization/normalize_mesh.hpp>
 TEST_CASE("unit_box_transform_centers_mesh", "[scene_graph][normalize]") {
     MeshObject m;

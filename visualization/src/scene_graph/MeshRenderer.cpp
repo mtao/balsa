@@ -450,7 +450,8 @@ auto PbrSurfaceRenderer::write_material(MeshMaterial &out, const MeshLayerContex
                                            // occlusion strength
         Vec4f texture_coordinate_sets;     // base colour, metallic-roughness,
                                            // normal, occlusion
-        Vec4f options;                     // emissive set, alpha mode, double sided
+        Vec4f options;                     // emissive set, alpha mode, double sided,
+                                           // debug channel
     };
     const auto &m = *material;
     const auto set = [](const std::optional<MaterialTexture> &t) {
@@ -463,7 +464,7 @@ auto PbrSurfaceRenderer::write_material(MeshMaterial &out, const MeshLayerContex
         .texture_coordinate_sets = {set(m.base_color_texture), set(m.metallic_roughness_texture),
                                     set(m.normal_texture), set(m.occlusion_texture)},
         .options = {set(m.emissive_texture), static_cast<float>(m.alpha_mode),
-                    m.double_sided ? 1.0f : 0.0f, 0.0f}});
+                    m.double_sided ? 1.0f : 0.0f, static_cast<float>(debug_channel)}});
     // In the program's texture slot order.
     out.textures = {m.base_color_texture, m.metallic_roughness_texture, m.normal_texture,
                     m.occlusion_texture, m.emissive_texture};
@@ -486,7 +487,32 @@ auto PbrSurfaceRenderer::build_controls(const MeshLayerContext &)
     cutoff.visible_when = [&m] { return m.alpha_mode == AlphaMode::Mask; };
     layout.add_property(std::move(cutoff));
     layout.add_property(bool_property("Double Sided", m.double_sided));
+    layout.add_property(
+        {.label = "Debug View",
+         .tooltip = "Show one input of the shading instead of the lit surface",
+         .widget = ChoiceInput{
+             .options =
+                 [] {
+                     const auto names = pbr_debug_channel_names();
+                     return std::vector<std::string>(names.begin(), names.end());
+                 },
+             .get_index = [this] { return static_cast<int>(debug_channel); },
+             .set_index =
+                 [this](const int &i) {
+                     if (i >= 0 && static_cast<std::size_t>(i) < pbr_debug_channel_names().size()) {
+                         debug_channel = static_cast<PbrDebugChannel>(i);
+                     }
+                 }}});
     return layout;
+}
+
+auto pbr_debug_channel_names() -> std::span<const std::string_view> {
+    static constexpr std::array<std::string_view, 13> names{
+        "Final",          "Base Color",      "Alpha",   "Metallic",  "Roughness",
+        "Occlusion",      "Emissive",        "Shading Normal",       "Geometry Normal",
+        "Tangent",        "Bitangent",       "Texture Coordinates 0", "Texture Coordinates 1"};
+    static_assert(names.size() == static_cast<std::size_t>(PbrDebugChannel::TextureCoordinates1) + 1);
+    return names;
 }
 
 auto register_builtin_mesh_renderers() -> void {
