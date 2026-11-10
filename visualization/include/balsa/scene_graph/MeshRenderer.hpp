@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+#include <type_traits>
 #include <functional>
 #include <optional>
 #include <memory>
@@ -15,6 +17,9 @@
 #include "balsa/scene_graph/MeshRole.hpp"
 #include "balsa/scene_graph/render_layers.hpp"
 #include "balsa/scene_graph/MeshAttribute.hpp"
+#include "balsa/scene_graph/Material.hpp"
+#include "balsa/visualization/shaders/ShaderProgram.hpp"
+#include "balsa/visualization/shaders/program_shader.hpp"
 #include "balsa/visualization/controls/Layout.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
@@ -40,8 +45,9 @@ struct MeshRoleRequirement {
     uint8_t min_components = 1;
     uint8_t max_components = MeshAttribute::max_components;
     bool required = true;
-    // Default binding, if any.
+    // Default binding, if any: the attribute carrying (semantic, set).
     std::optional<AttributeSemantic> semantic = {};
+    uint8_t set = 0;
 
     [[nodiscard]] auto accepts(const MeshAttribute &attribute) const -> bool {
         // Roles take scalars and vectors only.
@@ -98,22 +104,32 @@ struct ScalarColormap {
 /// This is intentionally a request, not a stored mesh-wide state: each
 /// renderer instance supplies one independently configured draw.
 struct MeshDrawRequest {
+    // The shader program, and the permutation of it (the drawable adds the
+    // definitions of bound optional streams).
+    visualization::shaders::ShaderProgram program;
+    visualization::shaders::ProgramVariant variant = {};
     MeshPrimitive primitive = MeshPrimitive::Triangles;
-    visualization::vulkan::MeshRenderState state;
-    /// Colormap applied to the scalar input; empty, or no scalar bound,
-    /// draws in uniform colour.
-    std::string colormap = {};
+    visualization::vulkan::CullMode cull_mode = visualization::vulkan::CullMode::None;
+    // False for blended surfaces, which are drawn after opaque ones.
+    bool depth_write = true;
 };
 
 /// Renderer-owned material payload. Backends translate this into their own
 /// descriptor/UBO layout; it deliberately contains no Vulkan types.
 struct MeshMaterial {
-    Vec4f uniform_color{1.0f, 1.0f, 1.0f, 1.0f};
-    Vec4f layer_color{1.0f, 1.0f, 1.0f, 1.0f};
-    float primitive_size = 1.0f;
-    ScalarReduction scalar_reduction = {};
-    float scalar_min = 0.0f;
-    float scalar_max = 1.0f;
+    // The program's material block (std140, its material_size bytes).
+    std::vector<std::byte> uniform;
+    // By the program's texture slot; empty slots use the slot's fallback.
+    std::vector<std::optional<MaterialTexture>> textures;
+
+    // Sets `uniform` to the bytes of `block`, a struct matching the
+    // program's std140 layout.
+    template <typename Block>
+        requires std::is_trivially_copyable_v<Block>
+    auto set_uniform(const Block &block) -> void {
+        const auto bytes = std::as_bytes(std::span(&block, 1));
+        uniform.assign(bytes.begin(), bytes.end());
+    }
 };
 
 /// A live view of the layer a renderer draws for: what its roles resolve
@@ -268,6 +284,30 @@ class UnlitPointsRenderer final : public MeshRenderer {
 
     Vec4f color{1.0f, 0.0f, 0.0f, 1.0f};
     float size = 3.0f;
+};
+
+/// A metallic-roughness (glTF) surface: Material's factors and textures,
+/// lit by the scene light plus a small ambient term until image-based
+/// lighting exists.
+class PbrSurfaceRenderer final : public MeshRenderer {
+  public:
+    PbrSurfaceRenderer() = default;
+    explicit PbrSurfaceRenderer(std::shared_ptr<Material> material)
+        : material(std::move(material)) {}
+
+    [[nodiscard]] auto clone() const -> std::unique_ptr<MeshRenderer> override;
+    [[nodiscard]] auto id() const -> std::string_view override;
+    [[nodiscard]] auto required_roles() const
+        -> std::span<const MeshRoleRequirement> override;
+    [[nodiscard]] auto draw_request() const -> MeshDrawRequest override;
+    auto write_material(MeshMaterial &material,
+                        const MeshLayerContext &layer) const -> void override;
+    [[nodiscard]] auto build_controls(const MeshLayerContext &layer)
+        -> visualization::controls::Layout override;
+
+    // Shared with other layers drawing the same material; clones share it
+    // too.  Never null.
+    std::shared_ptr<Material> material = std::make_shared<Material>();
 };
 
 auto register_builtin_mesh_renderers() -> void;

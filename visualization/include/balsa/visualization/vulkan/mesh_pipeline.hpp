@@ -1,173 +1,136 @@
 #pragma once
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <unordered_map>
-#include <vector>
 #include <vulkan/vulkan.hpp>
+
+#include "balsa/visualization/shaders/ShaderProgram.hpp"
+#include "balsa/visualization/shaders/program_shader.hpp"
 #include "balsa/visualization/shaders/shader_library.hpp"
 #include "balsa/visualization/vulkan/DescriptorAllocator.hpp"
-
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/visualization/vulkan/texture_cache.hpp"
 
 namespace balsa::visualization::vulkan {
 
 class Film;
-struct MeshVertexInputs;
 
-// ── MeshPipelineKey ──────────────────────────────────────────────────
-//
-// Captures every piece of state that can cause a distinct Vulkan
-// graphics pipeline to be needed.  Pipelines are baked for a
-// particular (render_pass, MSAA samples, topology, polygon mode,
-// shader permutation) combination.
+// Vertex streams, by shader location (VertexStream::location).
+inline constexpr std::size_t max_vertex_streams = 8;
 
+// Everything that makes a mesh pipeline distinct.
 struct MeshPipelineKey {
-    // Shader permutation state
-    ShadingModel shading = ShadingModel::Phong;
-    NormalSource normal_source = NormalSource::FromAttribute;
-
-    // Primitive topology — one pipeline per topology (triangles, lines,
-    // points).  Replaces the old RenderMode enum.
+    std::string program; // ShaderProgram id
+    shaders::ProgramVariant variant;
+    // Bound streams' formats; eUndefined where none is bound.
+    std::array<vk::Format, max_vertex_streams> stream_formats{};
     vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
-
-    // Colormap applied to the scalar input; empty = uniform colour.
-    std::string colormap;
-
-    // Vertex input formats (eUndefined = stream absent), from the bound
-    // AttributeBuffers.
-    vk::Format position_format = vk::Format::eR32G32B32Sfloat;
-    vk::Format normal_format = vk::Format::eUndefined;
-    vk::Format scalar_format = vk::Format::eUndefined;
-
-    // Rasterization state
-    CullMode cull_mode = CullMode::None; // which faces to discard
-
-    // Wireframe overlay — when true, the fragment shader uses
-    // gl_BaryCoordEXT (VK_KHR_fragment_shader_barycentric) to draw
-    // wireframe edges over the solid fill in a single draw call.
-    // Only set when the extension is available AND both solid +
-    // wireframe layers are enabled.
-    bool wireframe_overlay = false;
-
-    // Render-pass-dependent state (queried from Film)
-    uint32_t msaa_samples = 1; // underlying value of VkSampleCountFlagBits
-    uint64_t render_pass = 0; // VkRenderPass cast to uint64_t for hashing
+    CullMode cull_mode = CullMode::None;
+    bool depth_write = true;
+    // From the Film's render pass.
+    uint32_t msaa_samples = 1;
+    uint64_t render_pass = 0;
     bool depth_test = false;
 
-    bool operator==(const MeshPipelineKey &) const = default;
+    auto operator==(const MeshPipelineKey &) const -> bool = default;
 };
 
 struct MeshPipelineKeyHash {
-    std::size_t operator()(const MeshPipelineKey &k) const noexcept;
+    auto operator()(const MeshPipelineKey &key) const noexcept -> std::size_t;
 };
 
-// Build a MeshPipelineKey from the current render state, topology,
-// bound vertex inputs, and film configuration.  A non-empty colormap
-// colours by the scalar input.  Shader paths whose input is unbound fall
-// back (attribute normals -> computed, colormap -> uniform colour).
-// When wireframe_overlay is
-// true, the pipeline will emit gl_BaryCoordEXT-based wireframe edges
-// in the fragment shader.
-MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
-                                  std::string_view colormap,
-                                  vk::PrimitiveTopology topology,
-                                  const MeshVertexInputs &inputs,
-                                  Film &film,
-                                  bool wireframe_overlay = false);
-
-// ── MeshPipelineManager ──────────────────────────────────────────────
+// Pipelines and descriptor sets of shader programs (shaders::ShaderProgram),
+// shared by the drawables of a scene.
 //
-// Owns the descriptor set layout, pipeline layout, descriptor pool,
-// and a cache of compiled Vulkan graphics pipelines keyed by
-// MeshPipelineKey.
-//
-// Non-template class (mesh viewer is always 3D).  Internally uses
-// MeshShader<embedding_traits3F> for SPIR-V compilation.
-//
-// Thread-safety: NOT thread-safe — call only from the rendering thread.
-
+// Descriptor set 0 ("scene") holds the transforms and the scene lighting;
+// set 1 ("material") holds a program's material block, bound with a dynamic
+// offset, and its textures.  Pipeline layouts differ per program only in
+// set 1, so set 0 can be bound once for any of them.
 class MeshPipelineManager {
   public:
     explicit MeshPipelineManager(
-      const shaders::ShaderLibrary &library = shaders::builtin_shader_library())
+        const shaders::ShaderLibrary &library = shaders::builtin_shader_library())
       : _shader_library(library) {}
     ~MeshPipelineManager();
 
-    // Non-copyable, movable
     MeshPipelineManager(const MeshPipelineManager &) = delete;
-    MeshPipelineManager &operator=(const MeshPipelineManager &) = delete;
-    MeshPipelineManager(MeshPipelineManager &&) noexcept;
-    MeshPipelineManager &operator=(MeshPipelineManager &&) noexcept;
+    auto operator=(const MeshPipelineManager &) -> MeshPipelineManager & = delete;
 
-    // Initialise with a Film reference.  Must be called before any
-    // other method.  Safe to call again after release() to re-init
-    // for a new device/render-pass.
+    // Must be called before anything else; again after release() for a new
+    // device or render pass.
     void init(Film &film, uint32_t max_descriptor_sets = 32);
     auto shader_library() const -> const shaders::ShaderLibrary & { return _shader_library; }
 
-    // ── Pipeline access ─────────────────────────────────────────────
+    // ── Pipelines ───────────────────────────────────────────────────
 
-    // Get (or lazily create) the pipeline matching the given state,
-    // topology, and bound vertex inputs.  The Film is queried for
-    // render-pass / MSAA / depth-stencil info.
-    vk::Pipeline get_or_create(const MeshRenderState &state,
-                               std::string_view colormap,
-                               vk::PrimitiveTopology topology,
-                               const MeshVertexInputs &inputs,
-                               Film &film,
-                               bool wireframe_overlay = false);
-
-    // The shared pipeline layout (all mesh pipelines use the same one).
-    vk::PipelineLayout pipeline_layout() const { return _pipeline_layout; }
+    // A key with the Film's render-pass state filled in.
+    auto make_key(const shaders::ShaderProgram &program,
+                  shaders::ProgramVariant variant,
+                  const std::array<vk::Format, max_vertex_streams> &stream_formats,
+                  vk::PrimitiveTopology topology,
+                  CullMode cull_mode,
+                  bool depth_write) const -> MeshPipelineKey;
+    // Created on first use; null if creation failed.
+    auto pipeline(const MeshPipelineKey &key) -> vk::Pipeline;
+    auto pipeline_layout(const shaders::ShaderProgram &program) -> vk::PipelineLayout;
 
     // ── Descriptor sets ─────────────────────────────────────────────
+    //
+    // Freeing requires that no command buffer in flight uses the set.
 
-    // Allocate a descriptor set from the internal pool.
-    vk::DescriptorSet allocate_descriptor_set();
+    auto allocate_scene_set() -> vk::DescriptorSet;
+    void write_scene_set(vk::DescriptorSet set,
+                         vk::Buffer transforms,
+                         vk::DeviceSize transforms_size,
+                         vk::Buffer lighting,
+                         vk::DeviceSize lighting_size);
+    void free_scene_set(vk::DescriptorSet set);
 
-    // Write UBO buffer bindings into a descriptor set.
-    //   binding 0 = TransformUBO   (vertex stage)
-    //   binding 1 = MaterialUBO    (vertex + fragment stage)
-    void write_descriptor_set(vk::DescriptorSet ds,
-                              vk::Buffer transform_buffer,
-                              vk::DeviceSize transform_size,
-                              vk::Buffer material_buffer,
-                              vk::DeviceSize material_size);
+    auto allocate_material_set(const shaders::ShaderProgram &program) -> vk::DescriptorSet;
+    // `material` holds the program's material blocks, read at a dynamic
+    // offset; `textures` are its texture slots, in order.
+    void write_material_set(const shaders::ShaderProgram &program,
+                            vk::DescriptorSet set,
+                            vk::Buffer material,
+                            std::span<const vk::DescriptorImageInfo> textures);
+    void free_material_set(const shaders::ShaderProgram &program, vk::DescriptorSet set);
 
-    // Free a descriptor set back to the pool.  The caller must ensure
-    // the descriptor set is no longer in use by any command buffer
-    // (call device.waitIdle() first).  Safe to call with a null set.
-    void free_descriptor_set(vk::DescriptorSet ds);
+    // GPU copies of material textures.
+    auto texture_cache() -> TextureCache & { return _texture_cache; }
 
     // ── Lifecycle ───────────────────────────────────────────────────
 
-    // Destroy all cached pipelines (e.g. on swapchain recreation when
-    // the render pass changes).  Keeps the layout and pool alive.
+    // Destroys the pipelines (e.g. when the render pass changes).
     void invalidate_pipelines();
-
-    // Destroy everything.  Safe to call multiple times.
+    // Destroys everything.  Safe to call more than once.
     void release();
-
     bool is_initialized() const { return _initialized; }
 
   private:
-    vk::Pipeline create_pipeline(const MeshPipelineKey &key);
-
-    void create_descriptor_set_layout();
-    void create_pipeline_layout();
+    // Set 1's layout and the pipeline layout of one program.
+    struct ProgramLayout {
+        vk::DescriptorSetLayout material_set_layout;
+        vk::PipelineLayout pipeline_layout;
+        DescriptorAllocator allocator;
+    };
+    auto program_layout(const shaders::ShaderProgram &program) -> ProgramLayout &;
+    auto create_pipeline(const MeshPipelineKey &key) -> vk::Pipeline;
 
     vk::Device _device;
     Film *_film = nullptr;
     shaders::ShaderLibrary _shader_library;
     std::uint64_t _shader_revision = 0;
+    uint32_t _max_descriptor_sets = 32;
 
-    vk::DescriptorSetLayout _descriptor_set_layout;
-    vk::PipelineLayout _pipeline_layout;
-    DescriptorAllocator _descriptor_allocator;
-
-    std::unordered_map<MeshPipelineKey, vk::Pipeline, MeshPipelineKeyHash>
-        _cache;
-
+    vk::DescriptorSetLayout _scene_set_layout;
+    DescriptorAllocator _scene_allocator;
+    // By program id.
+    std::unordered_map<std::string, ProgramLayout> _programs;
+    TextureCache _texture_cache;
+    std::unordered_map<MeshPipelineKey, vk::Pipeline, MeshPipelineKeyHash> _cache;
     bool _initialized = false;
 };
 

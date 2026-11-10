@@ -3,7 +3,7 @@
 #include "balsa/visualization/colormap_list.hpp"
 #include "balsa/visualization/shaders/abstract_shader.hpp"
 #include "balsa/visualization/shaders/embedded_sources.hpp"
-#include "balsa/visualization/shaders/mesh_shader.hpp"
+#include "balsa/visualization/shaders/program_shader.hpp"
 #include "balsa/visualization/shaders/shader_library.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
@@ -30,17 +30,17 @@ TEST_CASE("shader_library_overlays_builtins", "[visualization][shaders]") {
     auto library = shaders::ShaderLibrary::overlay(shaders::builtin_shader_library());
     const auto initial_revision = library.revision();
 
-    REQUIRE(library.find("mesh/vertex"));
+    REQUIRE(library.find("phong/vertex"));
     REQUIRE(library.add_shader("user/fragment", "user source").has_value());
     CHECK(library.revision() > initial_revision);
 
-    const auto duplicate = library.add_shader("mesh/vertex", "duplicate");
+    const auto duplicate = library.add_shader("phong/vertex", "duplicate");
     REQUIRE_FALSE(duplicate.has_value());
     CHECK(duplicate.error() == shaders::ShaderLibraryError::DuplicatePath);
 
-    const auto old_source = library.find("mesh/vertex");
-    REQUIRE(library.override_shader("mesh/vertex", "override source").has_value());
-    CHECK(*library.find("mesh/vertex") == "override source");
+    const auto old_source = library.find("phong/vertex");
+    REQUIRE(library.override_shader("phong/vertex", "override source").has_value());
+    CHECK(*library.find("phong/vertex") == "override source");
     CHECK(old_source->starts_with("#version"));
 
     const auto missing = library.override_shader("missing", "source");
@@ -67,7 +67,7 @@ TEST_CASE("shader_library_shares_revisions_safely", "[visualization][shaders]") 
 
     CHECK(shaders::builtin_shader_library().is_read_only());
     auto builtin_handle = shaders::builtin_shader_library();
-    const auto builtin_override = builtin_handle.override_shader("mesh/vertex", "blocked");
+    const auto builtin_override = builtin_handle.override_shader("phong/vertex", "blocked");
     REQUIRE_FALSE(builtin_override.has_value());
     CHECK(builtin_override.error() == shaders::ShaderLibraryError::ReadOnly);
 }
@@ -78,8 +78,12 @@ TEST_CASE("embedded_shader_sources_are_available", "[visualization][shaders]") {
         "flat/fragment",
         "examples/triangle/vertex",
         "examples/triangle/fragment",
-        "mesh/vertex",
-        "mesh/fragment",
+        "phong/vertex",
+        "phong/fragment",
+        "unlit/vertex",
+        "unlit/fragment",
+        "pbr/vertex",
+        "pbr/fragment",
         "image/vertex",
         "image/fragment",
     };
@@ -117,58 +121,70 @@ TEST_CASE("embedded_shaders_compile", "[visualization][shaders]") {
     shaders::AbstractShader compiler;
     const auto image_vertex = shaders::builtin_shader_library().find("image/vertex");
     const auto image_fragment = shaders::builtin_shader_library().find("image/fragment");
-    const auto mesh_fragment = shaders::builtin_shader_library().find("mesh/fragment");
     REQUIRE(image_vertex);
     REQUIRE(image_fragment);
-    REQUIRE(mesh_fragment);
-
     CHECK_FALSE(compiler.compile_glsl(
       std::string_view{*image_vertex},
       shaders::AbstractShader::ShaderType::Vertex).empty());
     CHECK_FALSE(compiler.compile_glsl(
       std::string_view{*image_fragment},
       shaders::AbstractShader::ShaderType::Fragment).empty());
-
-    std::string fragment{*mesh_fragment};
-    const auto version_end = fragment.find('\n');
-    REQUIRE(version_end != std::string::npos);
-    fragment.insert(version_end + 1, *shaders::colormap_shader_source("MATLAB_jet"));
-    fragment.insert(version_end + 1, "\n#define COLOR_SCALAR_FIELD\n#define SHADING_FLAT\n");
-    CHECK_FALSE(compiler.compile_glsl(
-      fragment, shaders::AbstractShader::ShaderType::Fragment).empty());
 }
 
-TEST_CASE("mesh_shader_reduces_scalar_attribute", "[visualization][shaders]") {
-    // The scalar-field path reads the raw (1-4 component) attribute and
-    // reduces it in the vertex shader.
-    balsa::visualization::vulkan::MeshRenderState state;
-    for (const auto shading : {balsa::visualization::vulkan::ShadingModel::Flat,
-                               balsa::visualization::vulkan::ShadingModel::Gouraud,
-                               balsa::visualization::vulkan::ShadingModel::Phong}) {
-        state.shading = shading;
-        shaders::MeshShader<balsa::scene_graph::embedding_traits3F> shader(state, "MATLAB_jet");
-        CHECK_FALSE(shader.vert_spirv().empty());
-        CHECK_FALSE(shader.frag_spirv().empty());
-    }
-
-    // Every colormap from the colormap_shaders subproject compiles.
-    state.shading = balsa::visualization::vulkan::ShadingModel::Flat;
+TEST_CASE("phong_program_compiles_every_colormap", "[visualization][shaders][programs]") {
+    const auto program = shaders::programs::phong();
+    const auto shader = [&](std::string_view colormap) {
+        return shaders::ProgramShader(
+            program.value(),
+            {.defines = {"SHADING_FLAT", "HAS_SCALARS", "COLORMAP"},
+             .includes = {{"colormap.glsl", "colormaps/" + std::string(colormap)}}});
+    };
     for (const auto name : shaders::colormap_names()) {
-        shaders::MeshShader<balsa::scene_graph::embedding_traits3F> shader(
-          state, std::string(name));
         INFO(name);
-        CHECK_FALSE(shader.frag_spirv().empty());
+        CHECK_FALSE(shader(name).frag_spirv().empty());
     }
     // An unknown colormap has no shader source.
-    shaders::MeshShader<balsa::scene_graph::embedding_traits3F> unknown(state, "missing");
-    CHECK(unknown.frag_spirv().empty());
+    CHECK(shader("missing").frag_spirv().empty());
 }
 
-TEST_CASE("mesh_shader_honors_unlit_normal_source", "[visualization][shaders]") {
-    balsa::visualization::vulkan::MeshRenderState state;
-    state.normal_source = balsa::visualization::vulkan::NormalSource::None;
+TEST_CASE("shader_program_permutations_compile", "[visualization][shaders][programs]") {
+    namespace programs = shaders::programs;
+    const auto compiles = [](const shaders::ShaderProgram &program, shaders::ProgramVariant variant) {
+        CAPTURE(program.id(), variant.defines);
+        const shaders::ProgramShader shader(program.value(), std::move(variant));
+        CHECK_FALSE(shader.vert_spirv().empty());
+        CHECK_FALSE(shader.frag_spirv().empty());
+    };
+    // Every combination of a program's optional streams.
+    const auto stream_defines = [](const shaders::ShaderProgram &program, unsigned mask) {
+        std::vector<std::string> defines;
+        unsigned bit = 0;
+        for (const auto &stream : program.value().streams) {
+            if (stream.define.empty()) continue;
+            if ((mask >> bit++) & 1u) defines.push_back(stream.define);
+        }
+        return defines;
+    };
+    for (unsigned mask = 0; mask < 32; ++mask) {
+        compiles(programs::pbr(), {.defines = stream_defines(programs::pbr(), mask)});
+    }
+    for (const auto *shading : {"SHADING_FLAT", "SHADING_GOURAUD", "SHADING_PHONG", "SHADING_UNLIT"}) {
+        for (unsigned mask = 0; mask < 4; ++mask) {
+            auto defines = stream_defines(programs::phong(), mask);
+            defines.push_back(shading);
+            compiles(programs::phong(), {.defines = defines});
+            defines.push_back("COLORMAP");
+            compiles(programs::phong(),
+                     {.defines = defines, .includes = {{"colormap.glsl", "colormaps/MATLAB_jet"}}});
+        }
+    }
+    compiles(programs::unlit_lines(), {});
+    compiles(programs::unlit_points(), {});
+}
 
-    shaders::MeshShader<balsa::scene_graph::embedding_traits3F> shader(state);
-    CHECK_FALSE(shader.vert_spirv().empty());
-    CHECK_FALSE(shader.frag_spirv().empty());
+TEST_CASE("shader_program_missing_include_fails", "[visualization][shaders][programs]") {
+    // COLORMAP without a colormap include cannot compile.
+    const shaders::ProgramShader shader(shaders::programs::phong().value(),
+                                        {.defines = {"SHADING_PHONG", "HAS_SCALARS", "COLORMAP"}});
+    CHECK(shader.frag_spirv().empty());
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -6,10 +7,13 @@
 #include <vulkan/vulkan.hpp>
 
 #include "balsa/scene_graph/GeometryView.hpp"
+#include "balsa/scene_graph/Material.hpp"
+#include "balsa/scene_graph/MeshRenderer.hpp"
 #include "balsa/scene_graph/MeshRole.hpp"
 #include "balsa/visualization/vulkan/buffer.hpp"
 #include "balsa/visualization/vulkan/drawable.hpp"
 #include "balsa/visualization/vulkan/mesh_buffers.hpp"
+#include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
 
 namespace balsa::scene_graph {
@@ -85,9 +89,6 @@ class VulkanMeshDrawable : public VulkanDrawable {
 
     // Set the resolved scene-level light state for this frame.
     // Called by MeshScene::draw() before each drawable's draw().
-    // upload_material_ubo_for_layer() packs MaterialUBO using
-    // this state for light direction and per-mesh MaterialProperties
-    // for material response (ambient, specular, shininess).
     void set_scene_light_state(const ResolvedLightState &state) {
         _scene_light_state = state;
     }
@@ -108,54 +109,40 @@ class VulkanMeshDrawable : public VulkanDrawable {
                      const scene_graph::BasicShading &shading,
                      const scene_graph::MeshRenderLayer &layer) -> MeshBuffers *;
 
-    // The vertex streams layer's role bindings resolve to, uploading
-    // attributes on first use.
-    auto layer_inputs(Film &film,
-                      MeshBuffers &buffers,
-                      const scene_graph::BasicShading &shading,
-                      const scene_graph::MeshRenderLayer &layer)
-        -> MeshVertexInputs;
+    // Upload the frame's TransformUBO and SceneLightingUBO.
+    void update_scene_ubos(const scene_graph::Camera &cam, Film &film);
 
-    // Upload TransformUBO (model/view/projection/normal_matrix).
-    // Called once per frame.  Uses film.current_frame() to select
-    // the correct per-frame UBO buffer.
-    void update_transform_ubo(const scene_graph::Camera &cam, Film &film);
-
-    // Pack and upload MaterialUBO for a layer slot from the layer's
-    // renderer material for layer, its vertex inputs (scalar component count) and
-    // _scene_light_state.  Uses film.current_frame() to select the
-    // correct per-frame UBO.
-    void upload_material_ubo_for_layer(Film &film,
-                                       uint32_t layer_slot,
-                                       const MeshRenderState &rs,
-                                       const scene_graph::MeshRenderer &renderer,
-                                       const scene_graph::MeshLayerContext &layer,
-                                       const MeshVertexInputs &inputs);
-
-    // Bind the descriptor set with dynamic offset for the given layer.
-    // Uses film.current_frame() to select the correct per-frame set.
-    void bind_descriptor_set_for_layer(Film &film,
-                                       vk::CommandBuffer cb,
-                                       uint32_t layer_slot);
-
-    // Issue multi-layer Vulkan draw commands (solid, wireframe,
-    // points).  Each enabled layer uploads to its own material UBO
-    // slot and binds with a dynamic offset, so all layers read
-    // independent data even though the command buffer is deferred.
+    // Record each enabled layer's draw: its program's pipeline, its vertex
+    // streams, and its material at the layer slot's offset.
     void record_draw_commands(Film &film);
+
+    // The layer slot's material set for this frame, (re)written for
+    // `program` and `textures`.
+    auto material_set(Film &film,
+                      uint32_t layer_slot,
+                      const shaders::ShaderProgram &program,
+                      const scene_graph::MeshMaterial &material) -> vk::DescriptorSet;
 
     MeshPipelineManager *_manager;
     // One per view drawn.
     std::vector<std::unique_ptr<ViewBuffers>> _view_buffers;
 
-    // Per-frame UBO buffers and descriptor sets — one per concurrent
-    // frame slot — so the CPU can upload data for the current frame
-    // without clobbering data the GPU is still reading from a prior
-    // frame.  Sized by film.concurrent_frame_count() in init().
-    std::vector<VulkanBuffer> _transform_ubos;
-    std::vector<VulkanBuffer> _material_ubos;// each sized for k_max_material_layers aligned slots
-    std::vector<vk::DescriptorSet> _descriptor_sets;
-    vk::DeviceSize _material_ubo_stride = 0;// aligned size per layer slot
+    // Per frame slot, so the CPU never writes what the GPU may still read.
+    struct FrameResources {
+        VulkanBuffer transforms;
+        VulkanBuffer lighting;
+        // k_max_material_layers blocks, _material_stride apart.
+        VulkanBuffer materials;
+        vk::DescriptorSet scene_set;
+        struct MaterialSet {
+            vk::DescriptorSet set;
+            std::string program; // id; empty if unallocated
+            std::vector<const scene_graph::Texture *> textures{};
+        };
+        std::array<MaterialSet, k_max_material_layers> material_sets;
+    };
+    std::vector<FrameResources> _frames;
+    vk::DeviceSize _material_stride = 0;
 
     ResolvedLightState _scene_light_state;
     bool _initialized = false;

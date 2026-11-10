@@ -92,13 +92,12 @@ struct MeshRenderState {
 // ── ResolvedLightState ──────────────────────────────────────────────
 //
 // World-space lighting parameters resolved once per frame by
-// MeshScene from the scene graph's Light features.  Passed to each
-// VulkanMeshDrawable so that meshes pack their MaterialUBO from
-// both scene lighting and per-mesh MaterialProperties.
+// MeshScene from the scene graph's Light features.  Each
+// VulkanMeshDrawable uploads them as set 0's scene lighting.
 
 struct ResolvedLightState {
-    // False when the scene has no enabled lights.  The drawable maps this to
-    // an unlit material response rather than falling back to a phantom light.
+    // False when the scene has no enabled lights; programs then draw unlit
+    // rather than falling back to a phantom light.
     bool enabled = false;
     // World-space light direction (normalised).
     scene_graph::Vec3f light_dir{ 0.577f, 0.577f, 0.577f };

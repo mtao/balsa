@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <cstdio>
 #include <limits>
 #include <filesystem>
@@ -1929,8 +1930,15 @@ TEST_CASE("phong_surface_scalar_colormap", "[scene_graph][renderer]") {
     REQUIRE(layer);
     auto &renderer = dynamic_cast<sg::PhongSurfaceRenderer &>(*layer->renderer);
     const sg::MeshLayerContext context(m.shading, layer->id);
+    // The colormap a request includes as "colormap.glsl".
+    const auto colormap = [](const sg::MeshDrawRequest &request) {
+        for (const auto &[name, target] : request.variant.includes) {
+            if (name == "colormap.glsl") return target.substr(std::string_view("colormaps/").size());
+        }
+        return std::string{};
+    };
 
-    CHECK(renderer.draw_request().colormap == "MATLAB_jet");
+    CHECK(colormap(renderer.draw_request()) == "MATLAB_jet");
     CHECK(renderer.clone()->requirement(sg::roles::scalar())->max_components == 4);
 
     // Every setting is driven from the renderer's controls.
@@ -1955,7 +1963,10 @@ TEST_CASE("phong_surface_scalar_colormap", "[scene_graph][renderer]") {
     auto range = [&] {
         sg::MeshMaterial material;
         renderer.write_material(material, context);
-        return std::array{material.scalar_min, material.scalar_max};
+        // The Phong block's third vec4: min, max, two-sided, pad.
+        std::array<float, 2> min_max{};
+        std::memcpy(min_max.data(), material.uniform.data() + 2 * sizeof(sg::Vec4f), sizeof(min_max));
+        return min_max;
     };
 
     // Unbound scalar: uniform colour, no colormap settings.
@@ -2022,12 +2033,12 @@ TEST_CASE("phong_surface_scalar_colormap", "[scene_graph][renderer]") {
         REQUIRE(parula >= 0);
         e.set_index(parula);
     });
-    CHECK(renderer.draw_request().colormap == "MATLAB_parula");
+    CHECK(colormap(renderer.draw_request()) == "MATLAB_parula");
 
     // Clones keep their own settings.
     auto copy = renderer.clone();
     renderer.scalar_colormap.colormap = "MATLAB_jet";
-    CHECK(copy->draw_request().colormap == "MATLAB_parula");
+    CHECK(colormap(copy->draw_request()) == "MATLAB_parula");
 
     // Unbinding returns to the uniform colour.
     REQUIRE(m.shading.clear_layer_role(layer->id, sg::roles::scalar()));

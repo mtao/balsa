@@ -118,7 +118,7 @@ auto BasicShading::layer_attribute(const MeshRenderLayer &layer,
                         ? binding->attribute
                         : g->find_attribute(binding->attribute->name);
     } else if (requirement->semantic) {
-        attribute = g->attribute_for(*requirement->semantic);
+        attribute = g->attribute_for(*requirement->semantic, requirement->set);
     }
     return attribute && requirement->accepts(*attribute) ? attribute
                                                          : MeshAttributeHandle{};

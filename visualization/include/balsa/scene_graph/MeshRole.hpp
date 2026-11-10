@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -25,6 +26,10 @@ namespace roles {
     auto position() -> MeshRole; // "balsa.position"
     auto normal() -> MeshRole;   // "balsa.normal"
     auto scalar() -> MeshRole;   // "balsa.scalar"
+    auto tangent() -> MeshRole;  // "balsa.tangent"
+    // Set 0 or 1: "balsa.texture_coordinates_0" / "_1".
+    auto texture_coordinates(std::size_t set) -> MeshRole;
+    auto color() -> MeshRole;    // "balsa.color"
 } // namespace roles
 
 } // namespace balsa::scene_graph

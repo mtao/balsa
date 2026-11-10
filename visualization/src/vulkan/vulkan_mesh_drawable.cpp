@@ -7,11 +7,28 @@
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 
 #include <algorithm>
+#include <cstring>
 
 #include <spdlog/spdlog.h>
 
-
 namespace balsa::visualization::vulkan {
+
+namespace {
+    auto host_buffer(Film &film, vk::DeviceSize size) -> VulkanBuffer {
+        return VulkanBuffer(film, size, vk::BufferUsageFlagBits::eUniformBuffer,
+                            vk::MemoryPropertyFlagBits::eHostVisible
+                                | vk::MemoryPropertyFlagBits::eHostCoherent);
+    }
+
+    auto topology_of(scene_graph::MeshPrimitive primitive) -> vk::PrimitiveTopology {
+        switch (primitive) {
+        case scene_graph::MeshPrimitive::Triangles: return vk::PrimitiveTopology::eTriangleList;
+        case scene_graph::MeshPrimitive::Edges: return vk::PrimitiveTopology::eLineList;
+        case scene_graph::MeshPrimitive::Vertices: break;
+        }
+        return vk::PrimitiveTopology::ePointList;
+    }
+} // namespace
 
 // ── Constructor / Destructor ────────────────────────────────────────
 
@@ -26,43 +43,21 @@ VulkanMeshDrawable::~VulkanMeshDrawable() { release(); }
 void VulkanMeshDrawable::init(Film &film) {
     if (_initialized) return;
 
-    const int frame_count = film.concurrent_frame_count();
+    // Material blocks sit at aligned offsets for dynamic binding.
+    const auto alignment = film.physical_device_properties().limits.minUniformBufferOffsetAlignment;
+    const vk::DeviceSize block = shaders::max_material_size;
+    _material_stride = alignment == 0 ? block : (block + alignment - 1) / alignment * alignment;
 
-    // Material UBO alignment — shared across all frames.
-    auto min_align = film.physical_device_properties()
-                         .limits.minUniformBufferOffsetAlignment;
-    _material_ubo_stride = material_ubo_aligned_size(min_align);
-
-    _transform_ubos.resize(frame_count);
-    _material_ubos.resize(frame_count);
-    _descriptor_sets.resize(frame_count);
-
-    for (int i = 0; i < frame_count; ++i) {
-        // Create host-visible UBO buffers.
-        _transform_ubos[i] =
-            VulkanBuffer(film,
-                         sizeof(TransformUBO),
-                         vk::BufferUsageFlagBits::eUniformBuffer,
-                         vk::MemoryPropertyFlagBits::eHostVisible
-                             | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-        _material_ubos[i] =
-            VulkanBuffer(film,
-                         _material_ubo_stride * k_max_material_layers,
-                         vk::BufferUsageFlagBits::eUniformBuffer,
-                         vk::MemoryPropertyFlagBits::eHostVisible
-                             | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-        // Allocate and write descriptor set.  The material range covers
-        // a single slot; the dynamic offset selects which slot to read.
-        _descriptor_sets[i] = _manager->allocate_descriptor_set();
-        _manager->write_descriptor_set(_descriptor_sets[i],
-                                       _transform_ubos[i].buffer(),
-                                       sizeof(TransformUBO),
-                                       _material_ubos[i].buffer(),
-                                       sizeof(MaterialUBO));
+    _frames.resize(static_cast<std::size_t>(film.concurrent_frame_count()));
+    for (auto &frame : _frames) {
+        frame.transforms = host_buffer(film, sizeof(TransformUBO));
+        frame.lighting = host_buffer(film, sizeof(SceneLightingUBO));
+        frame.materials = host_buffer(film, _material_stride * k_max_material_layers);
+        frame.scene_set = _manager->allocate_scene_set();
+        _manager->write_scene_set(frame.scene_set, frame.transforms.buffer(),
+                                  sizeof(TransformUBO), frame.lighting.buffer(),
+                                  sizeof(SceneLightingUBO));
     }
-
     _initialized = true;
 }
 
@@ -70,23 +65,20 @@ void VulkanMeshDrawable::release() {
     for (auto &view : _view_buffers) view->buffers.release();
     _view_buffers.clear();
 
-    for (auto &ubo : _transform_ubos) ubo.release();
-    _transform_ubos.clear();
-
-    for (auto &ubo : _material_ubos) ubo.release();
-    _material_ubos.clear();
-
-    // Return descriptor sets to the pool so they can be reused (e.g.
-    // when BVH overlays are rebuilt repeatedly).  The caller must ensure
-    // the GPU is idle before calling release() — MeshScene::remove_mesh()
-    // handles this by calling device.waitIdle() first.
+    // The caller ensures the GPU no longer uses these (e.g.
+    // MeshScene::remove_mesh() waits for the device first).
     if (_manager) {
-        for (auto ds : _descriptor_sets) {
-            if (ds) _manager->free_descriptor_set(ds);
+        for (auto &frame : _frames) {
+            _manager->free_scene_set(frame.scene_set);
+            for (const auto &entry : frame.material_sets) {
+                if (entry.set) {
+                    _manager->free_material_set(*shaders::shader_programs().find(entry.program),
+                                                entry.set);
+                }
+            }
         }
     }
-    _descriptor_sets.clear();
-
+    _frames.clear();
     _initialized = false;
 }
 
@@ -95,11 +87,7 @@ void VulkanMeshDrawable::release() {
 void VulkanMeshDrawable::draw(const scene_graph::Camera &cam, Film &film) {
     if (!_initialized) return;
     if (!object().visible_in_hierarchy()) return;
-
-    // Upload transforms once per frame (to current frame's UBO).
-    update_transform_ubo(cam, film);
-
-    // Record multi-layer draw commands.
+    update_scene_ubos(cam, film);
     record_draw_commands(film);
 }
 
@@ -150,165 +138,92 @@ auto VulkanMeshDrawable::buffers_for(Film &film,
     return &view.buffers;
 }
 
-auto VulkanMeshDrawable::layer_inputs(Film &film,
-                                      MeshBuffers &buffers,
-                                      const scene_graph::BasicShading &shading,
-                                      const scene_graph::MeshRenderLayer &layer)
-    -> MeshVertexInputs {
-    auto input = [&](scene_graph::MeshRole role) {
-        return buffers.attribute(film, shading.layer_attribute(layer, role));
-    };
-    return {.positions = input(scene_graph::roles::position()),
-            .normals = input(scene_graph::roles::normal()),
-            .scalars = input(scene_graph::roles::scalar())};
-}
+// ── Private: set 0 ──────────────────────────────────────────────────
 
-// ── Private: transform UBO ──────────────────────────────────────────
+void VulkanMeshDrawable::update_scene_ubos(const scene_graph::Camera &cam, Film &film) {
+    auto &frame = _frames[static_cast<std::size_t>(film.current_frame())];
 
-void VulkanMeshDrawable::update_transform_ubo(const scene_graph::Camera &cam,
-                                              Film &film) {
-    if (!_initialized) return;
-
-    const int fi = film.current_frame();
-
-    // Model matrix from the scene graph Object's world transform.
-    auto model_affine = object().world_transform();
-    auto model = model_affine.to_matrix();
-    auto view = cam.view_matrix();
-    auto projection = cam.projection_matrix();
-
-    // Inverse-transpose of model (for transforming normals).
-    scene_graph::Mat4f normal_matrix =
-        model_affine.inverse().to_matrix().transpose().eval();
-
-    // Camera world-space position (for specular view vector).
-    auto cam_world = cam.object().world_transform();
-    auto cam_translation = cam_world.translation();
-
+    const auto model = object().world_transform();
+    const auto camera_position = cam.object().world_transform().translation();
     TransformUBO transform;
-    transform.model = model;
-    transform.view = view;
-    transform.projection = projection;
-    transform.normal_matrix = normal_matrix;
-    transform.camera_pos = scene_graph::Vec4f{
-        static_cast<float>(cam_translation(0)),
-        static_cast<float>(cam_translation(1)),
-        static_cast<float>(cam_translation(2)),
-        0.0f };// w = pad
-    _transform_ubos[fi].upload(&transform, sizeof(TransformUBO));
+    transform.model = model.to_matrix();
+    transform.view = cam.view_matrix();
+    transform.projection = cam.projection_matrix();
+    transform.normal_matrix = model.inverse().to_matrix().transpose().eval();
+    transform.camera_pos = scene_graph::Vec4f{static_cast<float>(camera_position(0)),
+                                              static_cast<float>(camera_position(1)),
+                                              static_cast<float>(camera_position(2)), 0.0f};
+    frame.transforms.upload(&transform, sizeof(TransformUBO));
+
+    const auto &light = _scene_light_state;
+    const SceneLightingUBO lighting{
+        .light_direction = {light.light_dir(0), light.light_dir(1), light.light_dir(2), 0.0f},
+        .light_color = {light.light_color(0), light.light_color(1), light.light_color(2),
+                        light.enabled ? 1.0f : 0.0f}};
+    frame.lighting.upload(&lighting, sizeof(SceneLightingUBO));
 }
 
-// ── Private: per-layer material UBO ─────────────────────────────────
+// ── Private: set 1 ──────────────────────────────────────────────────
 
-void VulkanMeshDrawable::upload_material_ubo_for_layer(
-    Film &film,
-    uint32_t layer_slot,
-    const MeshRenderState &rs,
-    const scene_graph::MeshRenderer &renderer,
-    const scene_graph::MeshLayerContext &layer,
-    const MeshVertexInputs &inputs) {
-    const int fi = film.current_frame();
+auto VulkanMeshDrawable::material_set(Film &film,
+                                      uint32_t layer_slot,
+                                      const shaders::ShaderProgram &program,
+                                      const scene_graph::MeshMaterial &material)
+    -> vk::DescriptorSet {
+    namespace sg = scene_graph;
+    const auto &slots = program.value().textures;
+    std::vector<const sg::Texture *> textures(slots.size(), nullptr);
+    for (std::size_t i = 0; i < slots.size() && i < material.textures.size(); ++i) {
+        const auto &t = material.textures[i];
+        if (t && t->texture && t->texture->image) textures[i] = t->texture.get();
+    }
 
-    MaterialUBO material;
+    auto &frame = _frames[static_cast<std::size_t>(film.current_frame())];
+    auto &entry = frame.material_sets[layer_slot];
+    // This frame slot's previous use has completed, so the set may be
+    // freed or rewritten.
+    if (entry.program != program.id()) {
+        if (entry.set) {
+            _manager->free_material_set(*shaders::shader_programs().find(entry.program), entry.set);
+        }
+        entry = {.set = _manager->allocate_material_set(program),
+                 .program = std::string(program.id())};
+    } else if (entry.textures == textures) {
+        return entry.set;
+    }
 
-    scene_graph::MeshMaterial renderer_material;
-    renderer.write_material(renderer_material, layer);
-    material.uniform_color = renderer_material.uniform_color;
-    material.layer_color = renderer_material.layer_color;
-
-    // With no enabled scene light, preserve the base color as an unlit pass.
-    // Otherwise disabling the headlight would accidentally fall back to the
-    // ResolvedLightState's default white light.
-    const bool lighting_enabled = _scene_light_state.enabled;
-
-    // Lighting — scene light direction + per-mesh material response.
-    const auto &ld = _scene_light_state.light_dir;
-    material.light_dir =
-        scene_graph::Vec4f{ ld(0), ld(1), ld(2),
-                            lighting_enabled ? rs.material.ambient_strength : 1.0f };
-
-    // Light color (from scene light) + diffuse strength in .w.
-    const auto &lcol = _scene_light_state.light_color;
-    material.light_color = scene_graph::Vec4f{
-        lcol(0), lcol(1), lcol(2),
-        lighting_enabled ? rs.material.diffuse_strength : 0.0f };
-
-    material.specular_params = scene_graph::Vec4f{
-        lighting_enabled ? rs.material.specular_strength : 0.0f,
-        lighting_enabled ? rs.material.specular_strength : 0.0f,
-        lighting_enabled ? rs.material.specular_strength : 0.0f,
-        rs.material.shininess };
-
-    // Scalar / sizing parameters.
-    material.scalar_params(0) = renderer_material.scalar_min;
-    material.scalar_params(1) = renderer_material.scalar_max;
-    material.scalar_params(2) = renderer_material.primitive_size;
-    material.scalar_params(3) = rs.two_sided ? 1.0f : 0.0f;
-
-    // Reduction of the raw scalar-role attribute, evaluated in the shader.
-    const auto &reduction = renderer_material.scalar_reduction;
-    material.scalar_select = scene_graph::Vec4f{
-        reduction.kind == scene_graph::ScalarReduction::Kind::Norm ? 1.0f : 0.0f,
-        static_cast<float>(reduction.value),
-        static_cast<float>(inputs.scalars ? inputs.scalars->components : 0),
-        0.0f};
-
-    // Write to the slot's aligned offset within the multi-slot buffer.
-    vk::DeviceSize offset =
-        static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride;
-    _material_ubos[fi].upload(&material, sizeof(MaterialUBO), offset);
+    auto &cache = _manager->texture_cache();
+    std::vector<vk::DescriptorImageInfo> infos;
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        const SampledImage *image = nullptr;
+        vk::Sampler sampler;
+        if (const auto *texture = textures[i]) {
+            image = &cache.image(film, texture->image, slots[i].color_space);
+            sampler = cache.sampler(film, texture->sampler);
+        } else {
+            image = slots[i].fallback == shaders::TextureFallback::FlatNormal ? &cache.flat_normal(film)
+                                                                              : &cache.white(film);
+            sampler = cache.sampler(film, sg::Sampler{});
+        }
+        infos.push_back({sampler, image->view(), vk::ImageLayout::eShaderReadOnlyOptimal});
+    }
+    _manager->write_material_set(program, entry.set, frame.materials.buffer(), infos);
+    entry.textures = std::move(textures);
+    return entry.set;
 }
 
-// ── Private: bind descriptor set with dynamic offset ────────────────
-
-void VulkanMeshDrawable::bind_descriptor_set_for_layer(Film &film,
-                                                       vk::CommandBuffer cb,
-                                                       uint32_t layer_slot) {
-    const int fi = film.current_frame();
-    uint32_t dynamic_offset = static_cast<uint32_t>(
-        static_cast<vk::DeviceSize>(layer_slot) * _material_ubo_stride);
-    cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                          _manager->pipeline_layout(),
-                          0,
-                          {_descriptor_sets[fi]},
-                          {dynamic_offset});
-}
-
-// ── Private: multi-layer draw commands ──────────────────────────────
+// ── Private: draw ───────────────────────────────────────────────────
 
 void VulkanMeshDrawable::record_draw_commands(Film &film) {
     const auto *shading = object().find_feature<scene_graph::BasicShading>();
     if (!shading) return;
 
     auto cb = film.current_command_buffer();
-
-    // ── Shared state: viewport, scissor ─────────────────────────────
-    // Pipeline, vertex streams and the descriptor set (dynamic material
-    // offset) are bound per layer.
-
-    auto extent = film.swapchain_image_size();
-    vk::Viewport viewport;
-    viewport.setX(0.0f);
-    viewport.setY(0.0f);
-    viewport.setWidth(static_cast<float>(extent[0]));
-    viewport.setHeight(static_cast<float>(extent[1]));
-    viewport.setMinDepth(0.0f);
-    viewport.setMaxDepth(1.0f);
-
-    vk::Rect2D scissor;
-    scissor.setOffset({0, 0});
-    scissor.setExtent({extent[0], extent[1]});
-
-    // Each layer binds its own vertex streams: layers may bind different
-    // attributes to the same role.
-    auto bind_vertex_inputs = [&](const MeshVertexInputs &inputs) {
-        auto bind = [&](uint32_t binding, const AttributeBuffer *b) {
-            if (b) cb.bindVertexBuffers(binding, {b->buffer.buffer()}, {vk::DeviceSize{0}});
-        };
-        bind(0, inputs.positions);
-        bind(1, inputs.normals);
-        bind(3, inputs.scalars);
-    };
+    auto &frame = _frames[static_cast<std::size_t>(film.current_frame())];
+    const auto extent = film.swapchain_image_size();
+    const vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(extent[0]),
+                                static_cast<float>(extent[1]), 0.0f, 1.0f};
+    const vk::Rect2D scissor{{0, 0}, {extent[0], extent[1]}};
 
     uint32_t layer_slot = 0;
     for (const auto &layer : shading->render_layers()) {
@@ -316,34 +231,64 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         if (layer_slot == k_max_material_layers) break;
         auto *buffers = buffers_for(film, *shading, layer);
         if (buffers == nullptr) continue;
-        const auto inputs = layer_inputs(film, *buffers, *shading, layer);
-        if (inputs.positions == nullptr) continue;
-        const auto request = layer.renderer->draw_request();
-        const auto topology = request.primitive == scene_graph::MeshPrimitive::Triangles
-                                  ? vk::PrimitiveTopology::eTriangleList
-                              : request.primitive == scene_graph::MeshPrimitive::Edges
-                                  ? vk::PrimitiveTopology::eLineList
-                                  : vk::PrimitiveTopology::ePointList;
-        const bool available =
+
+        auto request = layer.renderer->draw_request();
+        const auto &program = request.program.value();
+        const bool indexed_available =
             (request.primitive == scene_graph::MeshPrimitive::Triangles && buffers->has_triangle_indices())
             || (request.primitive == scene_graph::MeshPrimitive::Edges && buffers->has_edge_indices())
             || request.primitive == scene_graph::MeshPrimitive::Vertices;
-        if (!available) continue;
-        const auto pipeline = _manager->get_or_create(request.state, request.colormap, topology,
-                                                      inputs, film);
+        if (!indexed_available) continue;
+
+        // The program's streams from the layer's role bindings; optional
+        // ones that are bound enable their definition.
+        std::array<const AttributeBuffer *, max_vertex_streams> streams{};
+        std::array<vk::Format, max_vertex_streams> formats{};
+        bool complete = true;
+        for (const auto &stream : program.streams) {
+            const auto *buffer =
+                buffers->attribute(film, shading->layer_attribute(layer, stream.role));
+            if (buffer == nullptr) {
+                complete = complete && !stream.required;
+                continue;
+            }
+            streams[stream.location] = buffer;
+            formats[stream.location] = buffer->format;
+            if (!stream.define.empty()) request.variant.defines.push_back(stream.define);
+        }
+        if (!complete || streams[0] == nullptr) continue;
+
+        scene_graph::MeshMaterial material;
+        layer.renderer->write_material(material, scene_graph::MeshLayerContext(*shading, layer.id));
+        if (material.uniform.size() != program.material_size) {
+            spdlog::error("VulkanMeshDrawable: layer \"{}\" wrote {} material bytes; {} needs {}",
+                          layer.name, material.uniform.size(), program.label,
+                          program.material_size);
+            continue;
+        }
+
+        const auto pipeline = _manager->pipeline(_manager->make_key(
+            request.program, std::move(request.variant), formats, topology_of(request.primitive),
+            request.cull_mode, request.depth_write));
         if (!pipeline) continue;
 
-        upload_material_ubo_for_layer(film, layer_slot, request.state,
-                                      *layer.renderer,
-                                      scene_graph::MeshLayerContext(*shading, layer.id),
-                                      inputs);
+        const auto offset = static_cast<vk::DeviceSize>(layer_slot) * _material_stride;
+        frame.materials.upload(material.uniform.data(), material.uniform.size(), offset);
+        const auto layout = _manager->pipeline_layout(request.program);
+        const auto set = material_set(film, layer_slot, request.program, material);
+
         cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
-        cb.setViewport(0, {viewport});
-        cb.setScissor(0, {scissor});
-        bind_vertex_inputs(inputs);
-        bind_descriptor_set_for_layer(film, cb, layer_slot);
+        cb.setViewport(0, viewport);
+        cb.setScissor(0, scissor);
         cb.setLineWidth(layer.renderer->line_width());
         cb.setDepthBias(0.0f, 0.0f, 0.0f);
+        cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0,
+                              {frame.scene_set, set}, {static_cast<uint32_t>(offset)});
+        for (uint32_t location = 0; location < streams.size(); ++location) {
+            if (const auto *buffer = streams[location]) {
+                cb.bindVertexBuffers(location, {buffer->buffer.buffer()}, {vk::DeviceSize{0}});
+            }
+        }
         if (request.primitive == scene_graph::MeshPrimitive::Triangles) {
             cb.bindIndexBuffer(buffers->triangle_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(buffers->triangle_count() * 3, 1, 0, 0, 0);
@@ -354,7 +299,7 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
             cb.bindIndexBuffer(buffers->point_index_buffer(), 0, vk::IndexType::eUint32);
             cb.drawIndexed(buffers->point_count(), 1, 0, 0, 0);
         } else {
-            cb.draw(inputs.positions->count, 1, 0, 0);
+            cb.draw(streams[0]->count, 1, 0, 0);
         }
         ++layer_slot;
     }

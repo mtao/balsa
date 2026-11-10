@@ -48,6 +48,12 @@ auto float_property(std::string label, float &field, float min, float max,
                 .use_slider = slider}};
 }
 
+// "balsa.unlit_lines" / "balsa.unlit_points"'s std140 material block.
+struct UnlitBlock {
+    Vec4f color;
+    Vec4f size;   // x = point size
+};
+
 auto position_requirement() -> MeshRoleRequirement {
     return {.role = roles::position(),
             .min_components = 1,
@@ -168,9 +174,26 @@ auto PhongSurfaceRenderer::fit_to(const MeshLayerContext &layer) -> bool {
     return MeshRenderer::fit_to(layer);
 }
 auto PhongSurfaceRenderer::draw_request() const -> MeshDrawRequest {
-    return {.primitive = MeshPrimitive::Triangles,
-            .state = state,
-            .colormap = scalar_colormap.colormap};
+    using namespace visualization::vulkan;
+    MeshDrawRequest request{.program = visualization::shaders::programs::phong(),
+                            .primitive = MeshPrimitive::Triangles,
+                            .cull_mode = state.cull_mode};
+    auto &defines = request.variant.defines;
+    if (state.normal_source == NormalSource::None) {
+        defines.emplace_back("SHADING_UNLIT");
+    } else {
+        switch (state.shading) {
+        case ShadingModel::Flat: defines.emplace_back("SHADING_FLAT"); break;
+        case ShadingModel::Gouraud: defines.emplace_back("SHADING_GOURAUD"); break;
+        case ShadingModel::Phong: defines.emplace_back("SHADING_PHONG"); break;
+        }
+    }
+    if (!scalar_colormap.colormap.empty()) {
+        defines.emplace_back("COLORMAP");
+        request.variant.includes.emplace_back("colormap.glsl",
+                                              "colormaps/" + scalar_colormap.colormap);
+    }
+    return request;
 }
 auto PhongSurfaceRenderer::scalar_data_extents(const MeshLayerContext &layer) const
     -> std::optional<std::array<float, 2>> {
@@ -195,11 +218,24 @@ auto PhongSurfaceRenderer::scalar_range(const MeshLayerContext &layer) const
 }
 auto PhongSurfaceRenderer::write_material(MeshMaterial &material,
                                           const MeshLayerContext &layer) const -> void {
-    material.uniform_color = state.uniform_color;
-    material.scalar_reduction = scalar_colormap.reduction;
+    // "balsa.phong"'s std140 material block.
+    struct Block {
+        Vec4f color;
+        Vec4f response;       // ambient, diffuse, specular, shininess
+        Vec4f scalar_range;   // min, max, two-sided
+        Vec4f scalar_select;  // mode, component or p, component count
+    };
     const auto [min, max] = scalar_range(layer);
-    material.scalar_min = min;
-    material.scalar_max = max;
+    const auto scalar = layer.attribute(roles::scalar());
+    const auto &reduction = scalar_colormap.reduction;
+    const auto &m = state.material;
+    material.set_uniform(Block{
+        .color = state.uniform_color,
+        .response = {m.ambient_strength, m.diffuse_strength, m.specular_strength, m.shininess},
+        .scalar_range = {min, max, state.two_sided ? 1.0f : 0.0f, 0.0f},
+        .scalar_select = {reduction.kind == ScalarReduction::Kind::Norm ? 1.0f : 0.0f,
+                          static_cast<float>(reduction.value),
+                          static_cast<float>(scalar ? scalar->component_count() : 0), 0.0f}});
 }
 auto PhongSurfaceRenderer::build_controls(const MeshLayerContext &layer)
     -> visualization::controls::Layout {
@@ -293,14 +329,12 @@ auto UnlitWireframeRenderer::required_roles() const
     return requirements;
 }
 auto UnlitWireframeRenderer::draw_request() const -> MeshDrawRequest {
-    visualization::vulkan::MeshRenderState state;
-    state.normal_source = visualization::vulkan::NormalSource::None;
-    return {.primitive = MeshPrimitive::Edges, .state = std::move(state)};
+    return {.program = visualization::shaders::programs::unlit_lines(),
+            .primitive = MeshPrimitive::Edges};
 }
 auto UnlitWireframeRenderer::write_material(MeshMaterial &material,
-                                     const MeshLayerContext &) const -> void {
-    material.layer_color = color;
-    material.primitive_size = width;
+                                            const MeshLayerContext &) const -> void {
+    material.set_uniform(UnlitBlock{.color = color, .size = {width, 0.0f, 0.0f, 0.0f}});
 }
 auto UnlitWireframeRenderer::build_controls(const MeshLayerContext &)
     -> visualization::controls::Layout {
@@ -323,14 +357,12 @@ auto UnlitPointsRenderer::required_roles() const
     return requirements;
 }
 auto UnlitPointsRenderer::draw_request() const -> MeshDrawRequest {
-    visualization::vulkan::MeshRenderState state;
-    state.normal_source = visualization::vulkan::NormalSource::None;
-    return {.primitive = MeshPrimitive::Vertices, .state = std::move(state)};
+    return {.program = visualization::shaders::programs::unlit_points(),
+            .primitive = MeshPrimitive::Vertices};
 }
 auto UnlitPointsRenderer::write_material(MeshMaterial &material,
-                                     const MeshLayerContext &) const -> void {
-    material.layer_color = color;
-    material.primitive_size = size;
+                                         const MeshLayerContext &) const -> void {
+    material.set_uniform(UnlitBlock{.color = color, .size = {size, 0.0f, 0.0f, 0.0f}});
 }
 auto UnlitPointsRenderer::build_controls(const MeshLayerContext &)
     -> visualization::controls::Layout {
@@ -360,10 +392,110 @@ auto create_mesh_renderer(std::string_view id) -> std::unique_ptr<MeshRenderer> 
     return it == definitions().end() ? nullptr : it->create();
 }
 
+auto PbrSurfaceRenderer::clone() const -> std::unique_ptr<MeshRenderer> {
+    return std::make_unique<PbrSurfaceRenderer>(*this);
+}
+auto PbrSurfaceRenderer::id() const -> std::string_view { return "balsa.pbr_surface"; }
+auto PbrSurfaceRenderer::required_roles() const -> std::span<const MeshRoleRequirement> {
+    static const std::array requirements{
+        position_requirement(),
+        // Without normals the shader uses face normals.
+        MeshRoleRequirement{.role = roles::normal(),
+                            .min_components = 3,
+                            .max_components = 3,
+                            .required = false,
+                            .semantic = semantics::normal()},
+        // xyz and the bitangent sign; without tangents the shader derives
+        // them from texture coordinates.
+        MeshRoleRequirement{.role = roles::tangent(),
+                            .min_components = 4,
+                            .max_components = 4,
+                            .required = false,
+                            .semantic = semantics::tangent()},
+        MeshRoleRequirement{.role = roles::texture_coordinates(0),
+                            .min_components = 2,
+                            .max_components = 2,
+                            .required = false,
+                            .semantic = semantics::texture_coordinates(),
+                            .set = 0},
+        MeshRoleRequirement{.role = roles::texture_coordinates(1),
+                            .min_components = 2,
+                            .max_components = 2,
+                            .required = false,
+                            .semantic = semantics::texture_coordinates(),
+                            .set = 1},
+        // Multiplies the base colour.
+        MeshRoleRequirement{.role = roles::color(),
+                            .min_components = 3,
+                            .max_components = 4,
+                            .required = false,
+                            .semantic = semantics::color()},
+    };
+    return requirements;
+}
+auto PbrSurfaceRenderer::draw_request() const -> MeshDrawRequest {
+    using visualization::vulkan::CullMode;
+    return {.program = visualization::shaders::programs::pbr(),
+            .primitive = MeshPrimitive::Triangles,
+            .cull_mode = material->double_sided ? CullMode::None : CullMode::Back,
+            .depth_write = material->alpha_mode != AlphaMode::Blend};
+}
+auto PbrSurfaceRenderer::write_material(MeshMaterial &out, const MeshLayerContext &) const
+    -> void {
+    // "balsa.pbr"'s std140 material block.
+    struct Block {
+        Vec4f base_color;
+        Vec4f emissive;                    // rgb, alpha cutoff
+        Vec4f factors;                     // metallic, roughness, normal scale,
+                                           // occlusion strength
+        Vec4f texture_coordinate_sets;     // base colour, metallic-roughness,
+                                           // normal, occlusion
+        Vec4f options;                     // emissive set, alpha mode, double sided
+    };
+    const auto &m = *material;
+    const auto set = [](const std::optional<MaterialTexture> &t) {
+        return t ? static_cast<float>(t->set) : 0.0f;
+    };
+    out.set_uniform(Block{
+        .base_color = m.base_color,
+        .emissive = {m.emissive(0), m.emissive(1), m.emissive(2), m.alpha_cutoff},
+        .factors = {m.metallic, m.roughness, m.normal_scale, m.occlusion_strength},
+        .texture_coordinate_sets = {set(m.base_color_texture), set(m.metallic_roughness_texture),
+                                    set(m.normal_texture), set(m.occlusion_texture)},
+        .options = {set(m.emissive_texture), static_cast<float>(m.alpha_mode),
+                    m.double_sided ? 1.0f : 0.0f, 0.0f}});
+    // In the program's texture slot order.
+    out.textures = {m.base_color_texture, m.metallic_roughness_texture, m.normal_texture,
+                    m.occlusion_texture, m.emissive_texture};
+}
+auto PbrSurfaceRenderer::build_controls(const MeshLayerContext &)
+    -> visualization::controls::Layout {
+    using namespace visualization::controls;
+    Layout layout;
+    auto &m = *material;
+    layout.add_property(color_property("Base Color", m.base_color));
+    layout.add_property(float_property("Metallic", m.metallic, 0.0f, 1.0f, 0.01f, true));
+    layout.add_property(float_property("Roughness", m.roughness, 0.0f, 1.0f, 0.01f, true));
+    layout.add_property(
+        {.label = "Alpha Mode",
+         .widget = ChoiceInput{
+             .options = [] { return std::vector<std::string>{"Opaque", "Mask", "Blend"}; },
+             .get_index = [&m] { return static_cast<int>(m.alpha_mode); },
+             .set_index = [&m](const int &i) { m.alpha_mode = static_cast<AlphaMode>(i); }}});
+    auto cutoff = float_property("Alpha Cutoff", m.alpha_cutoff, 0.0f, 1.0f, 0.01f, true);
+    cutoff.visible_when = [&m] { return m.alpha_mode == AlphaMode::Mask; };
+    layout.add_property(std::move(cutoff));
+    layout.add_property(bool_property("Double Sided", m.double_sided));
+    return layout;
+}
+
 auto register_builtin_mesh_renderers() -> void {
     static const bool once = [] {
         register_mesh_renderer({"balsa.phong_surface", "Phong Surface", [] {
                                     return std::make_unique<PhongSurfaceRenderer>();
+                                }});
+        register_mesh_renderer({"balsa.pbr_surface", "PBR Surface", [] {
+                                    return std::make_unique<PbrSurfaceRenderer>();
                                 }});
         register_mesh_renderer({"balsa.unlit_wireframe", "Unlit Wireframe", [] {
                                     return std::make_unique<UnlitWireframeRenderer>();

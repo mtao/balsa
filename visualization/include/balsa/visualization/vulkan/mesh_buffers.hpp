@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -14,49 +15,30 @@ namespace balsa::visualization::vulkan {
 
 class Film;
 
-// ── UBO structs (must match GLSL layout, std140 alignment) ───────────
+// ── Set 0 uniform blocks (std140; "balsa/scene.glsl") ─────────────────
 
-// binding = 0 in mesh.vert / mesh.frag
+// Binding 0.
 struct TransformUBO {
-    scene_graph::Mat4f model; // 64 bytes
-    scene_graph::Mat4f view; // 64 bytes
-    scene_graph::Mat4f projection; // 64 bytes
-    scene_graph::Mat4f normal_matrix; // 64 bytes  (transpose(inverse(model)))
-    scene_graph::Vec4f
-        camera_pos; // 16 bytes  (xyz = world-space camera position, w = pad)
+    scene_graph::Mat4f model;
+    scene_graph::Mat4f view;
+    scene_graph::Mat4f projection;
+    scene_graph::Mat4f normal_matrix; // transpose(inverse(model))
+    scene_graph::Vec4f camera_pos;    // xyz = world-space camera position
 };
 static_assert(sizeof(TransformUBO) == 272, "TransformUBO must be 272 bytes");
 
-// binding = 1 in mesh.vert / mesh.frag
-struct MaterialUBO {
-    scene_graph::Vec4f uniform_color; // rgba
-    scene_graph::Vec4f light_dir; // xyz = direction, w = ambient_strength
-    scene_graph::Vec4f light_color; // xyz = light color, w = unused (pad)
-    scene_graph::Vec4f specular_params; // xyz = specular_color, w = shininess
-    scene_graph::Vec4f scalar_params; // x = scalar_min, y = scalar_max, z =
-                                      // point_size, w = two_sided (>0.5)
-    scene_graph::Vec4f
-        layer_color; // rgba — per-layer color (solid/wireframe/point)
-    scene_graph::Vec4f scalar_select; // x = mode (0 component, 1 p-norm),
-                                      // y = component index or p,
-                                      // z = component count, w = pad
+// Binding 1.
+struct SceneLightingUBO {
+    scene_graph::Vec4f light_direction; // xyz = world-space direction to the light
+    scene_graph::Vec4f light_color;     // xyz = colour, w = 1 if the light is on
 };
-static_assert(sizeof(MaterialUBO) == 112, "MaterialUBO must be 112 bytes");
+static_assert(sizeof(SceneLightingUBO) == 32, "SceneLightingUBO must be 32 bytes");
 
 // Maximum number of independently configured renderer layers drawn per mesh
 // frame. The default preset uses three; applications may register more.
 inline constexpr uint32_t k_max_material_layers = 16;
 
-// Compute the aligned offset for dynamic UBO slots, respecting
-// minUniformBufferOffsetAlignment.  Returns the stride in bytes
-// between consecutive MaterialUBO slots.
-inline vk::DeviceSize material_ubo_aligned_size(vk::DeviceSize min_alignment) {
-    vk::DeviceSize raw = sizeof(MaterialUBO);
-    if (min_alignment == 0) return raw;
-    return (raw + min_alignment - 1) & ~(min_alignment - 1);
-}
-
-// ── AttributeBuffer / MeshVertexInputs ──────────────────────────────
+// ── AttributeBuffer ──────────────────────────────────────────────────
 
 // A vertex attribute on the GPU, 1–4 components per vertex, in a format the
 // shader reads as float (see vertex_format).  Vulkan fills components the
@@ -66,18 +48,6 @@ struct AttributeBuffer {
     vk::Format format = vk::Format::eUndefined;
     uint8_t components = 0; // of the attribute (format may be padded to 4)
     uint32_t count = 0;
-};
-
-// The vertex streams one draw reads, each the attribute a layer bound to
-// the corresponding role (nullptr when unbound):
-//
-//   binding 0: positions (location 0)
-//   binding 1: normals   (location 1)
-//   binding 3: scalars   (location 3; reduced to one value in the shader)
-struct MeshVertexInputs {
-    const AttributeBuffer *positions = nullptr;
-    const AttributeBuffer *normals = nullptr;
-    const AttributeBuffer *scalars = nullptr;
 };
 
 // ── MeshBuffers ──────────────────────────────────────────────────────

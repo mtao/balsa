@@ -835,10 +835,13 @@ TEST_CASE("load_into_mesh_scene", "[gltf][viewer]") {
         for (const auto &child : object.children()) { n += self(*child); }
         return n;
     };
-    const auto surface_enabled = [](const sg::Object &object) {
+    // glTF primitives are drawn with their material, other meshes with
+    // the default Phong surface.
+    const auto surface_enabled = [](const sg::Object &object,
+                                    std::string_view renderer = "balsa.phong_surface") {
         const auto *shading = object.find_feature<sg::BasicShading>();
         REQUIRE(shading);
-        const auto *layer = shading->find_layer("balsa.phong_surface");
+        const auto *layer = shading->find_layer(renderer);
         REQUIRE(layer);
         return layer->enabled;
     };
@@ -868,7 +871,7 @@ TEST_CASE("load_into_mesh_scene", "[gltf][viewer]") {
         CHECK(object.parent() == &scene.root());
         CHECK(object.children_count() == 2);
         CHECK(drawable_count(object) == 2);
-        CHECK(surface_enabled(*object.children()[0]));
+        CHECK(surface_enabled(*object.children()[0], "balsa.pbr_surface"));
 
         // Loaded as is: no rescaling, so the world box is the file's.
         const auto box = balsa::visualization::world_bounding_box(object);

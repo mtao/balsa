@@ -130,6 +130,8 @@ visualization_sources = [
   'src/shaders/abstract_shader.cpp',
   'src/shaders/shader_library.cpp',
   'src/shaders/embedded_sources.cpp',
+  'src/shaders/program_shader.cpp',
+  'src/shaders/ShaderProgram.cpp',
   'src/shaders/embedded_colormaps.cpp',
   'src/vulkan/native_film.cpp',
   'src/vulkan/window.cpp',

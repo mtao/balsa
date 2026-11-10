@@ -1,176 +1,85 @@
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
-#include "balsa/visualization/vulkan/vertex_format.hpp"
-#include "balsa/scene_graph/embedding_traits.hpp"
-#include "balsa/visualization/shaders/mesh_shader.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
-#include "balsa/visualization/vulkan/mesh_buffers.hpp"
+#include "balsa/visualization/vulkan/vertex_format.hpp"
+
 #include <spdlog/spdlog.h>
+
+#include <functional>
 #include <stdexcept>
+#include <vector>
 
 namespace balsa::visualization::vulkan {
 
-// ── MeshPipelineKeyHash ──────────────────────────────────────────────
+namespace {
+    auto hash_combine(std::size_t seed, std::size_t value) -> std::size_t {
+        return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+    }
 
-static std::size_t hash_combine(std::size_t seed, std::size_t v) {
-    // boost::hash_combine style
-    seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    return seed;
+    auto program_definition(std::string_view id) -> const shaders::ShaderProgramDefinition & {
+        const auto program = shaders::shader_programs().find(id);
+        if (!program) throw std::runtime_error("MeshPipelineManager: unknown shader program");
+        return program->value();
+    }
+} // namespace
+
+auto MeshPipelineKeyHash::operator()(const MeshPipelineKey &key) const noexcept -> std::size_t {
+    const std::hash<std::string> string_hash;
+    std::size_t h = string_hash(key.program);
+    for (const auto &define : key.variant.defines) h = hash_combine(h, string_hash(define));
+    for (const auto &[name, target] : key.variant.includes) {
+        h = hash_combine(h, string_hash(name));
+        h = hash_combine(h, string_hash(target));
+    }
+    for (const auto format : key.stream_formats) h = hash_combine(h, std::hash<vk::Format>{}(format));
+    h = hash_combine(h, static_cast<std::size_t>(key.topology));
+    h = hash_combine(h, static_cast<std::size_t>(key.cull_mode));
+    h = hash_combine(h, key.depth_write);
+    h = hash_combine(h, key.msaa_samples);
+    h = hash_combine(h, std::hash<uint64_t>{}(key.render_pass));
+    return hash_combine(h, key.depth_test);
 }
-
-std::size_t
-    MeshPipelineKeyHash::operator()(const MeshPipelineKey &k) const noexcept {
-    std::size_t h = std::hash<uint8_t>{}(static_cast<uint8_t>(k.shading));
-    h = hash_combine(
-        h, std::hash<uint8_t>{}(static_cast<uint8_t>(k.normal_source)));
-    h = hash_combine(h,
-                     std::hash<uint32_t>{}(static_cast<uint32_t>(k.topology)));
-    h = hash_combine(h, std::hash<std::string>{}(k.colormap));
-    h = hash_combine(h, std::hash<vk::Format>{}(k.position_format));
-    h = hash_combine(h, std::hash<vk::Format>{}(k.normal_format));
-    h = hash_combine(h, std::hash<vk::Format>{}(k.scalar_format));
-    h = hash_combine(h,
-                     std::hash<uint8_t>{}(static_cast<uint8_t>(k.cull_mode)));
-    h = hash_combine(h, std::hash<bool>{}(k.wireframe_overlay));
-    h = hash_combine(h, std::hash<uint32_t>{}(k.msaa_samples));
-    h = hash_combine(h, std::hash<uint64_t>{}(k.render_pass));
-    h = hash_combine(h, std::hash<bool>{}(k.depth_test));
-    return h;
-}
-
-// ── make_pipeline_key ────────────────────────────────────────────────
-
-MeshPipelineKey make_pipeline_key(const MeshRenderState &state,
-                                  std::string_view colormap,
-                                  vk::PrimitiveTopology topology,
-                                  const MeshVertexInputs &inputs,
-                                  Film &film,
-                                  bool wireframe_overlay) {
-    MeshPipelineKey key;
-    key.shading = state.shading;
-    key.normal_source = state.normal_source;
-    key.topology = topology;
-
-    auto format = [](const AttributeBuffer *b) {
-        return b ? b->format : vk::Format::eUndefined;
-    };
-    key.position_format = format(inputs.positions);
-    key.normal_format = format(inputs.normals);
-    key.scalar_format = format(inputs.scalars);
-
-    // A colormap needs a scalar to map; without one, draw uniform colour.
-    if (key.scalar_format != vk::Format::eUndefined) key.colormap = colormap;
-    if (key.colormap.empty()) {
-        key.scalar_format = vk::Format::eUndefined; // unused: keep keys equal
-    }
-
-    // ── Safety net: enforce normal constraints ──────────────────────
-    // The UI and load-time code should already enforce these via
-    // MeshRenderState::constrain(), but clamp here as a last resort
-    // to prevent shader/vertex-layout mismatches.
-    if (key.normal_source == NormalSource::FromAttribute
-        && key.normal_format == vk::Format::eUndefined) {
-        key.normal_source = NormalSource::ComputedInShader;
-    }
-    if (key.normal_source != NormalSource::FromAttribute) {
-        key.normal_format = vk::Format::eUndefined; // unused: keep keys equal
-    }
-    if (key.normal_source == NormalSource::ComputedInShader
-        && (key.shading == ShadingModel::Phong
-            || key.shading == ShadingModel::Gouraud)) {
-        key.shading = ShadingModel::Flat;
-    }
-
-    key.cull_mode = state.cull_mode;
-    key.wireframe_overlay = wireframe_overlay;
-
-    key.msaa_samples = static_cast<uint32_t>(film.sample_count());
-    key.render_pass = reinterpret_cast<uint64_t>(
-        static_cast<VkRenderPass>(film.default_render_pass()));
-    key.depth_test = film.has_depth_stencil();
-
-    return key;
-}
-
-// ── MeshPipelineManager lifecycle ────────────────────────────────────
 
 MeshPipelineManager::~MeshPipelineManager() { release(); }
 
-MeshPipelineManager::MeshPipelineManager(MeshPipelineManager &&o) noexcept
-  : _device(o._device), _film(o._film), _shader_library(o._shader_library),
-    _shader_revision(o._shader_revision),
-    _descriptor_set_layout(o._descriptor_set_layout),
-    _pipeline_layout(o._pipeline_layout),
-    _descriptor_allocator(std::move(o._descriptor_allocator)),
-    _cache(std::move(o._cache)), _initialized(o._initialized) {
-    o._device = vk::Device{};
-    o._film = nullptr;
-    o._descriptor_set_layout = vk::DescriptorSetLayout{};
-    o._pipeline_layout = vk::PipelineLayout{};
-    o._initialized = false;
-}
-
-MeshPipelineManager &
-    MeshPipelineManager::operator=(MeshPipelineManager &&o) noexcept {
-    if (this != &o) {
-        release();
-        _device = o._device;
-        _film = o._film;
-        _shader_library = o._shader_library;
-        _shader_revision = o._shader_revision;
-        _descriptor_set_layout = o._descriptor_set_layout;
-        _pipeline_layout = o._pipeline_layout;
-        _descriptor_allocator = std::move(o._descriptor_allocator);
-        _cache = std::move(o._cache);
-        _initialized = o._initialized;
-        o._device = vk::Device{};
-        o._film = nullptr;
-        o._descriptor_set_layout = vk::DescriptorSetLayout{};
-        o._pipeline_layout = vk::PipelineLayout{};
-        o._initialized = false;
-    }
-    return *this;
-}
-
 void MeshPipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
-    if (_initialized) { release(); }
+    if (_initialized) release();
     _film = &film;
     _device = film.device();
+    _max_descriptor_sets = max_descriptor_sets;
+    _shader_revision = _shader_library.revision();
 
-    create_descriptor_set_layout();
-    create_pipeline_layout();
-    // Each set has 1 static uniform buffer (TransformUBO) and 1 dynamic
-    // uniform buffer (MaterialUBO).
-    _descriptor_allocator.init(
-        _device,
-        {{vk::DescriptorType::eUniformBuffer, 1},
-         {vk::DescriptorType::eUniformBufferDynamic, 1}},
-        max_descriptor_sets);
+    // Set 0: transforms (binding 0) and scene lighting (binding 1).
+    const auto stages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+    const std::array<vk::DescriptorSetLayoutBinding, 2> scene_bindings{{
+        {0, vk::DescriptorType::eUniformBuffer, 1, stages},
+        {1, vk::DescriptorType::eUniformBuffer, 1, stages},
+    }};
+    _scene_set_layout = _device.createDescriptorSetLayout(
+        vk::DescriptorSetLayoutCreateInfo{}.setBindings(scene_bindings));
+    _scene_allocator.init(_device, {{vk::DescriptorType::eUniformBuffer, 2}}, max_descriptor_sets);
 
     _initialized = true;
-    _shader_revision = _shader_library.revision();
     spdlog::info("MeshPipelineManager: initialized");
 }
 
 void MeshPipelineManager::release() {
-    if (!_initialized) { return; }
+    if (!_initialized) return;
     if (_device) {
         _device.waitIdle();
-
-        // Destroy cached pipelines
-        for (auto &[key, pipe] : _cache) {
-            if (pipe) { _device.destroyPipeline(pipe); }
+        for (auto &[key, pipeline] : _cache) {
+            if (pipeline) _device.destroyPipeline(pipeline);
         }
         _cache.clear();
-
-        _descriptor_allocator.release();
-        if (_pipeline_layout) {
-            _device.destroyPipelineLayout(_pipeline_layout);
-            _pipeline_layout = vk::PipelineLayout{};
+        _texture_cache.release();
+        for (auto &[id, layout] : _programs) {
+            layout.allocator.release();
+            _device.destroyPipelineLayout(layout.pipeline_layout);
+            _device.destroyDescriptorSetLayout(layout.material_set_layout);
         }
-        if (_descriptor_set_layout) {
-            _device.destroyDescriptorSetLayout(_descriptor_set_layout);
-            _descriptor_set_layout = vk::DescriptorSetLayout{};
-        }
+        _programs.clear();
+        _scene_allocator.release();
+        _device.destroyDescriptorSetLayout(_scene_set_layout);
+        _scene_set_layout = vk::DescriptorSetLayout{};
     }
     _device = vk::Device{};
     _film = nullptr;
@@ -181,323 +90,235 @@ void MeshPipelineManager::invalidate_pipelines() {
     if (!_initialized) return;
     if (_device) {
         _device.waitIdle();
-        for (auto &[key, pipe] : _cache) {
-            if (pipe) { _device.destroyPipeline(pipe); }
+        for (auto &[key, pipeline] : _cache) {
+            if (pipeline) _device.destroyPipeline(pipeline);
         }
     }
     _cache.clear();
     spdlog::info("MeshPipelineManager: pipelines invalidated");
 }
 
-// ── Descriptor set layout / pipeline layout / descriptor pool ────────
+// ── Layouts and descriptor sets ──────────────────────────────────────
 
-void MeshPipelineManager::create_descriptor_set_layout() {
-    // binding 0: TransformUBO (vertex shader only) — static uniform buffer
-    // binding 1: MaterialUBO  (vertex + fragment shader) — dynamic uniform
-    //            buffer so each layer can bind at a different offset.
-    std::array<vk::DescriptorSetLayoutBinding, 2> bindings;
+auto MeshPipelineManager::program_layout(const shaders::ShaderProgram &program)
+    -> ProgramLayout & {
+    if (!_initialized) throw std::runtime_error("MeshPipelineManager: not initialized");
+    const auto [it, inserted] = _programs.try_emplace(std::string(program.id()));
+    auto &layout = it->second;
+    if (!inserted) return layout;
 
-    auto &transform_binding = bindings[0];
-    transform_binding.setBinding(0);
-    transform_binding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    transform_binding.setDescriptorCount(1);
-    transform_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex
-                                    | vk::ShaderStageFlagBits::eFragment);
-
-    auto &material_binding = bindings[1];
-    material_binding.setBinding(1);
-    material_binding.setDescriptorType(
-        vk::DescriptorType::eUniformBufferDynamic);
-    material_binding.setDescriptorCount(1);
-    material_binding.setStageFlags(vk::ShaderStageFlagBits::eVertex
-                                   | vk::ShaderStageFlagBits::eFragment);
-
-    vk::DescriptorSetLayoutCreateInfo ci;
-    ci.setBindings(bindings);
-    _descriptor_set_layout = _device.createDescriptorSetLayout(ci);
-}
-
-void MeshPipelineManager::create_pipeline_layout() {
-    vk::PipelineLayoutCreateInfo ci;
-    ci.setSetLayouts(_descriptor_set_layout);
-    ci.setPushConstantRangeCount(0);
-    _pipeline_layout = _device.createPipelineLayout(ci);
-}
-
-// ── Descriptor set allocation / writing / freeing ────────────────────
-
-vk::DescriptorSet MeshPipelineManager::allocate_descriptor_set() {
-    if (!_initialized) {
-        throw std::runtime_error("MeshPipelineManager: not initialized");
+    // Set 1: the material block (binding 0), then the textures.
+    const auto &definition = program.value();
+    std::vector<vk::DescriptorSetLayoutBinding> bindings{
+        {0, vk::DescriptorType::eUniformBufferDynamic, 1,
+         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment}};
+    for (uint32_t i = 0; i < definition.textures.size(); ++i) {
+        bindings.push_back({i + 1, vk::DescriptorType::eCombinedImageSampler, 1,
+                            vk::ShaderStageFlagBits::eFragment});
     }
-    return _descriptor_allocator.allocate(_descriptor_set_layout);
+    layout.material_set_layout =
+        _device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings));
+    const std::array set_layouts{_scene_set_layout, layout.material_set_layout};
+    layout.pipeline_layout =
+        _device.createPipelineLayout(vk::PipelineLayoutCreateInfo{}.setSetLayouts(set_layouts));
+
+    std::vector<DescriptorAllocator::Descriptors> per_set{
+        {vk::DescriptorType::eUniformBufferDynamic, 1}};
+    if (!definition.textures.empty()) {
+        per_set.push_back({vk::DescriptorType::eCombinedImageSampler,
+                           static_cast<uint32_t>(definition.textures.size())});
+    }
+    layout.allocator.init(_device, std::move(per_set), _max_descriptor_sets);
+    return layout;
 }
 
-void MeshPipelineManager::write_descriptor_set(vk::DescriptorSet ds,
-                                               vk::Buffer transform_buffer,
-                                               vk::DeviceSize transform_size,
-                                               vk::Buffer material_buffer,
-                                               vk::DeviceSize material_size) {
-    vk::DescriptorBufferInfo transform_info;
-    transform_info.setBuffer(transform_buffer);
-    transform_info.setOffset(0);
-    transform_info.setRange(transform_size);
+auto MeshPipelineManager::pipeline_layout(const shaders::ShaderProgram &program)
+    -> vk::PipelineLayout {
+    return program_layout(program).pipeline_layout;
+}
 
-    // For the dynamic UBO, 'range' is the size of a single slot
-    // (one MaterialUBO).  The actual offset within the buffer is
-    // provided at bind time via the dynamic offset.
-    vk::DescriptorBufferInfo material_info;
-    material_info.setBuffer(material_buffer);
-    material_info.setOffset(0);
-    material_info.setRange(material_size);
+auto MeshPipelineManager::allocate_scene_set() -> vk::DescriptorSet {
+    if (!_initialized) throw std::runtime_error("MeshPipelineManager: not initialized");
+    return _scene_allocator.allocate(_scene_set_layout);
+}
 
-    std::array<vk::WriteDescriptorSet, 2> writes;
-
-    auto &w0 = writes[0];
-    w0.setDstSet(ds);
-    w0.setDstBinding(0);
-    w0.setDstArrayElement(0);
-    w0.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    w0.setDescriptorCount(1);
-    w0.setPBufferInfo(&transform_info);
-
-    auto &w1 = writes[1];
-    w1.setDstSet(ds);
-    w1.setDstBinding(1);
-    w1.setDstArrayElement(0);
-    w1.setDescriptorType(vk::DescriptorType::eUniformBufferDynamic);
-    w1.setDescriptorCount(1);
-    w1.setPBufferInfo(&material_info);
-
+void MeshPipelineManager::write_scene_set(vk::DescriptorSet set,
+                                          vk::Buffer transforms,
+                                          vk::DeviceSize transforms_size,
+                                          vk::Buffer lighting,
+                                          vk::DeviceSize lighting_size) {
+    const vk::DescriptorBufferInfo transforms_info{transforms, 0, transforms_size};
+    const vk::DescriptorBufferInfo lighting_info{lighting, 0, lighting_size};
+    const std::array writes{
+        vk::WriteDescriptorSet{set, 0, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr,
+                               &transforms_info},
+        vk::WriteDescriptorSet{set, 1, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr,
+                               &lighting_info},
+    };
     _device.updateDescriptorSets(writes, {});
 }
 
-void MeshPipelineManager::free_descriptor_set(vk::DescriptorSet ds) {
-    if (!_initialized || !ds) return;
-    _descriptor_allocator.free(ds);
+void MeshPipelineManager::free_scene_set(vk::DescriptorSet set) {
+    if (_initialized && set) _scene_allocator.free(set);
 }
 
-// ── Pipeline access ──────────────────────────────────────────────────
+auto MeshPipelineManager::allocate_material_set(const shaders::ShaderProgram &program)
+    -> vk::DescriptorSet {
+    auto &layout = program_layout(program);
+    return layout.allocator.allocate(layout.material_set_layout);
+}
 
-vk::Pipeline MeshPipelineManager::get_or_create(const MeshRenderState &state,
-                                                std::string_view colormap,
-                                                vk::PrimitiveTopology topology,
-                                                const MeshVertexInputs &inputs,
-                                                Film &film,
-                                                bool wireframe_overlay) {
-    if (!_initialized) {
-        throw std::runtime_error("MeshPipelineManager: not initialized");
+void MeshPipelineManager::write_material_set(const shaders::ShaderProgram &program,
+                                             vk::DescriptorSet set,
+                                             vk::Buffer material,
+                                             std::span<const vk::DescriptorImageInfo> textures) {
+    // The dynamic offset selects the block; the range is one block.
+    const vk::DescriptorBufferInfo material_info{material, 0, program.value().material_size};
+    std::vector<vk::WriteDescriptorSet> writes{vk::WriteDescriptorSet{
+        set, 0, 0, 1, vk::DescriptorType::eUniformBufferDynamic, nullptr, &material_info}};
+    for (uint32_t i = 0; i < textures.size(); ++i) {
+        writes.push_back({set, i + 1, 0, 1, vk::DescriptorType::eCombinedImageSampler,
+                          &textures[i]});
     }
+    _device.updateDescriptorSets(writes, {});
+}
+
+void MeshPipelineManager::free_material_set(const shaders::ShaderProgram &program,
+                                            vk::DescriptorSet set) {
+    if (!_initialized || !set) return;
+    if (const auto it = _programs.find(std::string(program.id())); it != _programs.end()) {
+        it->second.allocator.free(set);
+    }
+}
+
+// ── Pipelines ────────────────────────────────────────────────────────
+
+auto MeshPipelineManager::make_key(const shaders::ShaderProgram &program,
+                                   shaders::ProgramVariant variant,
+                                   const std::array<vk::Format, max_vertex_streams> &stream_formats,
+                                   vk::PrimitiveTopology topology,
+                                   CullMode cull_mode,
+                                   bool depth_write) const -> MeshPipelineKey {
+    return {.program = std::string(program.id()),
+            .variant = std::move(variant),
+            .stream_formats = stream_formats,
+            .topology = topology,
+            .cull_mode = cull_mode,
+            .depth_write = depth_write,
+            .msaa_samples = static_cast<uint32_t>(_film->sample_count()),
+            .render_pass = reinterpret_cast<uint64_t>(
+                static_cast<VkRenderPass>(_film->default_render_pass())),
+            .depth_test = _film->has_depth_stencil()};
+}
+
+auto MeshPipelineManager::pipeline(const MeshPipelineKey &key) -> vk::Pipeline {
+    if (!_initialized) throw std::runtime_error("MeshPipelineManager: not initialized");
     if (_shader_revision != _shader_library.revision()) {
         invalidate_pipelines();
         _shader_revision = _shader_library.revision();
     }
-    auto key =
-        make_pipeline_key(state, colormap, topology, inputs, film, wireframe_overlay);
-    auto it = _cache.find(key);
-    if (it != _cache.end()) { return it->second; }
-    auto pipeline = create_pipeline(key);
-    if (pipeline) { _cache[key] = pipeline; }
-    return pipeline;
+    if (const auto it = _cache.find(key); it != _cache.end()) return it->second;
+    const auto created = create_pipeline(key);
+    if (created) _cache.emplace(key, created);
+    return created;
 }
 
-// ── Pipeline creation ────────────────────────────────────────────────
+auto MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) -> vk::Pipeline {
+    const auto &definition = program_definition(key.program);
+    spdlog::info("MeshPipelineManager: creating a pipeline for {} (topology {})", definition.id,
+                 static_cast<int>(key.topology));
 
-vk::Pipeline MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) {
-    spdlog::info(
-        "MeshPipelineManager: creating pipeline for shading={}, color={}, "
-        "topology={}",
-        static_cast<int>(key.shading),
-        key.colormap,
-        static_cast<int>(key.topology));
-
-    // Build a temporary MeshRenderState from the key to drive shader
-    // compilation
-    MeshRenderState temp_state;
-    temp_state.shading = key.shading;
-    temp_state.normal_source = key.normal_source;
-
-    using ET3F = scene_graph::embedding_traits3F;
-    shaders::MeshShader<ET3F> shader(
-        temp_state, key.colormap, key.topology, key.wireframe_overlay,
-        _shader_library);
-    auto vert_spv = shader.vert_spirv();
-    auto frag_spv = shader.frag_spirv();
-
+    const shaders::ProgramShader shader(definition, key.variant, _shader_library);
+    const auto vert_spv = shader.vert_spirv();
+    const auto frag_spv = shader.frag_spirv();
     if (vert_spv.empty() || frag_spv.empty()) {
-        spdlog::error(
-            "MeshPipelineManager: shader compilation failed (empty SPIR-V), "
-            "skipping pipeline creation");
+        spdlog::error("MeshPipelineManager: shader compilation failed; no pipeline");
         return vk::Pipeline{};
     }
-
-    // Create shader modules
-    auto create_shader_module =
-        [&](const std::vector<uint32_t> &spv) -> vk::ShaderModule {
-        vk::ShaderModuleCreateInfo ci;
-        ci.setCodeSize(sizeof(uint32_t) * spv.size());
-        ci.setPCode(spv.data());
-        return _device.createShaderModule(ci);
+    const auto module = [&](const std::vector<uint32_t> &spv) {
+        return _device.createShaderModule(vk::ShaderModuleCreateInfo{}.setCode(spv));
+    };
+    const vk::ShaderModule vert_module = module(vert_spv);
+    const vk::ShaderModule frag_module = module(frag_spv);
+    const std::array shader_stages{
+        vk::PipelineShaderStageCreateInfo{{}, vk::ShaderStageFlagBits::eVertex, vert_module, "main"},
+        vk::PipelineShaderStageCreateInfo{{}, vk::ShaderStageFlagBits::eFragment, frag_module, "main"},
     };
 
-    vk::ShaderModule vert_module = create_shader_module(vert_spv);
-    vk::ShaderModule frag_module = create_shader_module(frag_spv);
-
-    // Shader stages
-    const std::string entry = "main";
-    vk::PipelineShaderStageCreateInfo shader_stages[2];
-    {
-        auto &vs = shader_stages[0];
-        vs.setStage(vk::ShaderStageFlagBits::eVertex);
-        vs.setModule(vert_module);
-        vs.setPName(entry.c_str());
-
-        auto &fs = shader_stages[1];
-        fs.setStage(vk::ShaderStageFlagBits::eFragment);
-        fs.setModule(frag_module);
-        fs.setPName(entry.c_str());
+    // One binding per bound stream, at its location.
+    std::vector<vk::VertexInputBindingDescription> bindings;
+    std::vector<vk::VertexInputAttributeDescription> attributes;
+    for (uint32_t location = 0; location < key.stream_formats.size(); ++location) {
+        const auto format = key.stream_formats[location];
+        if (format == vk::Format::eUndefined) continue;
+        bindings.push_back({location, vertex_format_size(format), vk::VertexInputRate::eVertex});
+        attributes.push_back({location, location, format, 0});
     }
+    const auto vertex_input = vk::PipelineVertexInputStateCreateInfo{}
+                                  .setVertexBindingDescriptions(bindings)
+                                  .setVertexAttributeDescriptions(attributes);
+    const auto input_assembly = vk::PipelineInputAssemblyStateCreateInfo{}.setTopology(key.topology);
+    const auto viewport_state =
+        vk::PipelineViewportStateCreateInfo{}.setViewportCount(1).setScissorCount(1);
 
-    // ── Vertex input ────────────────────────────────────────────────
-    //
-    // One binding per stream, matching mesh.vert, in the key's formats
-    // (all read as float; Vulkan fills missing components):
-    //   binding 0: position (location 0)
-    //   binding 1: normal   (location 1)  — if normal_format is set
-    //   binding 3: scalar   (location 3)  — if scalar_format is set
-    std::vector<vk::VertexInputBindingDescription> binding_descs;
-    std::vector<vk::VertexInputAttributeDescription> attrib_descs;
-    auto add_stream = [&](uint32_t location, vk::Format format) {
-        if (format == vk::Format::eUndefined) return;
-        binding_descs.push_back(
-            {location, vertex_format_size(format), vk::VertexInputRate::eVertex});
-        attrib_descs.push_back({location, location, format, 0});
-    };
-    add_stream(0, key.position_format);
-    add_stream(1, key.normal_format);
-    add_stream(3, key.scalar_format);
-
-    vk::PipelineVertexInputStateCreateInfo vertex_input;
-    vertex_input.setVertexBindingDescriptions(binding_descs);
-    vertex_input.setVertexAttributeDescriptions(attrib_descs);
-
-    // ── Input assembly ──────────────────────────────────────────────
-
-    vk::PipelineInputAssemblyStateCreateInfo input_assembly;
-    input_assembly.setTopology(key.topology);
-    input_assembly.setPrimitiveRestartEnable(VK_FALSE);
-
-    // ── Viewport / scissor (dynamic) ────────────────────────────────
-
-    vk::PipelineViewportStateCreateInfo viewport_state;
-    viewport_state.setViewportCount(1);
-    viewport_state.setScissorCount(1);
-
-    // ── Rasterization ───────────────────────────────────────────────
-
-    vk::PipelineRasterizationStateCreateInfo rasterization;
-    rasterization.setDepthClampEnable(VK_FALSE);
-    rasterization.setRasterizerDiscardEnable(VK_FALSE);
-    rasterization.setPolygonMode(vk::PolygonMode::eFill);
-    switch (key.cull_mode) {
-    case CullMode::None:
-        rasterization.setCullMode(vk::CullModeFlagBits::eNone);
-        break;
-    case CullMode::Back:
-        rasterization.setCullMode(vk::CullModeFlagBits::eBack);
-        break;
-    case CullMode::Front:
-        rasterization.setCullMode(vk::CullModeFlagBits::eFront);
-        break;
-    }
-    rasterization.setFrontFace(vk::FrontFace::eCounterClockwise);
-    rasterization.setDepthBiasEnable(
-        key.topology == vk::PrimitiveTopology::eTriangleList ? VK_TRUE
-                                                             : VK_FALSE);
-    rasterization.setLineWidth(1.0f);
-
-    // ── Multisample ─────────────────────────────────────────────────
-
-    vk::PipelineMultisampleStateCreateInfo multisampling;
-    multisampling.setRasterizationSamples(
+    vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eNone;
+    if (key.cull_mode == CullMode::Back) cull_mode = vk::CullModeFlagBits::eBack;
+    if (key.cull_mode == CullMode::Front) cull_mode = vk::CullModeFlagBits::eFront;
+    const auto rasterization =
+        vk::PipelineRasterizationStateCreateInfo{}
+            .setPolygonMode(vk::PolygonMode::eFill)
+            .setCullMode(cull_mode)
+            .setFrontFace(vk::FrontFace::eCounterClockwise)
+            .setDepthBiasEnable(key.topology == vk::PrimitiveTopology::eTriangleList)
+            .setLineWidth(1.0f);
+    const auto multisampling = vk::PipelineMultisampleStateCreateInfo{}.setRasterizationSamples(
         static_cast<vk::SampleCountFlagBits>(key.msaa_samples));
-    multisampling.setSampleShadingEnable(VK_FALSE);
-    multisampling.setMinSampleShading(1.0f);
+    const auto depth_stencil = vk::PipelineDepthStencilStateCreateInfo{}
+                                   .setDepthTestEnable(key.depth_test)
+                                   .setDepthWriteEnable(key.depth_test && key.depth_write)
+                                   .setDepthCompareOp(vk::CompareOp::eLessOrEqual);
 
-    // ── Depth / stencil ─────────────────────────────────────────────
+    // Alpha blending; opaque draws output alpha 1.
+    const auto blend_attachment =
+        vk::PipelineColorBlendAttachmentState{}
+            .setBlendEnable(true)
+            .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
+            .setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
+            .setColorBlendOp(vk::BlendOp::eAdd)
+            .setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
+            .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
+            .setAlphaBlendOp(vk::BlendOp::eAdd)
+            .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
+                               | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+    const auto color_blend = vk::PipelineColorBlendStateCreateInfo{}.setAttachments(blend_attachment);
 
-    vk::PipelineDepthStencilStateCreateInfo depth_stencil;
-    depth_stencil.setDepthTestEnable(key.depth_test ? VK_TRUE : VK_FALSE);
-    depth_stencil.setDepthWriteEnable(key.depth_test ? VK_TRUE : VK_FALSE);
-    depth_stencil.setDepthCompareOp(vk::CompareOp::eLessOrEqual);
-    depth_stencil.setDepthBoundsTestEnable(VK_FALSE);
-    depth_stencil.setStencilTestEnable(VK_FALSE);
+    const std::array dynamic_states{vk::DynamicState::eViewport, vk::DynamicState::eScissor,
+                                    vk::DynamicState::eLineWidth, vk::DynamicState::eDepthBias};
+    const auto dynamic_state = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamic_states);
 
-    // ── Color blending ──────────────────────────────────────────────
-
-    vk::PipelineColorBlendAttachmentState color_blend_attachment;
-    color_blend_attachment.setColorWriteMask(
-        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
-        | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-    color_blend_attachment.setBlendEnable(VK_TRUE);
-    color_blend_attachment.setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha);
-    color_blend_attachment.setDstColorBlendFactor(
-        vk::BlendFactor::eOneMinusSrcAlpha);
-    color_blend_attachment.setColorBlendOp(vk::BlendOp::eAdd);
-    color_blend_attachment.setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
-    color_blend_attachment.setDstAlphaBlendFactor(vk::BlendFactor::eZero);
-    color_blend_attachment.setAlphaBlendOp(vk::BlendOp::eAdd);
-
-    vk::PipelineColorBlendStateCreateInfo color_blend;
-    color_blend.setLogicOpEnable(VK_FALSE);
-    color_blend.setAttachmentCount(1);
-    color_blend.setPAttachments(&color_blend_attachment);
-
-    // ── Dynamic state ───────────────────────────────────────────────
-
-    std::vector<vk::DynamicState> dynamic_states = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor,
-        vk::DynamicState::eLineWidth,
-        vk::DynamicState::eDepthBias,
-    };
-    vk::PipelineDynamicStateCreateInfo dynamic_state;
-    dynamic_state.setDynamicStates(dynamic_states);
-
-    // ── Assemble ────────────────────────────────────────────────────
-
-    vk::RenderPass rp{reinterpret_cast<VkRenderPass>(key.render_pass)};
-
-    vk::GraphicsPipelineCreateInfo pipeline_info;
-    pipeline_info.setStageCount(2);
-    pipeline_info.setPStages(shader_stages);
-    pipeline_info.setPVertexInputState(&vertex_input);
-    pipeline_info.setPInputAssemblyState(&input_assembly);
-    pipeline_info.setPViewportState(&viewport_state);
-    pipeline_info.setPRasterizationState(&rasterization);
-    pipeline_info.setPMultisampleState(&multisampling);
-    pipeline_info.setPDepthStencilState(&depth_stencil);
-    pipeline_info.setPColorBlendState(&color_blend);
-    pipeline_info.setPDynamicState(&dynamic_state);
-    pipeline_info.setLayout(_pipeline_layout);
-    pipeline_info.setRenderPass(rp);
-    pipeline_info.setSubpass(0);
-    pipeline_info.setBasePipelineHandle(VK_NULL_HANDLE);
+    const auto info = vk::GraphicsPipelineCreateInfo{}
+                          .setStages(shader_stages)
+                          .setPVertexInputState(&vertex_input)
+                          .setPInputAssemblyState(&input_assembly)
+                          .setPViewportState(&viewport_state)
+                          .setPRasterizationState(&rasterization)
+                          .setPMultisampleState(&multisampling)
+                          .setPDepthStencilState(&depth_stencil)
+                          .setPColorBlendState(&color_blend)
+                          .setPDynamicState(&dynamic_state)
+                          .setLayout(pipeline_layout(*shaders::shader_programs().find(key.program)))
+                          .setRenderPass(vk::RenderPass{reinterpret_cast<VkRenderPass>(key.render_pass)})
+                          .setSubpass(0);
 
     vk::Pipeline result;
-    auto res = _device.createGraphicsPipeline(VK_NULL_HANDLE, pipeline_info);
-    if (res.result == vk::Result::eSuccess) {
-        result = res.value;
-        spdlog::info("MeshPipelineManager: pipeline created successfully");
+    if (const auto created = _device.createGraphicsPipeline(nullptr, info);
+        created.result == vk::Result::eSuccess) {
+        result = created.value;
     } else {
-        spdlog::error(
-            "MeshPipelineManager: failed to create graphics pipeline");
+        spdlog::error("MeshPipelineManager: failed to create a graphics pipeline");
     }
-
-    // Cleanup shader modules
     _device.destroyShaderModule(vert_module);
     _device.destroyShaderModule(frag_module);
-
     return result;
 }
 

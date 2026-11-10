@@ -15,11 +15,29 @@ constexpr unsigned char triangle_vertex[] = {
 constexpr unsigned char triangle_fragment[] = {
 #embed "triangle.frag"
 };
-constexpr unsigned char mesh_vertex[] = {
-#embed "mesh.vert"
+constexpr unsigned char scene_include[] = {
+#embed "scene.glsl"
 };
-constexpr unsigned char mesh_fragment[] = {
-#embed "mesh.frag"
+constexpr unsigned char phong_material_include[] = {
+#embed "phong_material.glsl"
+};
+constexpr unsigned char phong_vertex[] = {
+#embed "phong.vert"
+};
+constexpr unsigned char phong_fragment[] = {
+#embed "phong.frag"
+};
+constexpr unsigned char unlit_vertex[] = {
+#embed "unlit.vert"
+};
+constexpr unsigned char unlit_fragment[] = {
+#embed "unlit.frag"
+};
+constexpr unsigned char pbr_vertex[] = {
+#embed "pbr.vert"
+};
+constexpr unsigned char pbr_fragment[] = {
+#embed "pbr.frag"
 };
 constexpr unsigned char image_vertex[] = {
 #embed "image.vert"
@@ -44,8 +62,15 @@ auto builtin_shader_library() -> const ShaderLibrary & {
           "examples/triangle/vertex", std::string{as_string_view(triangle_vertex)});
         (void)library.add_shader(
           "examples/triangle/fragment", std::string{as_string_view(triangle_fragment)});
-        (void)library.add_shader("mesh/vertex", std::string{as_string_view(mesh_vertex)});
-        (void)library.add_shader("mesh/fragment", std::string{as_string_view(mesh_fragment)});
+        (void)library.add_shader("balsa/scene.glsl", std::string{as_string_view(scene_include)});
+        (void)library.add_shader("balsa/phong_material.glsl",
+                                 std::string{as_string_view(phong_material_include)});
+        (void)library.add_shader("phong/vertex", std::string{as_string_view(phong_vertex)});
+        (void)library.add_shader("phong/fragment", std::string{as_string_view(phong_fragment)});
+        (void)library.add_shader("unlit/vertex", std::string{as_string_view(unlit_vertex)});
+        (void)library.add_shader("unlit/fragment", std::string{as_string_view(unlit_fragment)});
+        (void)library.add_shader("pbr/vertex", std::string{as_string_view(pbr_vertex)});
+        (void)library.add_shader("pbr/fragment", std::string{as_string_view(pbr_fragment)});
         (void)library.add_shader("image/vertex", std::string{as_string_view(image_vertex)});
         (void)library.add_shader("image/fragment", std::string{as_string_view(image_fragment)});
         library.make_read_only();
