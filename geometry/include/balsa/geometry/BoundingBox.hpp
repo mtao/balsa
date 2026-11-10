@@ -160,7 +160,7 @@ class BoundingBox {
         auto h = (range() / T(2)).eval();
         const ::zipper::Vector<T, Dim> ones =
             ::zipper::expression::nullary::Constant<T, Dim>(T(1));
-        return ::zipper::as_vector((h.as_array() == T(0)).select(ones.as_array(), h.as_array()))
+        return ::zipper::as_vector((::zipper::as_array(h) == T(0)).select(::zipper::as_array(ones), ::zipper::as_array(h)))
             .eval();
     }
 
@@ -168,8 +168,8 @@ class BoundingBox {
     auto to_local(const Vec &world) const -> ::zipper::Vector<T, Dim>
         requires std::floating_point<T>
     {
-        return ::zipper::as_vector((world - center()).as_array()
-                                   / half_range().as_array())
+        return ::zipper::as_vector(::zipper::as_array(world - center())
+                                   / ::zipper::as_array(half_range()))
             .eval();
     }
 
@@ -178,7 +178,7 @@ class BoundingBox {
         requires std::floating_point<T>
     {
         return (center()
-                + ::zipper::as_vector(local.as_array() * half_range().as_array()))
+                + ::zipper::as_vector(::zipper::as_array(local) * ::zipper::as_array(half_range())))
             .eval();
     }
 
@@ -195,7 +195,7 @@ class BoundingBox {
         requires std::floating_point<T>
     {
         return ::zipper::transform::Scaling<T, Dim>(
-                   ::zipper::as_vector(T(1) / half_range().as_array()).eval())
+                   ::zipper::as_vector(T(1) / ::zipper::as_array(half_range())).eval())
                * ::zipper::transform::Translation<T, Dim>(
                    (-center()).eval());
     }

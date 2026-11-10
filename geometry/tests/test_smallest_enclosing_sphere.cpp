@@ -24,7 +24,7 @@ bool valid_circle_rad2(const Circ &circle, const ColVecs &P) {
         v = v - C;
     }
     auto rads = ::zipper::as_vector(m.colwise().template norm_powered<2>()).eval();
-    const bool res = (rads.as_array() < (r2)).all();
+    const bool res = (as_array(rads) < (r2)).all();
     return res;
 }
 
@@ -131,12 +131,12 @@ std::array<balsa::zipper::ColVectors<double, D>, 2>
     // Random radii for inside points: uniform in [0, inside_r]
     balsa::zipper::VecXd inner_radii(count);
     inner_radii = ::zipper::expression::nullary::uniform_random<double>(inner_radii.extents());
-    inner_radii = ::zipper::as_vector((inner_radii.as_array() * inside).abs());
+    inner_radii = ::zipper::as_vector((as_array(inner_radii) * inside).abs());
 
     // Random radii for outside points: uniform in [inside_r, outside]
     balsa::VecXd outer_radii(count);
     outer_radii = ::zipper::expression::nullary::uniform_random<double>(outer_radii.extents());
-    outer_radii = ::zipper::as_vector((outer_radii.as_array() * (outside - inside)).abs() + inside);
+    outer_radii = ::zipper::as_vector((as_array(outer_radii) * (outside - inside)).abs() + inside);
 
     {
         balsa::zipper::ColVectors<double, D> inside(count);
@@ -174,10 +174,10 @@ TEST_CASE("sphere_sampling_test", "[testing_internal]") {
             v = v - C;
         }
         auto V = ::zipper::as_vector(m.colwise().template norm_powered<2>()).eval();
-        CHECK((V.as_array() >= min * min).all());
+        CHECK((as_array(V) >= min * min).all());
         CHECK_FALSE(valid_circle_rad2(std::make_tuple(C, min * min), pts));
         if (max != 0) {
-            CHECK((V.as_array() <= max * max).all());
+            CHECK((as_array(V) <= max * max).all());
             CHECK(valid_circle_rad2(std::make_tuple(C, max * max), pts));
         }
     };
@@ -237,7 +237,7 @@ TEST_CASE("brute_force_test", "[geometry,point_cloud]") {
                 v = v - c;
             }
             auto V = ::zipper::as_vector(m.colwise().norm()).eval();
-            CHECK((V.as_array() <= (r + 1e-8)).all());
+            CHECK((as_array(V) <= (r + 1e-8)).all());
         }
     };
 

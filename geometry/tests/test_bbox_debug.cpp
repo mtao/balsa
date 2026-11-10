@@ -17,8 +17,8 @@ int main() {
     std::cout << "a(2)==b(2): " << (a(2) == b(2)) << std::endl;
 
     // Test as_array
-    auto aa = a.as_array();
-    auto ba = b.as_array();
+    auto aa = as_array(a);
+    auto ba = as_array(b);
     std::cout << "aa(0)=" << aa(0) << " ba(0)=" << ba(0) << std::endl;
 
     // Test operator== on arrays
@@ -46,8 +46,8 @@ int main() {
 
     // Test 3: min operation
     zipper::Vector<float, 3> x({ 1, 2, 3 });
-    auto x_arr = x.as_array();
-    auto vmax_arr = v_max.as_array();
+    auto x_arr = as_array(x);
+    auto vmax_arr = as_array(v_max);
     auto min_result = zipper::min(x_arr, vmax_arr);
 
     // Materialize the min result
@@ -67,8 +67,8 @@ int main() {
     std::cout << "m_min = {" << m_min(0) << ", " << m_min(1) << ", " << m_min(2) << "}" << std::endl;
     std::cout << "m_max = {" << m_max(0) << ", " << m_max(1) << ", " << m_max(2) << "}" << std::endl;
 
-    m_min = ::zipper::as_vector(::zipper::min(point.as_array(), m_min.as_array()));
-    m_max = ::zipper::as_vector(::zipper::max(point.as_array(), m_max.as_array()));
+    m_min = ::zipper::as_vector(::zipper::min(as_array(point), as_array(m_min)));
+    m_max = ::zipper::as_vector(::zipper::max(as_array(point), as_array(m_max)));
 
     std::cout << "After expand:" << std::endl;
     std::cout << "m_min = {" << m_min(0) << ", " << m_min(1) << ", " << m_min(2) << "}" << std::endl;

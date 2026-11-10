@@ -118,7 +118,7 @@ XYZData read_xyzD(const std::string &filename) {
 
     data.positions = D.template topRows<3>();
 
-    if (D.bottomRows(3).as_array().abs().sum() != 0) {
+    if (as_array(D.bottomRows(3)).abs().sum() != 0) {
         data.extra = D.template bottomRows<3>();
     }
 
