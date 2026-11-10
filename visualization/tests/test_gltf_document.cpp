@@ -26,7 +26,7 @@
 #include <string>
 #include <string_view>
 
-namespace gltf = balsa::visualization::scene_graph::gltf;
+namespace gltf = balsa::visualization::gltf;
 namespace uri = balsa::uri;
 using Catch::Matchers::ContainsSubstring;
 

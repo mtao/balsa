@@ -34,7 +34,7 @@ namespace {
 
 #if defined(BALSA_VISUALIZATION_GLTF)
     auto load_gltf(const std::filesystem::path &path) -> SceneLoader::result_type {
-        namespace gltf = balsa::visualization::scene_graph::gltf;
+        namespace gltf = balsa::visualization::gltf;
         auto object =
             gltf::load(path).and_then([](const gltf::Document &document) {
                 return gltf::to_object(document);
