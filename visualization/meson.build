@@ -117,6 +117,7 @@ visualization_private_deps = [vma_dep]
 
 visualization_sources = [
   'src/vulkan/film.cpp',
+  'src/vulkan/logging.cpp',
   'src/vulkan/scene_base.cpp',
   'src/vulkan/pipeline.cpp',
   'src/vulkan/vulkan_buffer.cpp',

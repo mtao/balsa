@@ -1,4 +1,5 @@
 #include "balsa/visualization/vulkan/DescriptorAllocator.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 
 #include <format>
 #include <ranges>
@@ -58,6 +59,10 @@ void DescriptorAllocator::add_pool(uint32_t sets) {
             e.what()));
     }
     m_pools.push_back({pool, sets});
+    logger()->debug(
+        "DescriptorAllocator: created pool {} with capacity {} sets",
+        m_pools.size() - 1,
+        sets);
 }
 
 auto DescriptorAllocator::allocate(vk::DescriptorSetLayout layout)

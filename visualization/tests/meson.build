@@ -33,6 +33,13 @@ test_buffer_allocator = executable(
 )
 test('buffer allocator test', test_buffer_allocator)
 
+test_vulkan_logging = executable(
+  'test_vulkan_logging',
+  'test_vulkan_logging.cpp',
+  dependencies: [visualization_dep, catch2_with_main_dep],
+)
+test('vulkan logger test', test_vulkan_logging)
+
 if get_option('json')
   test_gltf_document = executable(
     'test_gltf_document',

@@ -3,16 +3,16 @@
 #include <string>
 #include <vector>
 
-#include "balsa/scene_graph/Object.hpp"
+#include "balsa/scene_graph/BasicShading.hpp"
 #include "balsa/scene_graph/Camera.hpp"
 #include "balsa/scene_graph/DrawableGroup.hpp"
-#include "balsa/scene_graph/BasicShading.hpp"
+#include "balsa/scene_graph/Light.hpp"
 #include "balsa/scene_graph/MeshGeometry.hpp"
 #include "balsa/scene_graph/MeshInstance.hpp"
-#include "balsa/scene_graph/Light.hpp"
-#include "balsa/visualization/vulkan/scene_base.hpp"
+#include "balsa/scene_graph/Object.hpp"
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 #include "balsa/visualization/vulkan/mesh_render_state.hpp"
+#include "balsa/visualization/vulkan/scene_base.hpp"
 
 namespace balsa::visualization::vulkan {
 
@@ -41,8 +41,8 @@ class VulkanMeshDrawable;
 
 class MeshScene : public SceneBase {
   public:
-    explicit MeshScene(
-      const shaders::ShaderLibrary &library = shaders::builtin_shader_library());
+    explicit MeshScene(const shaders::ShaderLibrary &library =
+                           shaders::builtin_shader_library());
     ~MeshScene() override;
 
     // Non-copyable, non-movable (holds Vulkan resources + raw Film pointer)
@@ -55,7 +55,6 @@ class MeshScene : public SceneBase {
 
     // Initialize the pipeline manager and all VulkanMeshDrawables.
     void initialize(Film &film) override;
-
 
     // Draw all visible drawables.
     void draw(Film &film) override;
@@ -82,7 +81,8 @@ class MeshScene : public SceneBase {
 
     // Adds an Object tree (e.g. a glTF scene) under the root, with drawables
     // for its meshes.
-    scene_graph::Object &add_object(std::unique_ptr<scene_graph::Object> object);
+    scene_graph::Object &
+        add_object(std::unique_ptr<scene_graph::Object> object);
 
     // Remove a mesh Object (and its descendants) from the scene by
     // pointer, releasing their GPU resources.  Returns true if found and
@@ -109,20 +109,30 @@ class MeshScene : public SceneBase {
     const scene_graph::Object &camera_object() const;
 
     // The default (permanent, hidden) camera Object.
-    scene_graph::Object &default_camera_object() { return *_default_camera_object; }
-    const scene_graph::Object &default_camera_object() const { return *_default_camera_object; }
+    scene_graph::Object &default_camera_object() {
+        return *_default_camera_object;
+    }
+    const scene_graph::Object &default_camera_object() const {
+        return *_default_camera_object;
+    }
 
     // The active camera Object (may differ from the default).
     // Returns the default camera if no other camera has been activated.
-    scene_graph::Object &active_camera_object() { return *_active_camera_object; }
-    const scene_graph::Object &active_camera_object() const { return *_active_camera_object; }
+    scene_graph::Object &active_camera_object() {
+        return *_active_camera_object;
+    }
+    const scene_graph::Object &active_camera_object() const {
+        return *_active_camera_object;
+    }
 
     // Set the active camera.  Pass nullptr to revert to the default.
     // The Object must have a Camera feature.
     void set_active_camera(scene_graph::Object *cam_obj);
 
     // Returns true if the active camera is the default camera.
-    bool is_default_camera_active() const { return _active_camera_object == _default_camera_object; }
+    bool is_default_camera_active() const {
+        return _active_camera_object == _default_camera_object;
+    }
 
     // Convenience: set camera position via look_at parameters.
     // Always operates on the **default** camera Object.
@@ -142,7 +152,9 @@ class MeshScene : public SceneBase {
     const scene_graph::Object &root() const { return _scene_root; }
 
     scene_graph::DrawableGroup &drawable_group() { return _drawable_group; }
-    const scene_graph::DrawableGroup &drawable_group() const { return _drawable_group; }
+    const scene_graph::DrawableGroup &drawable_group() const {
+        return _drawable_group;
+    }
 
     // ── Drawable helpers ───────────────────────────────────────────
 
@@ -158,7 +170,9 @@ class MeshScene : public SceneBase {
     // ── Pipeline manager access (for advanced use) ──────────────────
 
     MeshPipelineManager &pipeline_manager() { return _pipeline_manager; }
-    const MeshPipelineManager &pipeline_manager() const { return _pipeline_manager; }
+    const MeshPipelineManager &pipeline_manager() const {
+        return _pipeline_manager;
+    }
 
     // ── Scene lighting ──────────────────────────────────────────────
 
@@ -186,7 +200,6 @@ class MeshScene : public SceneBase {
     MeshPipelineManager _pipeline_manager;
     Film *_film = nullptr;
     bool _initialized = false;
-    std::size_t _last_drawable_count = 0;
 };
 
-}// namespace balsa::visualization::vulkan
+} // namespace balsa::visualization::vulkan

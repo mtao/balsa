@@ -1,11 +1,12 @@
 #include "balsa/visualization/qt/vulkan/window.hpp"
 #include "balsa/visualization/input_handler.hpp"
-#include <spdlog/spdlog.h>
+#include "balsa/visualization/vulkan/logging.hpp"
+#include <QCloseEvent>
 #include <QGuiApplication>
-#include <QVulkanInstance>
 #include <QMouseEvent>
 #include <QResizeEvent>
-#include <QCloseEvent>
+#include <QVulkanInstance>
+#include <spdlog/spdlog.h>
 
 namespace balsa::visualization::qt::vulkan {
 
@@ -18,7 +19,8 @@ class Window::Renderer : public QVulkanWindowRenderer {
     Renderer(Window *w) : _outer(w) {}
 
     void initResources() override {
-        spdlog::debug("Qt Renderer: initResources");
+        ::balsa::visualization::vulkan::logger()->debug(
+            "Qt Renderer: initResources");
         // Create the persistent Film now that QVulkanWindow has a device
         _outer->_film = std::make_unique<Film>(*static_cast<QVulkanWindow *>(_outer));
 
@@ -30,15 +32,18 @@ class Window::Renderer : public QVulkanWindowRenderer {
     }
 
     void initSwapChainResources() override {
-        spdlog::debug("Qt Renderer: initSwapChainResources");
+        ::balsa::visualization::vulkan::logger()->debug(
+            "Qt Renderer: initSwapChainResources");
     }
 
     void releaseSwapChainResources() override {
-        spdlog::debug("Qt Renderer: releaseSwapChainResources");
+        ::balsa::visualization::vulkan::logger()->debug(
+            "Qt Renderer: releaseSwapChainResources");
     }
 
     void releaseResources() override {
-        spdlog::debug("Qt Renderer: releaseResources");
+        ::balsa::visualization::vulkan::logger()->debug(
+            "Qt Renderer: releaseResources");
         // Release scene's Vulkan resources while the device is still valid.
         // This handles the case where external shared_ptr holders keep the
         // scene alive beyond this point.
@@ -122,7 +127,9 @@ int Window::exec() {
     // QGuiApplication::exec() returns, the local is destroyed, but
     // QVulkanWindow still holds a dangling pointer to it.
     if (!QVulkanWindow::vulkanInstance()) {
-        spdlog::error("No QVulkanInstance set on Window — call setVulkanInstance() before exec()");
+        ::balsa::visualization::vulkan::logger()->error(
+            "No QVulkanInstance set on Window — call setVulkanInstance() "
+            "before exec()");
         return 1;
     }
 

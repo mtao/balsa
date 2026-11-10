@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/BufferUploadBatch.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include "balsa/visualization/vulkan/one_shot_command.hpp"
 
 #include <stdexcept>
@@ -26,6 +27,8 @@ void BufferUploadBatch::add(vk::Buffer destination,
 
 void BufferUploadBatch::submit() {
     if (_copies.empty()) return;
+    ProfileScope profile("BufferUploadBatch::submit");
+    logger()->debug("Uploading {} buffers in one batch", _copies.size());
     one_shot_command(_film, [&](vk::CommandBuffer command) {
         for (const auto &copy : _copies) {
             command.copyBuffer(copy.staging.buffer(),

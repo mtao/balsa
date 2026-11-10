@@ -1,6 +1,7 @@
 #include "balsa/visualization/vulkan/native_film.hpp"
-#include <spdlog/spdlog.h>
+#include "balsa/visualization/vulkan/logging.hpp"
 #include <format>
+#include <spdlog/spdlog.h>
 
 #include <ranges>
 #include <array>
@@ -33,11 +34,6 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL
     default:
         break;
     }
-    std::shared_ptr<spdlog::logger> logger = spdlog::get("balsa.vulkan");
-    if (!bool(logger)) {
-        logger = spdlog::default_logger();
-    }
-
     std::string_view type;
     if (typeFlags & vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation) {
         type = "Validation";
@@ -48,7 +44,8 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL
     } else {
         type = "General";
     }
-    logger->log(slevel, "Vk{}: {}", type, pCallbackData->pMessage);
+    balsa::visualization::vulkan::logger()->log(
+        slevel, "Vk{}: {}", type, pCallbackData->pMessage);
     return VK_FALSE;
 }
 }// namespace
@@ -148,8 +145,8 @@ bool NativeFilm::check_validation_layer_support() {
             }
         }
         if (!layer_found) {
-            spdlog::error("Was unable to load validation layer [{}]",
-                          layer_name);
+            logger()->error("Was unable to load validation layer [{}]",
+                            layer_name);
             return false;
         }
     }
@@ -260,7 +257,8 @@ void NativeFilm::create_device() {
         // Add barycentric extension if supported
         if (_has_fragment_shader_barycentric) {
             extension_names.push_back(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
-            spdlog::info("NativeFilm: enabling VK_KHR_fragment_shader_barycentric");
+            logger()->info(
+                "NativeFilm: enabling VK_KHR_fragment_shader_barycentric");
         }
 
         // for (auto &&extension : extension_names) {
@@ -333,38 +331,30 @@ void NativeFilm::create_instance() {
         debug_create_info = debug_utils_messenger_create_info();
         ictrace.setPNext(&debug_create_info);
     }
-    for (auto &&ext : extension_names) {
-        spdlog::trace("str ext: {}", ext);
-    }
-    for (auto &&ext : extension_names) {
-        spdlog::trace("str ext: {}", ext);
-    }
+    for (auto &&ext : extension_names) { logger()->trace("str ext: {}", ext); }
+    for (auto &&ext : extension_names) { logger()->trace("str ext: {}", ext); }
     for (auto &&ext : _validation_layers) {
-        spdlog::trace("str layer: {}", ext);
+        logger()->trace("str layer: {}", ext);
     }
-    for (auto &&ext : ext_cnames) {
-        spdlog::trace("ext: {}", ext);
-    }
-    for (auto &&ext : layer_cnames) {
-        spdlog::trace("layer: {}", ext);
-    }
+    for (auto &&ext : ext_cnames) { logger()->trace("ext: {}", ext); }
+    for (auto &&ext : layer_cnames) { logger()->trace("layer: {}", ext); }
 
     try {
         _instance_raii = _context_raii.createInstance(ictrace);
     } catch (const std::exception &e) {
-        spdlog::error("Error creating instance: {}", e.what());
+        logger()->error("Error creating instance: {}", e.what());
 
         std::vector<vk::ExtensionProperties> extensions = _context_raii.enumerateInstanceExtensionProperties();
 
         for (const auto &extension : extensions) {
-            spdlog::trace("Instance has extension [{}] available",
-                          std::string_view(extension.extensionName));
+            logger()->trace("Instance has extension [{}] available",
+                            std::string_view(extension.extensionName));
         }
         auto layer_properties = _context_raii.enumerateInstanceLayerProperties();
 
         for (const auto &layer : layer_properties) {
-            spdlog::trace("Instance has layer [{}] available",
-                          std::string_view(layer.layerName));
+            logger()->trace("Instance has layer [{}] available",
+                            std::string_view(layer.layerName));
         }
         throw e;
     }
@@ -376,7 +366,7 @@ void NativeFilm::create_debug_messenger() {
         return;
     }
     if (!bool(*_instance_raii)) {
-        spdlog::error("Cannot create debug messenger without instance set");
+        logger()->error("Cannot create debug messenger without instance set");
     }
 
     auto create_info = debug_utils_messenger_create_info();
@@ -413,8 +403,8 @@ int NativeFilm::score_physical_devices(const vk::PhysicalDevice &device) const {
     }
 
     if (!features.geometryShader) {
-        spdlog::trace("Skipped device from {} due lack of geometry shading",
-                      to_string(vk::VendorId(properties.vendorID)));
+        logger()->trace("Skipped device from {} due lack of geometry shading",
+                        to_string(vk::VendorId(properties.vendorID)));
         return 0;
     }
     // check for complete queues
@@ -438,10 +428,10 @@ void NativeFilm::pick_physical_device() {
                           devices.size() - 1));
         }
         auto properties = devices[idx].getProperties();
-        spdlog::debug("Using requested physical device {}: Vendor={} type={}",
-                      idx,
-                      to_string(vk::VendorId(properties.vendorID)),
-                      to_string(properties.deviceType));
+        logger()->debug("Using requested physical device {}: Vendor={} type={}",
+                        idx,
+                        to_string(vk::VendorId(properties.vendorID)),
+                        to_string(properties.deviceType));
         _physical_device_raii = std::move(devices[idx]);
         return;
     }
@@ -450,10 +440,10 @@ void NativeFilm::pick_physical_device() {
     for (auto &&device : devices) {
         int score = score_physical_devices(*device);
         auto properties = device.getProperties();
-        spdlog::trace("physical device: Vendor={} type={} got score {}",
-                      to_string(vk::VendorId(properties.vendorID)),
-                      to_string(properties.deviceType),
-                      score);
+        logger()->trace("physical device: Vendor={} type={} got score {}",
+                        to_string(vk::VendorId(properties.vendorID)),
+                        to_string(properties.deviceType),
+                        score);
         if (score > 0) {
             candidates.emplace(std::make_pair(score, *device));
         }
@@ -473,9 +463,9 @@ void NativeFilm::pick_physical_device() {
     }
     auto properties = device.getProperties();
     // auto features = device.getFeatures();
-    spdlog::trace("Chosen physical device: Vendor={} type={}",
-                  to_string(vk::VendorId(properties.vendorID)),
-                  to_string(properties.deviceType));
+    logger()->trace("Chosen physical device: Vendor={} type={}",
+                    to_string(vk::VendorId(properties.vendorID)),
+                    to_string(properties.deviceType));
     _physical_device_raii = vk::raii::PhysicalDevice(_instance_raii, device);
 }
 
@@ -653,7 +643,10 @@ void NativeFilm::create_image_resources() {
 
     auto images = _swapchain_raii.getImages();
     if (_swapchain_count != images.size()) {
-        spdlog::error("Swapchain requested more images than we requested: {} vs {}", images.size(), _swapchain_count);
+        logger()->error(
+            "Swapchain requested more images than we requested: {} vs {}",
+            images.size(),
+            _swapchain_count);
     }
     const size_t size = images.size();
 
@@ -745,7 +738,7 @@ uint32_t NativeFilm::choose_swapchain_image_count() const {
     if (capabilities.maxImageCount != 0) {
         image_count = std::min(image_count, capabilities.maxImageCount);
     }
-    spdlog::debug("Desired swapchain image count: {}", image_count);
+    logger()->debug("Desired swapchain image count: {}", image_count);
     return image_count;
 }
 
@@ -819,18 +812,19 @@ void NativeFilm::recreate_swapchain() {
     // Handle minimized window (0x0 extent) — nothing to do, the next
     // frame will retry once the window is un-minimized
     if (new_extent.width == 0 || new_extent.height == 0) {
-        spdlog::debug("Swapchain recreation skipped: window is minimized ({}x{})",
-                      new_extent.width,
-                      new_extent.height);
+        logger()->debug(
+            "Swapchain recreation skipped: window is minimized ({}x{})",
+            new_extent.width,
+            new_extent.height);
         _swapchain_needs_recreation = true;
         return;
     }
 
-    spdlog::debug("Recreating swapchain: {}x{} -> {}x{}",
-                  _swapchain_extent.width,
-                  _swapchain_extent.height,
-                  new_extent.width,
-                  new_extent.height);
+    logger()->debug("Recreating swapchain: {}x{} -> {}x{}",
+                    _swapchain_extent.width,
+                    _swapchain_extent.height,
+                    new_extent.width,
+                    new_extent.height);
 
     // Destroy in reverse creation order (image_resources, render pass,
     // MSAA color, depth/stencil, but NOT swapchain yet — we pass it as oldSwapchain)
@@ -855,9 +849,9 @@ void NativeFilm::recreate_swapchain() {
     }
 
     _swapchain_needs_recreation = false;
-    spdlog::debug("Swapchain recreation complete: {}x{}",
-                  _swapchain_extent.width,
-                  _swapchain_extent.height);
+    logger()->debug("Swapchain recreation complete: {}x{}",
+                    _swapchain_extent.width,
+                    _swapchain_extent.height);
 }
 
 void NativeFilm::notify_framebuffer_resized() {
@@ -1042,8 +1036,8 @@ void NativeFilm::create_depth_stencil_resources() {
 
     _depth_image_view_raii = _device_raii.createImageView(view_ci);
 
-    spdlog::debug("Created depth/stencil resources with format {}",
-                  vk::to_string(_depth_stencil_format));
+    logger()->debug("Created depth/stencil resources with format {}",
+                    vk::to_string(_depth_stencil_format));
 }
 
 void NativeFilm::destroy_depth_stencil_resources() {
@@ -1149,8 +1143,8 @@ void NativeFilm::create_msaa_color_resources() {
 
     _msaa_color_image_view_raii = _device_raii.createImageView(view_ci);
 
-    spdlog::debug("Created MSAA color resources with {}x samples",
-                  static_cast<uint32_t>(_sample_count));
+    logger()->debug("Created MSAA color resources with {}x samples",
+                    static_cast<uint32_t>(_sample_count));
 }
 
 void NativeFilm::destroy_msaa_color_resources() {
@@ -1184,52 +1178,53 @@ void NativeFilm::pre_draw_hook() {
     }
 
     auto &frame = _frame_resources[_current_frame_index];
-    spdlog::trace("pre_draw: using frame {}/{}", _current_frame_index, _frame_resources.size());
+    logger()->trace("pre_draw: using frame {}/{}",
+                    _current_frame_index,
+                    _frame_resources.size());
 
     vk::Result result;
 
     if (!frame.image_acquired) {
         if (frame.fence_waitable) {
-            spdlog::trace("pre_draw: waiting for fence_raii");
+            logger()->trace("pre_draw: waiting for fence_raii");
             result = device.waitForFences(*frame.fence_raii, VK_TRUE, UINT64_MAX);
             device.resetFences(*frame.fence_raii);
             frame.fence_waitable = false;
         }
 
-
-        spdlog::trace("pre_draw: acquiring image");
+        logger()->trace("pre_draw: acquiring image");
         try {
             vk::ResultValue<uint32_t> res =
               device.acquireNextImageKHR(*_swapchain_raii, UINT64_MAX, *frame.image_semaphore_raii, *frame.fence_raii);
             _current_image_index = res.value;
             if (res.result == vk::Result::eSuccess || res.result == vk::Result::eSuboptimalKHR) {
-                spdlog::trace("Acquired image {}", res.value);
+                logger()->trace("Acquired image {}", res.value);
                 frame.fence_waitable = true;
                 frame.image_semaphore_waitable = true;
                 frame.image_acquired = true;
             }
         } catch (vk::OutOfDateKHRError const &) {
             // Swapchain is out of date — recreate and retry acquiring
-            spdlog::debug("Swapchain out of date during acquire, recreating");
+            logger()->debug("Swapchain out of date during acquire, recreating");
             recreate_swapchain();
             return;
         }
     }
-    spdlog::trace("pre_draw: using image {}/{}", _current_image_index, _image_resources.size());
+    logger()->trace("pre_draw: using image {}/{}",
+                    _current_image_index,
+                    _image_resources.size());
 
     auto &image = _image_resources[_current_image_index];
 
     if (image.command_fence_waitable) {
-        spdlog::trace("pre_draw: waiting for command fence");
+        logger()->trace("pre_draw: waiting for command fence");
         result = device.waitForFences(*image.command_fence_raii, VK_TRUE, UINT64_MAX);
-        if (result != vk::Result::eSuccess) {
-            spdlog::error("Fence failed");
-        }
-        spdlog::trace("pre_draw: Resetting command fence");
+        if (result != vk::Result::eSuccess) { logger()->error("Fence failed"); }
+        logger()->trace("pre_draw: Resetting command fence");
         device.resetFences(*image.command_fence_raii);
         image.command_fence_waitable = false;
     } else {
-        spdlog::warn("Image command fence was not waitable");
+        logger()->warn("Image command fence was not waitable");
     }
 
 
@@ -1272,11 +1267,15 @@ void NativeFilm::post_draw_hook() {
     auto &image = _image_resources[_current_image_index];
     auto &frame = _frame_resources[_current_frame_index];
 
-    spdlog::trace("post_draw: using frame {}/{}", _current_frame_index, _frame_resources.size());
-    spdlog::trace("post_draw: using image {}/{}", _current_image_index, _image_resources.size());
+    logger()->trace("post_draw: using frame {}/{}",
+                    _current_frame_index,
+                    _frame_resources.size());
+    logger()->trace("post_draw: using image {}/{}",
+                    _current_image_index,
+                    _image_resources.size());
 
     if (_graphics_queue_family_index != _present_queue_family_index) {
-        spdlog::trace("Transfer barrier");
+        logger()->trace("Transfer barrier");
         vk::ImageMemoryBarrier presentTransfer;
         presentTransfer.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
         presentTransfer.setOldLayout(vk::ImageLayout::ePresentSrcKHR);
@@ -1295,18 +1294,20 @@ void NativeFilm::post_draw_hook() {
 
     image.command_buffer_raii.end();
 
-    spdlog::trace("post_draw: preparing submit trace");
+    logger()->trace("post_draw: preparing submit trace");
     vk::SubmitInfo si;
     {
         if (frame.image_semaphore_waitable) {
-            spdlog::trace("image -> draw semaphores");
-            spdlog::trace("image semaphore raii {}", bool(*frame.image_semaphore_raii));
+            logger()->trace("image -> draw semaphores");
+            logger()->trace("image semaphore raii {}",
+                            bool(*frame.image_semaphore_raii));
             si.setWaitSemaphores(*frame.image_semaphore_raii);
         }
 
         // if frame grabbing?
         if (true) {
-            spdlog::trace("draw semaphore raii {}", bool(*frame.draw_semaphore_raii));
+            logger()->trace("draw semaphore raii {}",
+                            bool(*frame.draw_semaphore_raii));
             si.setSignalSemaphores(*frame.draw_semaphore_raii);
         }
         vk::PipelineStageFlags flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
@@ -1315,26 +1316,33 @@ void NativeFilm::post_draw_hook() {
     }
 
     try {
-        spdlog::trace("post_draw: adding image fence to graphics queue with command_fence_raii");
-        spdlog::trace("command fence raii {}", bool(*image.command_fence_raii));
+        logger()->trace(
+            "post_draw: adding image fence to graphics queue with "
+            "command_fence_raii");
+        logger()->trace("command fence raii {}",
+                        bool(*image.command_fence_raii));
         _graphics_queue_raii.submit(si, *image.command_fence_raii);
         frame.image_semaphore_waitable = false;
         image.command_fence_waitable = true;
     } catch (const std::exception &e) {
-        spdlog::error("Failed: {}", e.what());
+        logger()->error("Failed: {}", e.what());
     }
 
     const bool graphics_present_different_familes = _present_queue_family_index != _graphics_queue_family_index;
     if (graphics_present_different_familes) {
-        spdlog::trace("post_draw: attaching semaphores because queues are different (graphics={}, present={})", _graphics_queue_family_index, _present_queue_family_index);
-        spdlog::trace("draw -> present semaphores");
+        logger()->trace(
+            "post_draw: attaching semaphores because queues are different "
+            "(graphics={}, present={})",
+            _graphics_queue_family_index,
+            _present_queue_family_index);
+        logger()->trace("draw -> present semaphores");
         si.setWaitSemaphores(*frame.draw_semaphore_raii);
         si.setSignalSemaphores(*frame.present_semaphore_raii);
         si.setCommandBuffers(*image.present_command_buffer_raii);
         _present_queue_raii.submit(si, *image.command_fence_raii);
     }
 
-    spdlog::trace("post_draw: setting present wait semaphore");
+    logger()->trace("post_draw: setting present wait semaphore");
     vk::PresentInfoKHR present;
     present.setSwapchains(*_swapchain_raii);
     present.setImageIndices(_current_image_index);
@@ -1342,27 +1350,29 @@ void NativeFilm::post_draw_hook() {
     // present.setPResults(nullptr);
 
     if (graphics_present_different_familes) {
-        spdlog::trace("present-> done");
+        logger()->trace("present-> done");
         present.setWaitSemaphores(*frame.present_semaphore_raii);
     } else {
-        spdlog::trace("draw-> done");
+        logger()->trace("draw-> done");
         present.setWaitSemaphores(*frame.draw_semaphore_raii);
     }
 
-    spdlog::trace("post_draw: calling present");
+    logger()->trace("post_draw: calling present");
     try {
         vk::Result result =
           _present_queue_raii.presentKHR(present);
         if (result == vk::Result::eSuboptimalKHR) {
-            spdlog::debug("Swapchain suboptimal during present, flagging recreation");
+            logger()->debug(
+                "Swapchain suboptimal during present, flagging recreation");
             _swapchain_needs_recreation = true;
         }
     } catch (vk::OutOfDateKHRError const &) {
-        spdlog::debug("Swapchain out of date during present, flagging recreation");
+        logger()->debug(
+            "Swapchain out of date during present, flagging recreation");
         _swapchain_needs_recreation = true;
     }
     frame.image_acquired = false;
     _current_frame_index = (_current_frame_index + 1) % _frame_resources.size();
-    spdlog::trace("post_draw: Done");
+    logger()->trace("post_draw: Done");
 }
 }// namespace balsa::visualization::vulkan

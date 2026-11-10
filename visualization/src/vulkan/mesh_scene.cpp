@@ -2,10 +2,10 @@
 #include "balsa/scene_graph/Light.hpp"
 #include "balsa/visualization/vulkan/BufferUploadBatch.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <spdlog/spdlog.h>
 #include <zipper/transform/view.hpp>
 
@@ -52,12 +52,13 @@ void MeshScene::initialize(Film &film) {
         }
     }
 
-    spdlog::info("MeshScene initialized with {} drawable(s)", _drawable_group.size());
+    logger()->debug("MeshScene initialized with {} drawable(s)",
+                    _drawable_group.size());
 }
 
 void MeshScene::draw(Film &film) {
     if (!_initialized) return;
-    const auto start = std::chrono::steady_clock::now();
+    ProfileScope profile("MeshScene::draw", spdlog::level::trace);
     BufferUploadBatch uploads(film);
 
     // Resolve scene-level lighting once per frame.
@@ -74,20 +75,13 @@ void MeshScene::draw(Film &film) {
         vmd->draw(*active_cam, film);
     }
     uploads.submit();
-    if (_drawable_group.size() != _last_drawable_count) {
-        spdlog::info("MeshScene: prepared frame for {} drawables in {:.3f}s",
-                     _drawable_group.size(),
-                     std::chrono::duration<double>(
-                         std::chrono::steady_clock::now() - start)
-                         .count());
-        _last_drawable_count = _drawable_group.size();
-    }
 }
 
 void MeshScene::release_vulkan_resources() {
     if (!_initialized) return;
 
-    spdlog::debug("MeshScene: releasing Vulkan resources ({} drawables)", _drawable_group.size());
+    logger()->debug("MeshScene: releasing Vulkan resources ({} drawables)",
+                    _drawable_group.size());
 
     // Release all VulkanMeshDrawables first (they reference pipeline
     // manager's descriptor pool).
@@ -102,7 +96,6 @@ void MeshScene::release_vulkan_resources() {
 
     _film = nullptr;
     _initialized = false;
-    _last_drawable_count = 0;
 }
 
 // ── Mesh management ──────────────────────────────────────────────────
@@ -259,7 +252,8 @@ void MeshScene::set_active_camera(scene_graph::Object *cam_obj) {
     }
     auto *cam = cam_obj->find_feature<scene_graph::Camera>();
     if (!cam) {
-        spdlog::warn("set_active_camera: Object '{}' has no Camera feature", cam_obj->name);
+        logger()->warn("set_active_camera: Object '{}' has no Camera feature",
+                       cam_obj->name);
         return;
     }
     _active_camera_object = cam_obj;

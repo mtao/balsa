@@ -31,6 +31,7 @@
 #include <QWidget>
 
 #include <balsa/qt/spdlog_logger.hpp>
+#include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 
 // Qt defines 'emit' as a macro, which conflicts with TBB's
@@ -45,6 +46,7 @@
 #include <balsa/visualization/qt/SceneGraphWidget.hpp>
 #include <balsa/visualization/qt/vulkan/window.hpp>
 #include <balsa/visualization/vulkan/BufferAllocator.hpp>
+#include <balsa/visualization/vulkan/logging.hpp>
 #include <balsa/visualization/vulkan/mesh_render_state.hpp>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
@@ -243,34 +245,39 @@ namespace {
                 return;
             }
             const auto decoded = Clock::now();
-            spdlog::info(
+            vk_viz::logger()->debug(
                 "  CPU scene load (parse, codecs, conversion): {:.3f}s",
                 seconds(decoded - start));
             auto &object = _scene->add_object(std::move(*loaded));
             const auto initialized = Clock::now();
-            spdlog::info("  Initialized '{}' in {:.3f}s",
-                         object.name,
-                         seconds(initialized - decoded));
-            const auto memory =
-                _vk_window->film().buffer_allocator()->statistics();
-            spdlog::info(
-                "  Buffers: {} suballocations in {} memory blocks ({:.1f} MiB "
-                "reserved)",
-                memory.allocations,
-                memory.memory_blocks,
-                memory.reserved_bytes / (1024.0 * 1024.0));
+            vk_viz::logger()->debug("  Initialized '{}' in {:.3f}s",
+                                    object.name,
+                                    seconds(initialized - decoded));
+            if (vk_viz::logger()->should_log(spdlog::level::debug)) {
+                const auto memory =
+                    _vk_window->film().buffer_allocator()->statistics();
+                vk_viz::logger()->debug(
+                    "  Buffers: {} suballocations in {} memory blocks ({:.1f} "
+                    "MiB "
+                    "reserved)",
+                    memory.allocations,
+                    memory.memory_blocks,
+                    memory.reserved_bytes / (1024.0 * 1024.0));
+            }
             _camera->frame(viz::world_bounding_box(_scene->root()));
             const auto framed = Clock::now();
-            spdlog::info("  Framed scene in {:.3f}s",
-                         seconds(framed - initialized));
+            vk_viz::logger()->debug("  Framed scene in {:.3f}s",
+                                    seconds(framed - initialized));
 
             // Refresh the outliner and select the new mesh (this also
             // updates the properties panel via the object_selected signal).
             _outliner->refresh();
             _outliner->select_object(&object);
             const auto finished = Clock::now();
-            spdlog::info("  Updated outliner in {:.3f}s; total load {:.3f}s",
-                         seconds(finished - framed),
+            vk_viz::logger()->debug("  Updated outliner in {:.3f}s",
+                                    seconds(finished - framed));
+            spdlog::info("Loaded '{}' in {:.3f}s",
+                         object.name,
                          seconds(finished - start));
 
             // Request a redraw
@@ -301,6 +308,7 @@ int main(int argc, char *argv[]) {
 
     QApplication app(argc, argv);
     spdlog::set_level(spdlog::level::info);
+    spdlog::cfg::load_env_levels();
     balsa::qt::activateSpdlogOutput();
 
     std::filesystem::path obj_path;

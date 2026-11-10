@@ -1,7 +1,7 @@
 #include "balsa/visualization/glfw/vulkan/film.hpp"
-#include <spdlog/spdlog.h>
+#include "balsa/visualization/vulkan/logging.hpp"
 #include <GLFW/glfw3.h>
-
+#include <spdlog/spdlog.h>
 
 namespace balsa::visualization::glfw::vulkan {
 
@@ -18,7 +18,8 @@ vk::raii::SurfaceKHR Film::make_surface() const {
     vk::Result result = vk::Result(glfwCreateWindowSurface(
       static_cast<VkInstance>(instance()), _window, nullptr, &vksurface));
     if (result != vk::Result::eSuccess) {
-        spdlog::error("Surface creation failed {}", to_string(result));
+        ::balsa::visualization::vulkan::logger()->error(
+            "Surface creation failed {}", to_string(result));
     }
     return vk::raii::SurfaceKHR(instance_raii(), vksurface);
 }
