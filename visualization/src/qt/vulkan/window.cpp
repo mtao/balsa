@@ -49,14 +49,14 @@ class Window::Renderer : public QVulkanWindowRenderer {
     void releaseResources() override {
         ::balsa::visualization::vulkan::logger()->debug(
             "Qt Renderer: releaseResources");
-        // Release scene's Vulkan resources while the device is still valid.
-        // This handles the case where external shared_ptr holders keep the
-        // scene alive beyond this point.
+        // Release scene's Vulkan resources while the device is still valid
+        // (external shared_ptr holders may keep the scene alive beyond
+        // this point).  The scene itself stays: if Qt recreates the device
+        // (e.g. after device loss), initResources() initializes it again.
         const auto &sc = _outer->scene();
         if (sc) {
             sc->release_vulkan_resources();
         }
-        _outer->set_scene(nullptr);
         _outer->_film.reset();
     }
 
@@ -126,6 +126,10 @@ bool Window::is_from_touch(const QMouseEvent *e) {
 
 Window::Window(const std::string &title, int width, int height)
   : QVulkanWindow(), visualization::vulkan::Window(), _title(title), _initial_width(width), _initial_height(height) {
+    // Without this, QVulkanWindow releases every resource whenever the
+    // window stops being exposed, which Wayland compositors report when
+    // the window is on another workspace.
+    setFlags(QVulkanWindow::PersistentResources);
 }
 
 Window::~Window() {
