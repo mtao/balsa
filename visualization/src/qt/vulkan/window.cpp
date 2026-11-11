@@ -2,6 +2,7 @@
 #include "balsa/visualization/input_handler.hpp"
 #include "balsa/visualization/vulkan/logging.hpp"
 #include <QCloseEvent>
+#include <QFocusEvent>
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QResizeEvent>
@@ -103,6 +104,14 @@ int Window::translate_button(Qt::MouseButton button) {
     }
 }
 
+int Window::translate_buttons(Qt::MouseButtons buttons) {
+    int mask = 0;
+    for (auto b : { Qt::LeftButton, Qt::RightButton, Qt::MiddleButton }) {
+        if (buttons & b) mask |= 1 << translate_button(b);
+    }
+    return mask;
+}
+
 bool Window::is_from_touch(const QMouseEvent *e) {
     const auto *dev = e->pointingDevice();
     return dev && dev->type() == QInputDevice::DeviceType::TouchScreen;
@@ -195,6 +204,7 @@ void Window::mousePressEvent(QMouseEvent *e) {
     me.x = e->position().x();
     me.y = e->position().y();
     me.button = translate_button(e->button());
+    me.buttons = translate_buttons(e->buttons());
     me.modifiers = translate_mods(e->modifiers());
     dispatch_mouse(me);
 }
@@ -206,6 +216,7 @@ void Window::mouseReleaseEvent(QMouseEvent *e) {
     me.x = e->position().x();
     me.y = e->position().y();
     me.button = translate_button(e->button());
+    me.buttons = translate_buttons(e->buttons());
     me.modifiers = translate_mods(e->modifiers());
     dispatch_mouse(me);
 }
@@ -217,6 +228,7 @@ void Window::mouseMoveEvent(QMouseEvent *e) {
     me.x = e->position().x();
     me.y = e->position().y();
     me.button = -1;
+    me.buttons = translate_buttons(e->buttons());
     me.modifiers = translate_mods(e->modifiers());
     dispatch_mouse(me);
 }
@@ -300,6 +312,11 @@ void Window::keyReleaseEvent(QKeyEvent *e) {
     ke.scancode = e->nativeScanCode();
     ke.modifiers = translate_mods(e->modifiers());
     dispatch_key(ke);
+}
+
+void Window::focusOutEvent(QFocusEvent *e) {
+    QVulkanWindow::focusOutEvent(e);
+    dispatch_focus_lost();
 }
 
 void Window::resizeEvent(QResizeEvent *e) {

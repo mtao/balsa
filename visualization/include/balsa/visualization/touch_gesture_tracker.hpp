@@ -11,11 +11,13 @@ namespace balsa::visualization {
 // Incremental motion of a set of touch contacts between two TouchEvents.
 //
 //   touch_count  number of contacts that stayed down for the whole step
-//   translation  movement of their centroid (logical pixels)
+//   centroid     their centroid after the step (logical pixels)
+//   translation  movement of the centroid during the step
 //   scale        change in spread (>1 = fingers moving apart); always 1
 //                for a single contact
 struct TouchGesture {
     int touch_count = 0;
+    zipper::Vector<double, 2> centroid{ 0.0, 0.0 };
     zipper::Vector<double, 2> translation{ 0.0, 0.0 };
     double scale = 1.0;
 };

@@ -20,6 +20,7 @@ struct MouseEvent {
     double x = 0;
     double y = 0;
     int button = -1;// 0=left, 1=right, 2=middle. -1 for move/scroll.
+    int buttons = -1;// held buttons after the event (bit 1<<button), -1 if unknown
     double scroll_x = 0;
     double scroll_y = 0;
     int modifiers = 0;// bitmask of Modifiers
@@ -76,6 +77,9 @@ class InputHandler {
     virtual void on_key_event(const KeyEvent &) {}
     virtual void on_touch_event(const TouchEvent &) {}
     virtual void on_window_resize(const WindowResizeEvent &) {}
+    // The window lost input focus; releases may never arrive, so drop any
+    // in-progress drag or touch state.
+    virtual void on_focus_lost() {}
 };
 
 }// namespace balsa::visualization

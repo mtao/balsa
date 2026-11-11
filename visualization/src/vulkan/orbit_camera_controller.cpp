@@ -33,9 +33,11 @@ auto OrbitCameraController::frame(const geometry::BoundingBox<float, 3> &box) ->
     _scene->set_active_camera(nullptr);
     const auto &camera = _scene->camera();
     const float radius = std::max(0.5f * box.range().norm(), 1e-6f);
+    // Fit against the narrower of the two view angles.
+    const float tan_v = std::tan(0.5f * camera.vertical_fov());
+    const float half_fov = std::atan(std::min(tan_v, tan_v * camera.aspect()));
     _center = box.center();
-    _distance = std::max(
-      1.05f * radius / std::sin(0.5f * camera.fov_y()), _min_distance);
+    _distance = std::max(1.05f * radius / std::sin(half_fov), _min_distance);
     _scene->set_perspective(camera.fov_y(),
                             camera.aspect(),
                             1e-3f * radius,
@@ -64,6 +66,13 @@ auto OrbitCameraController::on_mouse_event(const MouseEvent &e) -> void {
         break;
 
     case MouseEvent::Type::Move: {
+        // Trust the held-button state when the backend reports it, so a
+        // release delivered to another window cannot leave a drag stuck.
+        if (e.buttons >= 0) {
+            _left_down = e.buttons & (1 << 0);
+            _right_down = e.buttons & (1 << 1);
+            _middle_down = e.buttons & (1 << 2);
+        }
         double dx = e.x - _last_x;
         double dy = e.y - _last_y;
         _last_x = e.x;
@@ -83,7 +92,7 @@ auto OrbitCameraController::on_mouse_event(const MouseEvent &e) -> void {
         // Snap from bookmark camera on first interaction.
         snap_to_active_camera();
         // Zoom: exponential scaling feels natural
-        zoom(1.0f / (1.0f - static_cast<float>(e.scroll_y) * zoom_sensitivity));
+        zoom_at(1.0f / (1.0f - static_cast<float>(e.scroll_y) * zoom_sensitivity), e.x, e.y);
         break;
     }
     }
@@ -101,15 +110,23 @@ auto OrbitCameraController::on_touch_event(const TouchEvent &e) -> void {
         orbit(dx * touch_orbit_scale, dy * touch_orbit_scale);
     } else {
         pan(dx, dy);
-        zoom(static_cast<float>(gesture->scale));
+        zoom_at(static_cast<float>(gesture->scale),
+                gesture->centroid(0),
+                gesture->centroid(1));
     }
 }
 
 auto OrbitCameraController::on_window_resize(const WindowResizeEvent &e) -> void {
+    set_viewport_size(e.width, e.height);
     if (_scene && e.framebuffer_width > 0 && e.framebuffer_height > 0) {
         _scene->update_aspect(
           static_cast<float>(e.framebuffer_width) / static_cast<float>(e.framebuffer_height));
     }
+}
+
+auto OrbitCameraController::on_focus_lost() -> void {
+    _left_down = _right_down = _middle_down = false;
+    _touch.reset();
 }
 
 auto OrbitCameraController::orbit(double dx, double dy) -> void {
@@ -124,7 +141,7 @@ auto OrbitCameraController::pan(double dx, double dy) -> void {
     scene_graph::Vec3f right = forward.cross(_up).normalized();
     scene_graph::Vec3f up = right.cross(forward).normalized();
 
-    float pan_scale = _distance * pan_sensitivity;
+    const float pan_scale = world_per_pixel();
     _center = _center - right * (static_cast<float>(dx) * pan_scale);
     _center = _center + up * (static_cast<float>(dy) * pan_scale);
     apply();
@@ -134,6 +151,39 @@ auto OrbitCameraController::zoom(float factor) -> void {
     if (!(factor > 0.0f)) return;
     _distance = std::max(_distance / factor, _min_distance);
     apply();
+}
+
+auto OrbitCameraController::zoom_at(float factor, double x, double y) -> void {
+    if (_viewport_width <= 0 || _viewport_height <= 0) {
+        zoom(factor);
+        return;
+    }
+    const float before = world_per_pixel();
+    zoom(factor);
+    // The point under (x, y) moved away from the viewport center by a
+    // factor of before/after; pan it back under the cursor.
+    const double shift = 1.0 - static_cast<double>(before / world_per_pixel());
+    pan((x - 0.5 * _viewport_width) * shift, (y - 0.5 * _viewport_height) * shift);
+}
+
+auto OrbitCameraController::set_viewport_size(double width, double height) -> void {
+    _viewport_width = width;
+    _viewport_height = height;
+}
+
+auto OrbitCameraController::world_per_pixel() const -> float {
+    if (!_scene || _viewport_height <= 0) return _distance * pan_sensitivity;
+    const auto &camera = _scene->camera();
+    // |projection(1,1)| is 1/tan(fov/2) for perspective and 2/(top-bottom)
+    // for orthographic (negated for Vulkan's flipped y); the visible height at the center is 2/P11, times
+    // the distance for perspective.
+    const float p11 = std::abs(camera.projection_matrix()(1, 1));
+    if (!(p11 > 0.0f)) return _distance * pan_sensitivity;
+    float visible_height = 2.0f / p11;
+    if (camera.projection_type() == scene_graph::Camera::Projection::Perspective) {
+        visible_height *= _distance;
+    }
+    return visible_height / static_cast<float>(_viewport_height);
 }
 
 auto OrbitCameraController::compute_eye() const -> scene_graph::Vec3f {

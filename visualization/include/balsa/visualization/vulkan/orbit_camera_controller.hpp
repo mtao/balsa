@@ -53,6 +53,9 @@ class OrbitCameraController : public InputHandler {
 
     // Sensitivity parameters
     float orbit_sensitivity = 0.005f;
+    // Pan speed per pixel (scaled by distance) used only until the
+    // viewport size is known; afterwards panning tracks the cursor exactly
+    // on the plane through the center.
     float pan_sensitivity = 0.003f;
     float zoom_sensitivity = 0.1f;
     // Multiplier on orbit_sensitivity for one-finger drags.
@@ -67,6 +70,7 @@ class OrbitCameraController : public InputHandler {
     //   Pinch                → zoom
     auto on_touch_event(const TouchEvent &e) -> void override;
     auto on_window_resize(const WindowResizeEvent &e) -> void override;
+    auto on_focus_lost() -> void override;
 
     // ── Camera motions (screen-space deltas in logical pixels) ──────
 
@@ -75,6 +79,12 @@ class OrbitCameraController : public InputHandler {
     auto pan(double dx, double dy) -> void;
     // factor > 1 moves the eye closer (distance /= factor).
     auto zoom(float factor) -> void;
+    // Zooms while keeping the point under (x, y) fixed on screen
+    // (exact on the plane through the center).
+    auto zoom_at(float factor, double x, double y) -> void;
+
+    // Logical window size; set automatically by on_window_resize.
+    auto set_viewport_size(double width, double height) -> void;
 
   private:
     MeshScene *_scene = nullptr;
@@ -97,6 +107,13 @@ class OrbitCameraController : public InputHandler {
     bool _middle_down = false;
 
     TouchGestureTracker _touch;
+
+    // Logical window size, 0 until known.
+    double _viewport_width = 0;
+    double _viewport_height = 0;
+
+    // World units covered by one logical pixel on the plane through the center.
+    auto world_per_pixel() const -> float;
 
     auto compute_eye() const -> scene_graph::Vec3f;
 

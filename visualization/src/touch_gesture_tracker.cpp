@@ -39,6 +39,7 @@ auto TouchGestureTracker::update(const TouchEvent &e) -> std::optional<TouchGest
         const auto [c1, s1] = centroid_and_spread(current);
         TouchGesture g;
         g.touch_count = static_cast<int>(current.size());
+        g.centroid = c1;
         g.translation = c1 - c0;
         if (current.size() > 1 && s0 > min_spread) {
             g.scale = std::max(s1, min_spread) / s0;

@@ -54,6 +54,7 @@ class Window {
     virtual void dispatch_key(const KeyEvent &e);
     virtual void dispatch_touch(const TouchEvent &e);
     void dispatch_resize(const WindowResizeEvent &e);
+    void dispatch_focus_lost();
 
   private:
     std::shared_ptr<SceneBase> _scene;

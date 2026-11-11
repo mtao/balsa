@@ -1102,6 +1102,93 @@ TEST_CASE("orbit_camera_touch", "[viewer][touch]") {
     }
 }
 
+TEST_CASE("orbit_camera_screen_space_tracking", "[viewer][touch]") {
+    namespace vk = balsa::visualization::vulkan;
+    vk::MeshScene scene;
+    const float fov = 1.0f;
+    scene.set_perspective(fov, 2.0f, 0.01f, 100.f);
+    vk::OrbitCameraController camera(&scene);
+    camera.set_viewport_size(800, 400);
+    // Looking down -z: screen +x is world +x, screen +y is world -y.
+    camera.set_angles(0.f, 0.f);
+    const float wpp0 = 2.f * camera.distance() * std::tan(0.5f * fov) / 400.f;
+
+    SECTION("pan moves one pixel's worth per pixel") {
+        camera.pan(10, 20);
+        CHECK(camera.center()(0) == Catch::Approx(-10 * wpp0));
+        CHECK(camera.center()(1) == Catch::Approx(20 * wpp0));
+    }
+
+    SECTION("zoom_at keeps the point under the cursor fixed") {
+        const double ox = 100, oy = -50;// offset from viewport center
+        const float d0 = camera.distance();
+        // World point on the center plane under the cursor.
+        const float px = camera.center()(0) + static_cast<float>(ox) * wpp0;
+        const float py = camera.center()(1) - static_cast<float>(oy) * wpp0;
+
+        camera.zoom_at(2.f, 400 + ox, 200 + oy);
+        CHECK(camera.distance() == Catch::Approx(0.5f * d0));
+        const float wpp1 = 2.f * camera.distance() * std::tan(0.5f * fov) / 400.f;
+        CHECK(camera.center()(0) + static_cast<float>(ox) * wpp1 == Catch::Approx(px));
+        CHECK(camera.center()(1) - static_cast<float>(oy) * wpp1 == Catch::Approx(py));
+    }
+
+    SECTION("zoom_at the viewport center does not pan") {
+        camera.zoom_at(2.f, 400, 200);
+        CHECK(camera.center().norm() == Catch::Approx(0.f).margin(1e-6));
+    }
+}
+
+TEST_CASE("orbit_camera_drops_stale_drags", "[viewer]") {
+    namespace vk = balsa::visualization::vulkan;
+    namespace viz = balsa::visualization;
+    vk::MeshScene scene;
+    vk::OrbitCameraController camera(&scene);
+    const float theta = camera.theta();
+
+    auto mouse = [](viz::MouseEvent::Type type, double x, int button, int buttons) {
+        viz::MouseEvent e{ type };
+        e.x = x;
+        e.button = button;
+        e.buttons = buttons;
+        return e;
+    };
+    camera.on_mouse_event(mouse(viz::MouseEvent::Type::Press, 0, 0, 1));
+
+    SECTION("focus loss ends the drag") {
+        camera.on_focus_lost();
+        camera.on_mouse_event(mouse(viz::MouseEvent::Type::Move, 50, -1, -1));
+        CHECK(camera.theta() == theta);
+    }
+
+    SECTION("a move with no held buttons ends the drag") {
+        camera.on_mouse_event(mouse(viz::MouseEvent::Type::Move, 50, -1, 0));
+        CHECK(camera.theta() == theta);
+    }
+
+    SECTION("held buttons keep dragging") {
+        camera.on_mouse_event(mouse(viz::MouseEvent::Type::Move, 50, -1, 1));
+        CHECK(camera.theta() != theta);
+    }
+}
+
+TEST_CASE("camera_fov_spans_shorter_side", "[viewer]") {
+    balsa::scene_graph::Camera cam;
+    cam.set_perspective(1.0f, 2.0f, 0.1f, 10.f);
+    CHECK(cam.vertical_fov() == Catch::Approx(1.0f));
+
+    // Vertical (default): portrait keeps the vertical angle.
+    cam.update_aspect(0.5f);
+    CHECK(cam.vertical_fov() == Catch::Approx(1.0f));
+
+    // ShorterSide: in portrait the horizontal angle stays at fov.
+    cam.set_fov_axis(balsa::scene_graph::Camera::FovAxis::ShorterSide);
+    const float horizontal = 2.f * std::atan(std::tan(0.5f * cam.vertical_fov()) * 0.5f);
+    CHECK(horizontal == Catch::Approx(1.0f));
+    cam.update_aspect(2.0f);
+    CHECK(cam.vertical_fov() == Catch::Approx(1.0f));
+}
+
 TEST_CASE("scene_loader", "[viewer]") {
     TempDir dir;
     namespace sg = balsa::scene_graph;

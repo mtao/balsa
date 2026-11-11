@@ -52,6 +52,7 @@ class Window : public QVulkanWindow
     void keyPressEvent(QKeyEvent *e) override;
     void keyReleaseEvent(QKeyEvent *e) override;
     void resizeEvent(QResizeEvent *e) override;
+    void focusOutEvent(QFocusEvent *e) override;
 
   private:
     std::string _title;
@@ -67,6 +68,8 @@ class Window : public QVulkanWindow
     static int translate_mods(Qt::KeyboardModifiers mods);
     // Helper: translate Qt mouse button enum to our int convention (0=left,1=right,2=middle).
     static int translate_button(Qt::MouseButton button);
+    // Helper: held Qt buttons as a bitmask of (1 << translate_button).
+    static int translate_buttons(Qt::MouseButtons buttons);
     // True for mouse events Qt synthesized from touch input; those are
     // already handled through touchEvent().
     static bool is_from_touch(const QMouseEvent *e);

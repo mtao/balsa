@@ -21,6 +21,7 @@ MeshScene::MeshScene(const shaders::ShaderLibrary &library)
     _default_camera_object = &cam_obj;
     _active_camera_object = &cam_obj;
     _default_camera = &cam_obj.emplace_feature<scene_graph::Camera>();
+    _default_camera->set_fov_axis(scene_graph::Camera::FovAxis::ShorterSide);
 
     // Attach a default headlight to the camera Object.
     // Direction (0, 0, 1) in camera local space = shining along the

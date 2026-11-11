@@ -205,8 +205,8 @@ void Window::cb_window_refresh(GLFWwindow *w) {
 }
 
 void Window::cb_window_focus(GLFWwindow *w, int focused) {
-    (void)w;
-    (void)focused;
+    if (focused) return;
+    if (auto *win = self(w)) win->dispatch_focus_lost();
 }
 
 void Window::cb_window_iconify(GLFWwindow *w, int iconified) {

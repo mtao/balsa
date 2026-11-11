@@ -62,6 +62,12 @@ void Window::dispatch_touch(const TouchEvent &e) {
     }
 }
 
+void Window::dispatch_focus_lost() {
+    if (_input_handler) {
+        _input_handler->on_focus_lost();
+    }
+}
+
 void Window::dispatch_resize(const WindowResizeEvent &e) {
     if (_input_handler) {
         _input_handler->on_window_resize(e);
