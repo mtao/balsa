@@ -5,7 +5,8 @@ layout(set = 1, binding = 0) uniform Material {
     vec4 u_response;       // ambient, diffuse and specular strength, shininess
     vec4 u_scalar_range;   // x = min, y = max, z = two-sided (> 0.5)
     vec4 u_scalar_select;  // x = mode (0 component, 1 p-norm),
-                           // y = component or p, z = component count
+                           // y = component or p, z = component count,
+                           // w = debug channel
 };
 
 // The scene light's diffuse (with ambient) and specular terms at a surface

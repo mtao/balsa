@@ -1,6 +1,7 @@
 #include "balsa/scene_graph/ImageData.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -119,6 +120,12 @@ auto ImageData::update_region(uint32_t x,
     } else {
         _dirty = DirtyRegion(x, y, x + w, y + h);
     }
+}
+
+auto ImageData::debug_channels() -> std::span<const std::string_view> {
+    static constexpr std::array<std::string_view, 5> names{"Red", "Green", "Blue", "Alpha",
+                                                           "Luminance"};
+    return names;
 }
 
 } // namespace balsa::scene_graph

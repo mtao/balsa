@@ -144,6 +144,7 @@ visualization_sources = [
   'src/scene_graph/Object.cpp',
   'src/scene_graph/Camera.cpp',
   'src/scene_graph/MeshRenderer.cpp',
+  'src/scene_graph/DebugView.cpp',
   'src/scene_graph/MeshGeometry.cpp',
   'src/scene_graph/BasicShading.cpp',
   'src/scene_graph/DrawableGroup.cpp',

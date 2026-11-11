@@ -30,6 +30,8 @@ namespace roles {
     // Set 0 or 1: "balsa.texture_coordinates_0" / "_1".
     auto texture_coordinates(std::size_t set) -> MeshRole;
     auto color() -> MeshRole;    // "balsa.color"
+    // Any attribute shown as data (AttributeColorRenderer).
+    auto visualized() -> MeshRole; // "balsa.visualized"
 } // namespace roles
 
 } // namespace balsa::scene_graph

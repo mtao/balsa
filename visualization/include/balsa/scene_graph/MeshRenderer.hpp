@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "balsa/scene_graph/AttributeSemantic.hpp"
+#include "balsa/scene_graph/DebugView.hpp"
 #include "balsa/scene_graph/GeometryView.hpp"
 #include "balsa/scene_graph/MeshRole.hpp"
 #include "balsa/scene_graph/render_layers.hpp"
@@ -180,6 +181,12 @@ class MeshRenderer {
     /// controls are shown.
     [[nodiscard]] virtual auto build_controls(const MeshLayerContext &layer)
         -> visualization::controls::Layout = 0;
+    /// The renderer's debug channels, or nullptr if it has none.  The
+    /// selection is per renderer, so it is copied by clone().
+    [[nodiscard]] virtual auto debug_view() -> DebugView * { return nullptr; }
+    [[nodiscard]] auto debug_view() const -> const DebugView * {
+        return const_cast<MeshRenderer *>(this)->debug_view();
+    }
 };
 
 struct MeshRendererDefinition {
@@ -243,7 +250,13 @@ class PhongSurfaceRenderer final : public MeshRenderer {
     [[nodiscard]] auto scalar_range(const MeshLayerContext &layer) const
         -> std::array<float, 2>;
 
+    /// Diffuse and specular terms, and the normalized scalar.
+    [[nodiscard]] static auto debug_channels() -> std::span<const std::string_view>;
+    [[nodiscard]] auto debug_view() -> DebugView * override { return &m_debug_view; }
+    using MeshRenderer::debug_view;
+
   private:
+    DebugView m_debug_view{"Shaded", debug_channels()};
     struct ExtentsCache {
         MeshAttributeHandle attribute;
         uint64_t geometry_version = 0;
@@ -286,29 +299,6 @@ class UnlitPointsRenderer final : public MeshRenderer {
     float size = 3.0f;
 };
 
-/// What a PBR surface shows: the lit result or one input of the shading,
-/// as in the Khronos glTF Sample Viewer's debug views.  Colours are shown
-/// as colours; data (normals, factors, coordinates) as raw values, vectors
-/// mapped from [-1, 1] to [0, 1].
-enum class PbrDebugChannel : uint8_t {
-    Final,
-    BaseColor,
-    Alpha,
-    Metallic,
-    Roughness,
-    Occlusion,
-    Emissive,
-    ShadingNormal,
-    GeometryNormal,
-    Tangent,
-    Bitangent,
-    TextureCoordinates0,
-    TextureCoordinates1,
-};
-
-/// Labels of the PbrDebugChannel values, in order.
-[[nodiscard]] auto pbr_debug_channel_names() -> std::span<const std::string_view>;
-
 /// A metallic-roughness (glTF) surface: Material's factors and textures,
 /// lit by the scene light plus a small ambient term until image-based
 /// lighting exists.
@@ -331,9 +321,55 @@ class GltfMetallicRoughnessRenderer final : public MeshRenderer {
     // Shared with other layers drawing the same material; clones share it
     // too.  Never null.
     std::shared_ptr<Material> material = std::make_shared<Material>();
-    // Per renderer, not per material: debugging one layer leaves others
-    // sharing its material alone.
-    PbrDebugChannel debug_channel = PbrDebugChannel::Final;
+
+    /// Material inputs and the shading frame.  Per renderer, not on the
+    /// shared Material: debugging one layer leaves others alone.
+    [[nodiscard]] static auto debug_channels() -> std::span<const std::string_view>;
+    [[nodiscard]] auto debug_view() -> DebugView * override { return &m_debug_view; }
+    using MeshRenderer::debug_view;
+
+  private:
+    DebugView m_debug_view{"Shaded", debug_channels()};
+};
+
+/// How AttributeColorRenderer maps attribute values to [0, 1] colours.
+enum class AttributeColorRange : uint8_t {
+    Signed,      // [-1, 1], e.g. normals and tangents
+    Unit,        // [0, 1], e.g. colours and weights
+    FitToData,   // each component's extents
+    Fractional,  // fract(value): repeating, e.g. texture coordinates
+};
+
+/// Shows any per-vertex attribute (1-4 components) as an unlit colour:
+/// one component as grey, two as red-green, three or four as RGB.  Without
+/// a bound attribute it shows face normals.  Reads roles::visualized(),
+/// which defaults to the normal attribute.
+class AttributeColorRenderer final : public MeshRenderer {
+  public:
+    [[nodiscard]] auto clone() const -> std::unique_ptr<MeshRenderer> override;
+    [[nodiscard]] auto id() const -> std::string_view override;
+    [[nodiscard]] auto required_roles() const
+        -> std::span<const MeshRoleRequirement> override;
+    [[nodiscard]] auto draw_request() const -> MeshDrawRequest override;
+    auto write_material(MeshMaterial &material,
+                        const MeshLayerContext &layer) const -> void override;
+    [[nodiscard]] auto build_controls(const MeshLayerContext &layer)
+        -> visualization::controls::Layout override;
+
+    AttributeColorRange range = AttributeColorRange::Signed;
+
+    /// Per component [min, max] of layer's attribute under `range`
+    /// (components the attribute lacks are [0, 1]).
+    [[nodiscard]] auto component_ranges(const MeshLayerContext &layer) const
+        -> std::array<std::array<float, 2>, 4>;
+
+  private:
+    struct ExtentsCache {
+        MeshAttributeHandle attribute;
+        uint64_t geometry_version = 0;
+        std::array<std::array<float, 2>, 4> extents{};
+    };
+    mutable ExtentsCache m_extents;
 };
 
 auto register_builtin_mesh_renderers() -> void;

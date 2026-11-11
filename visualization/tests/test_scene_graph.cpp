@@ -1281,7 +1281,8 @@ TEST_CASE("ImageData default state", "[scene_graph][image]") {
     // Default display parameters.
     CHECK(img.exposure() == Catch::Approx(0.0f));
     CHECK(img.gamma() == Catch::Approx(2.2f));
-    CHECK(img.channel_mode() == ImageData::ChannelMode::RGBA);
+    CHECK(img.debug_view().channel_name() == "RGBA");
+    CHECK(img.debug_view().channels().size() == 5);
 }
 
 TEST_CASE("ImageData set_pixels_rgba8", "[scene_graph][image]") {
@@ -1469,11 +1470,11 @@ TEST_CASE("ImageData display parameters", "[scene_graph][image]") {
     img.set_gamma(std::numeric_limits<float>::infinity());
     CHECK(img.gamma() == Catch::Approx(1.0f));
 
-    img.set_channel_mode(ImageData::ChannelMode::Red);
-    CHECK(img.channel_mode() == ImageData::ChannelMode::Red);
-
-    img.set_channel_mode(ImageData::ChannelMode::Luminance);
-    CHECK(img.channel_mode() == ImageData::ChannelMode::Luminance);
+    // Channel indices are what image.frag receives.
+    CHECK(img.debug_view().set_channel("Red"));
+    CHECK(img.debug_view().channel() == 1);
+    CHECK(img.debug_view().set_channel("Luminance"));
+    CHECK(img.debug_view().channel() == 5);
 }
 
 TEST_CASE("ImageData as Object feature", "[scene_graph][image]") {
@@ -2104,52 +2105,133 @@ TEST_CASE("phong_surface_scalar_colormap", "[scene_graph][renderer]") {
     find("Color", [&](const ctl::Property &p) { CHECK(p.visible_when()); });
 }
 
-TEST_CASE("pbr_surface_debug_channel", "[scene_graph][renderer][pbr]") {
+TEST_CASE("debug_view_selects_channels", "[scene_graph][debug_view]") {
     namespace sg = balsa::scene_graph;
     namespace ctl = balsa::visualization::controls;
-    auto material = std::make_shared<sg::Material>();
-    sg::GltfMetallicRoughnessRenderer renderer(material);
-    sg::GltfMetallicRoughnessRenderer other(material);
+    static constexpr std::array<std::string_view, 2> channels{"Normal", "Depth"};
+    sg::DebugView view("Shaded", channels);
+    CHECK_FALSE(view.active());
+    CHECK(view.channel_name() == "Shaded");
+    CHECK(view.option_names() == std::vector<std::string>{"Shaded", "Normal", "Depth"});
 
-    // The channel is the w of the block's fifth vec4 (options).
-    const auto channel = [](const sg::GltfMetallicRoughnessRenderer &r) {
+    CHECK(view.set_channel(2));
+    CHECK(view.channel_name() == "Depth");
+    CHECK(view.active());
+    // Out of range or unknown: unchanged.
+    CHECK_FALSE(view.set_channel(3));
+    CHECK_FALSE(view.set_channel("Missing"));
+    CHECK(view.channel() == 2);
+    CHECK(view.set_channel("Normal"));
+    CHECK(view.channel() == 1);
+    CHECK(view.set_channel("Shaded"));
+    CHECK(view.channel() == 0);
+
+    const auto property = sg::debug_view_property(view);
+    CHECK(property.label == "Debug View");
+    const auto &choice = std::get<ctl::ChoiceInput>(property.widget);
+    CHECK(choice.options().size() == 3);
+    choice.set_index(1);
+    CHECK(view.channel() == 1);
+    CHECK(choice.get_index() == 1);
+    choice.set_index(-1);
+    choice.set_index(7);
+    CHECK(view.channel() == 1);
+}
+
+TEST_CASE("mesh_renderer_debug_views", "[scene_graph][renderer][debug_view]") {
+    namespace sg = balsa::scene_graph;
+    namespace ctl = balsa::visualization::controls;
+    // The last float of a material block.
+    const auto last_float = [](const sg::MeshRenderer &r) {
         sg::MeshMaterial out;
         r.write_material(out, {});
-        REQUIRE(out.uniform.size() == 5 * sizeof(sg::Vec4f));
+        REQUIRE(out.uniform.size() >= sizeof(float));
         float value = -1.0f;
-        std::memcpy(&value,
-                    out.uniform.data() + 4 * sizeof(sg::Vec4f)
-                        + 3 * sizeof(float),
+        std::memcpy(&value, out.uniform.data() + out.uniform.size() - sizeof(float),
                     sizeof(value));
         return value;
     };
-    CHECK(channel(renderer) == 0.0f);
+    const auto has_debug_control = [](sg::MeshRenderer &r) {
+        int seen = 0;
+        r.build_controls({}).for_each_property([&](const ctl::Property &p) {
+            seen += p.label == "Debug View";
+        });
+        return seen == 1;
+    };
 
-    const ctl::Layout layout = renderer.build_controls({});
-    int seen = 0;
-    layout.for_each_property([&](const ctl::Property &p) {
-        if (p.label != "Debug View") return;
-        ++seen;
-        const auto &choice = std::get<ctl::ChoiceInput>(p.widget);
-        CHECK(choice.options().size() == sg::pbr_debug_channel_names().size());
-        CHECK(choice.options().front() == "Final");
-        choice.set_index(static_cast<int>(sg::PbrDebugChannel::ShadingNormal));
-        CHECK(choice.get_index()
-              == static_cast<int>(sg::PbrDebugChannel::ShadingNormal));
-        // Out of range is ignored.
-        choice.set_index(99);
-    });
-    CHECK(seen == 1);
-    CHECK(renderer.debug_channel == sg::PbrDebugChannel::ShadingNormal);
-    CHECK(channel(renderer)
-          == static_cast<float>(sg::PbrDebugChannel::ShadingNormal));
+    SECTION("glTF metallic-roughness: per renderer, not per material") {
+        auto material = std::make_shared<sg::Material>();
+        sg::GltfMetallicRoughnessRenderer renderer(material);
+        sg::GltfMetallicRoughnessRenderer other(material);
+        REQUIRE(renderer.debug_view());
+        CHECK(has_debug_control(renderer));
+        CHECK(last_float(renderer) == 0.0f);
 
-    // Per renderer: a layer sharing the material is unaffected; clones copy it.
-    CHECK(channel(other) == 0.0f);
-    CHECK(dynamic_cast<const sg::GltfMetallicRoughnessRenderer &>(
-              *renderer.clone())
-              .debug_channel
-          == sg::PbrDebugChannel::ShadingNormal);
+        REQUIRE(renderer.debug_view()->set_channel("Shading Normal"));
+        CHECK(last_float(renderer) == 7.0f);
+        CHECK(last_float(other) == 0.0f);
+        // Clones copy the selection.
+        CHECK(renderer.clone()->debug_view()->channel_name() == "Shading Normal");
+    }
+    SECTION("Phong") {
+        sg::PhongSurfaceRenderer renderer;
+        REQUIRE(renderer.debug_view());
+        CHECK(has_debug_control(renderer));
+        REQUIRE(renderer.debug_view()->set_channel("Scalar"));
+        CHECK(last_float(renderer) == 3.0f);
+    }
+    SECTION("renderers without debug channels") {
+        CHECK(sg::UnlitWireframeRenderer{}.debug_view() == nullptr);
+        CHECK(sg::AttributeColorRenderer{}.debug_view() == nullptr);
+    }
+}
+
+TEST_CASE("attribute_color_renderer", "[scene_graph][renderer]") {
+    namespace sg = balsa::scene_graph;
+    MeshObject m{make_quad()};
+    auto *layer = m.shading.find_layer("balsa.phong_surface");
+    REQUIRE(layer);
+    layer->renderer = std::make_unique<sg::AttributeColorRenderer>();
+    auto &renderer = dynamic_cast<sg::AttributeColorRenderer &>(*layer->renderer);
+    const sg::MeshLayerContext context(m.shading, layer->id);
+    CHECK(renderer.draw_request().program.id() == "balsa.attribute_color");
+
+    struct Block {
+        std::array<float, 4> min, max, options;
+    };
+    const auto block = [&] {
+        sg::MeshMaterial out;
+        renderer.write_material(out, context);
+        REQUIRE(out.uniform.size() == sizeof(Block));
+        Block b;
+        std::memcpy(&b, out.uniform.data(), sizeof(b));
+        return b;
+    };
+
+    // No normals: face normals, signed whatever the range.
+    CHECK_FALSE(context.attribute(sg::roles::visualized()));
+    renderer.range = sg::AttributeColorRange::Fractional;
+    CHECK(block().options[0] == 0.0f);
+    CHECK(block().options[1] == 0.0f);
+    CHECK(block().min[0] == -1.0f);
+
+    // Per vertex: (3, 4), (0, 1), (1, 0), (0, -2)
+    const std::array<float, 8> uv = {3, 4, 0, 1, 1, 0, 0, -2};
+    m.geometry.add_attribute("uv", sg::AttributeDomain::Vertex, 2, uv);
+    REQUIRE(m.shading.assign_layer_role(layer->id, sg::roles::visualized(), "uv"));
+    CHECK(block().options[0] == 2.0f);
+    CHECK(block().options[1] == 1.0f);
+
+    renderer.range = sg::AttributeColorRange::Signed;
+    CHECK(block().min == std::array{-1.0f, -1.0f, -1.0f, -1.0f});
+    CHECK(block().options[1] == 0.0f);
+    renderer.range = sg::AttributeColorRange::Unit;
+    CHECK(block().max == std::array{1.0f, 1.0f, 1.0f, 1.0f});
+
+    // Each component's extents; absent components are [0, 1].
+    renderer.range = sg::AttributeColorRange::FitToData;
+    CHECK(block().min == std::array{0.0f, -2.0f, 0.0f, 0.0f});
+    CHECK(block().max == std::array{3.0f, 4.0f, 1.0f, 1.0f});
 }
 
 #include <balsa/visualization/normalize_mesh.hpp>

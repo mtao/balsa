@@ -58,6 +58,18 @@ namespace {
                          {"occlusion"},
                          {"emissive", ColorSpace::Srgb}},
         });
+        ShaderProgram attribute_color = catalog.add({
+            .id = "balsa.attribute_color",
+            .label = "Attribute colour",
+            .vertex_shader = "attribute_color/vertex",
+            .fragment_shader = "attribute_color/fragment",
+            .streams = {position_stream(),
+                        {.role = roles::visualized(),
+                         .location = 1,
+                         .define = "HAS_ATTRIBUTE"}},
+            .material_size = 48,
+            .textures = {},
+        });
         ShaderProgram unlit_lines = catalog.add({
             .id = "balsa.unlit_lines",
             .label = "Unlit lines",
@@ -93,6 +105,7 @@ namespace programs {
     auto gltf_metallic_roughness() -> ShaderProgram {
         return defaults().gltf_metallic_roughness;
     }
+    auto attribute_color() -> ShaderProgram { return defaults().attribute_color; }
     auto unlit_lines() -> ShaderProgram { return defaults().unlit_lines; }
     auto unlit_points() -> ShaderProgram { return defaults().unlit_points; }
 } // namespace programs

@@ -61,6 +61,8 @@ namespace programs {
     auto phong() -> ShaderProgram;
     // glTF metallic-roughness surfaces: "balsa.gltf_metallic_roughness".
     auto gltf_metallic_roughness() -> ShaderProgram;
+    // Any attribute shown as an unlit colour: "balsa.attribute_color".
+    auto attribute_color() -> ShaderProgram;
     // Unlit lines of one colour: "balsa.unlit_lines".
     auto unlit_lines() -> ShaderProgram;
     // Unlit points of one colour and size: "balsa.unlit_points".

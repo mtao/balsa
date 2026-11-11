@@ -21,7 +21,7 @@ static_assert(sizeof(ImageTransformUBO) == 64,
 // binding = 1 in image.frag
 struct ImageParamsUBO {
     scene_graph::Vec4f
-        tone_params; // x=exposure, y=gamma, z=channel_mode, w=unused
+        tone_params; // x=exposure, y=gamma, z=debug channel, w=unused
     scene_graph::Vec4f image_size; // x=width, y=height, z=1/width, w=1/height
 };
 static_assert(sizeof(ImageParamsUBO) == 32, "ImageParamsUBO must be 32 bytes");

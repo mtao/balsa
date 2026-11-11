@@ -8,6 +8,7 @@
 
 #include "balsa/geometry/BoundingBox.hpp"
 #include "balsa/scene_graph/AbstractFeature.hpp"
+#include "balsa/scene_graph/DebugView.hpp"
 #include "balsa/visualization/vulkan/VulkanTexture.hpp"
 
 namespace balsa::scene_graph {
@@ -23,7 +24,7 @@ namespace balsa::scene_graph {
 //   - RGBA8:   4 bytes/pixel  (8-bit unsigned, sRGB)
 //   - RGBAF32: 16 bytes/pixel (32-bit float, linear HDR)
 //
-// The tone-mapping display parameters (exposure, gamma, channel mode)
+// The tone-mapping display parameters (exposure, gamma, debug view)
 // are stored here but evaluated in the fragment shader on the GPU.
 
 class ImageData : public AbstractFeature {
@@ -97,17 +98,11 @@ class ImageData : public AbstractFeature {
         if (std::isfinite(g) && g > 0.0f) _gamma = g;
     }
 
-    // Channel display mode.
-    enum class ChannelMode : int {
-        RGBA = 0,
-        Red = 1,
-        Green = 2,
-        Blue = 3,
-        Alpha = 4,
-        Luminance = 5,
-    };
-    auto channel_mode() const -> ChannelMode { return _channel_mode; }
-    auto set_channel_mode(ChannelMode mode) -> void { _channel_mode = mode; }
+    // What is shown: the image, or one of its channels (Red, Green, Blue,
+    // Alpha, Luminance), in image.frag's channel order.
+    [[nodiscard]] static auto debug_channels() -> std::span<const std::string_view>;
+    auto debug_view() -> DebugView & { return _debug_view; }
+    auto debug_view() const -> const DebugView & { return _debug_view; }
 
   private:
     std::vector<std::byte> _pixels;
@@ -119,7 +114,7 @@ class ImageData : public AbstractFeature {
 
     float _exposure = 0.0f;
     float _gamma = 2.2f;
-    ChannelMode _channel_mode = ChannelMode::RGBA;
+    DebugView _debug_view{"RGBA", debug_channels()};
 };
 
 } // namespace balsa::scene_graph

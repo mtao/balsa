@@ -235,7 +235,8 @@ auto PhongSurfaceRenderer::write_material(MeshMaterial &material,
         .scalar_range = {min, max, state.two_sided ? 1.0f : 0.0f, 0.0f},
         .scalar_select = {reduction.kind == ScalarReduction::Kind::Norm ? 1.0f : 0.0f,
                           static_cast<float>(reduction.value),
-                          static_cast<float>(scalar ? scalar->component_count() : 0), 0.0f}});
+                          static_cast<float>(scalar ? scalar->component_count() : 0),
+                          static_cast<float>(m_debug_view.channel())}});
 }
 auto PhongSurfaceRenderer::build_controls(const MeshLayerContext &layer)
     -> visualization::controls::Layout {
@@ -256,6 +257,7 @@ auto PhongSurfaceRenderer::build_controls(const MeshLayerContext &layer)
     layout.add_property(float_property("Shininess", state.material.shininess,
                                       1.0f, 256.0f, 1.0f, true));
     layout.add_property(bool_property("Two-sided Lighting", state.two_sided));
+    layout.add_property(debug_view_property(m_debug_view));
 
     auto &colormap = layout.add_column("Scalar Colormap");
     colormap.set_visible_when(scalar_bound);
@@ -470,7 +472,7 @@ auto GltfMetallicRoughnessRenderer::write_material(
         .texture_coordinate_sets = {set(m.base_color_texture), set(m.metallic_roughness_texture),
                                     set(m.normal_texture), set(m.occlusion_texture)},
         .options = {set(m.emissive_texture), static_cast<float>(m.alpha_mode),
-                    m.double_sided ? 1.0f : 0.0f, static_cast<float>(debug_channel)}});
+                    m.double_sided ? 1.0f : 0.0f, static_cast<float>(m_debug_view.channel())}});
     // In the program's texture slot order.
     out.textures = {m.base_color_texture, m.metallic_roughness_texture, m.normal_texture,
                     m.occlusion_texture, m.emissive_texture};
@@ -493,32 +495,127 @@ auto GltfMetallicRoughnessRenderer::build_controls(const MeshLayerContext &)
     cutoff.visible_when = [&m] { return m.alpha_mode == AlphaMode::Mask; };
     layout.add_property(std::move(cutoff));
     layout.add_property(bool_property("Double Sided", m.double_sided));
-    layout.add_property(
-        {.label = "Debug View",
-         .tooltip = "Show one input of the shading instead of the lit surface",
-         .widget = ChoiceInput{
-             .options =
-                 [] {
-                     const auto names = pbr_debug_channel_names();
-                     return std::vector<std::string>(names.begin(), names.end());
-                 },
-             .get_index = [this] { return static_cast<int>(debug_channel); },
-             .set_index =
-                 [this](const int &i) {
-                     if (i >= 0 && static_cast<std::size_t>(i) < pbr_debug_channel_names().size()) {
-                         debug_channel = static_cast<PbrDebugChannel>(i);
-                     }
-                 }}});
+    layout.add_property(debug_view_property(m_debug_view));
     return layout;
 }
 
-auto pbr_debug_channel_names() -> std::span<const std::string_view> {
-    static constexpr std::array<std::string_view, 13> names{
-        "Final",          "Base Color",      "Alpha",   "Metallic",  "Roughness",
-        "Occlusion",      "Emissive",        "Shading Normal",       "Geometry Normal",
-        "Tangent",        "Bitangent",       "Texture Coordinates 0", "Texture Coordinates 1"};
-    static_assert(names.size() == static_cast<std::size_t>(PbrDebugChannel::TextureCoordinates1) + 1);
+auto GltfMetallicRoughnessRenderer::debug_channels() -> std::span<const std::string_view> {
+    // In gltf_metallic_roughness.frag's DEBUG_* order.
+    static constexpr std::array<std::string_view, 9> names{
+        "Base Color", "Alpha",          "Metallic", "Roughness", "Occlusion",
+        "Emissive",   "Shading Normal", "Tangent",  "Bitangent"};
     return names;
+}
+
+auto PhongSurfaceRenderer::debug_channels() -> std::span<const std::string_view> {
+    // In phong.frag's DEBUG_* order.
+    static constexpr std::array<std::string_view, 3> names{"Diffuse", "Specular", "Scalar"};
+    return names;
+}
+
+auto AttributeColorRenderer::clone() const -> std::unique_ptr<MeshRenderer> {
+    return std::make_unique<AttributeColorRenderer>(*this);
+}
+auto AttributeColorRenderer::id() const -> std::string_view { return "balsa.attribute_color"; }
+auto AttributeColorRenderer::required_roles() const -> std::span<const MeshRoleRequirement> {
+    static const std::array requirements{
+        position_requirement(),
+        // Normals by default; without an attribute the shader shows face
+        // normals.
+        MeshRoleRequirement{.role = roles::visualized(),
+                            .min_components = 1,
+                            .max_components = 4,
+                            .required = false,
+                            .semantic = semantics::normal()},
+    };
+    return requirements;
+}
+auto AttributeColorRenderer::draw_request() const -> MeshDrawRequest {
+    return {.program = visualization::shaders::programs::attribute_color(),
+            .primitive = MeshPrimitive::Triangles};
+}
+auto AttributeColorRenderer::component_ranges(const MeshLayerContext &layer) const
+    -> std::array<std::array<float, 2>, 4> {
+    std::array<std::array<float, 2>, 4> ranges;
+    switch (range) {
+    case AttributeColorRange::Signed: ranges.fill({-1.0f, 1.0f}); return ranges;
+    case AttributeColorRange::Unit:
+    case AttributeColorRange::Fractional: ranges.fill({0.0f, 1.0f}); return ranges;
+    case AttributeColorRange::FitToData: break;
+    }
+    const auto attribute = layer.attribute(roles::visualized());
+    const auto version = layer.geometry_version();
+    if (!(m_extents.attribute == attribute && m_extents.geometry_version == version)) {
+        m_extents = {.attribute = attribute, .geometry_version = version};
+        m_extents.extents.fill({0.0f, 1.0f});
+        const auto count = attribute ? std::min<std::size_t>(attribute->component_count(), 4) : 0;
+        for (std::size_t c = 0; c < count; ++c) {
+            const ScalarReduction component{.kind = ScalarReduction::Kind::Component,
+                                            .value = static_cast<uint8_t>(c)};
+            if (const auto extents = scalar_extents(*attribute, component)) {
+                m_extents.extents[c] = *extents;
+            }
+        }
+    }
+    return m_extents.extents;
+}
+auto AttributeColorRenderer::write_material(MeshMaterial &material,
+                                            const MeshLayerContext &layer) const -> void {
+    // "balsa.attribute_color"'s std140 material block.
+    struct Block {
+        Vec4f min;
+        Vec4f max;
+        Vec4f options;   // component count, fractional
+    };
+    const auto attribute = layer.attribute(roles::visualized());
+    const auto ranges = component_ranges(layer);
+    Block block{.options = {static_cast<float>(attribute ? attribute->component_count() : 0),
+                            range == AttributeColorRange::Fractional ? 1.0f : 0.0f, 0.0f, 0.0f}};
+    for (std::size_t c = 0; c < ranges.size(); ++c) {
+        block.min(c) = ranges[c][0];
+        block.max(c) = ranges[c][1];
+    }
+    if (!attribute) {
+        // Face normals are directions whatever the range.
+        block.min = Vec4f{-1.0f, -1.0f, -1.0f, -1.0f};
+        block.max = Vec4f{1.0f, 1.0f, 1.0f, 1.0f};
+        block.options(1) = 0.0f;
+    }
+    material.set_uniform(block);
+}
+auto AttributeColorRenderer::build_controls(const MeshLayerContext &layer)
+    -> visualization::controls::Layout {
+    using namespace visualization::controls;
+    Layout layout;
+    Property choice{
+        .label = "Range",
+        .tooltip = "Values shown as 0 to 1: [-1, 1] for directions, [0, 1] for colours, "
+                   "the data's extents per component, or repeating (fract)",
+        .widget = ChoiceInput{
+            .options =
+                [] {
+                    return std::vector<std::string>{"Signed [-1, 1]", "Unit [0, 1]",
+                                                    "Fit to Data", "Fractional"};
+                },
+            .get_index = [this] { return static_cast<int>(range); },
+            .set_index =
+                [this](const int &i) {
+                    if (i >= 0 && i <= static_cast<int>(AttributeColorRange::Fractional)) {
+                        range = static_cast<AttributeColorRange>(i);
+                    }
+                }}};
+    choice.live_tooltip = [this, layer] {
+        const auto attribute = layer.attribute(roles::visualized());
+        if (!attribute) return std::string("Face normals");
+        const auto ranges = component_ranges(layer);
+        std::string text;
+        for (std::size_t c = 0; c < std::min<std::size_t>(attribute->component_count(), 4); ++c) {
+            text += std::format("[{:.3g}, {:.3g}] ", ranges[c][0], ranges[c][1]);
+        }
+        return text;
+    };
+    layout.add_property(std::move(choice));
+    return layout;
 }
 
 auto register_builtin_mesh_renderers() -> void {
@@ -530,6 +627,9 @@ auto register_builtin_mesh_renderers() -> void {
             {"balsa.gltf_metallic_roughness_surface",
              "glTF Metallic-Roughness",
              [] { return std::make_unique<GltfMetallicRoughnessRenderer>(); }});
+        register_mesh_renderer({"balsa.attribute_color", "Attribute Color", [] {
+                                    return std::make_unique<AttributeColorRenderer>();
+                                }});
         register_mesh_renderer({"balsa.unlit_wireframe", "Unlit Wireframe", [] {
                                     return std::make_unique<UnlitWireframeRenderer>();
                                 }});

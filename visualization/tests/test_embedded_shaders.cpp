@@ -189,6 +189,8 @@ TEST_CASE("shader_program_permutations_compile", "[visualization][shaders][progr
                      {.defines = defines, .includes = {{"colormap.glsl", "colormaps/MATLAB_jet"}}});
         }
     }
+    compiles(programs::attribute_color(), {});
+    compiles(programs::attribute_color(), {.defines = {"HAS_ATTRIBUTE"}});
     compiles(programs::unlit_lines(), {});
     compiles(programs::unlit_points(), {});
 }

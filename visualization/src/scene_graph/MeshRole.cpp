@@ -16,6 +16,7 @@ namespace {
             catalog.add({"balsa.texture_coordinates_0", "Texture coordinates 0"}),
             catalog.add({"balsa.texture_coordinates_1", "Texture coordinates 1"})};
         MeshRole color = catalog.add({"balsa.color", "Color"});
+        MeshRole visualized = catalog.add({"balsa.visualized", "Visualized attribute"});
     };
 
     auto defaults() -> Defaults & {
@@ -35,6 +36,7 @@ namespace roles {
         return defaults().texture_coordinates.at(set);
     }
     auto color() -> MeshRole { return defaults().color; }
+    auto visualized() -> MeshRole { return defaults().visualized; }
 } // namespace roles
 
 } // namespace balsa::scene_graph

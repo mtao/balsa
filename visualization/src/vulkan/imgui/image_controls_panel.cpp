@@ -55,13 +55,18 @@ auto draw_image_controls(ImageScene &scene, ImagePanelState &state) -> bool {
         // ── Channel Mode ────────────────────────────────────────────
         if (ImGui::CollapsingHeader("Channel Display",
                                     ImGuiTreeNodeFlags_DefaultOpen)) {
-            static constexpr const char *channel_names[] = {
-                "RGBA", "Red", "Green", "Blue", "Alpha", "Luminance"};
-            int current = static_cast<int>(img->channel_mode());
-            if (ImGui::Combo("Channel", &current, channel_names, 6)) {
-                img->set_channel_mode(
-                    static_cast<scene_graph::ImageData::ChannelMode>(current));
-                changed = true;
+            auto &view = img->debug_view();
+            auto names = view.option_names();
+            int current = static_cast<int>(view.channel());
+            if (ImGui::Combo(
+                  "Channel",
+                  &current,
+                  [](void *data, int i) -> const char * {
+                      return (*static_cast<const std::vector<std::string> *>(data))[i].c_str();
+                  },
+                  &names,
+                  static_cast<int>(names.size()))) {
+                changed = view.set_channel(static_cast<std::size_t>(current));
             }
         }
 

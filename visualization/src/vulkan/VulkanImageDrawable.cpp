@@ -192,7 +192,7 @@ auto VulkanImageDrawable::update_ubos(const scene_graph::Camera &cam,
     float exposure = image_data ? image_data->exposure() : 0.0f;
     float gamma = image_data ? image_data->gamma() : 2.2f;
     float channel =
-        image_data ? static_cast<float>(image_data->channel_mode()) : 0.0f;
+        image_data ? static_cast<float>(image_data->debug_view().channel()) : 0.0f;
     float img_w = image_data ? static_cast<float>(image_data->width()) : 1.0f;
     float img_h = image_data ? static_cast<float>(image_data->height()) : 1.0f;
 

@@ -1,7 +1,7 @@
 #version 460 core
 
 layout(binding = 1) uniform ImageParams {
-    vec4 tone_params;   // x=exposure, y=gamma, z=channel_mode, w=unused
+    vec4 tone_params;   // x=exposure, y=gamma, z=debug channel (ImageData::debug_channels()), w=unused
     vec4 image_size;    // x=width, y=height, z=1/width, w=1/height
 };
 
