@@ -63,16 +63,20 @@ struct TouchEvent {
 //   Scroll  two-finger scroll; dx/dy are pixel deltas
 //   Pinch   scale is the incremental zoom factor (>1 = spreading)
 //   Swipe   multi-finger swipe; dx/dy are pixel deltas
+//   Rotate  two-finger twist; angle is the incremental turn (radians,
+//           clockwise on screen)
 struct TouchpadEvent {
     enum class Type { Scroll,
                       Pinch,
-                      Swipe };
+                      Swipe,
+                      Rotate };
     Type type;
     double x = 0;// cursor position, logical window coordinates
     double y = 0;
     double dx = 0;
     double dy = 0;
     double scale = 1;
+    double angle = 0;
     int modifiers = 0;// bitmask of Modifiers
 };
 

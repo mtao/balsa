@@ -10,6 +10,7 @@
 #include <QTouchEvent>
 #include <QVulkanInstance>
 #include <QWidget>
+#include <QtMath>
 #include <spdlog/spdlog.h>
 
 namespace balsa::visualization::qt::vulkan {
@@ -329,6 +330,11 @@ bool Window::handle_native_gesture(QNativeGestureEvent *e) {
     case Qt::ZoomNativeGesture:
         te.type = TouchpadEvent::Type::Pinch;
         te.scale = 1.0 + e->value();
+        break;
+    case Qt::RotateNativeGesture:
+        // Qt reports degrees, clockwise-positive.
+        te.type = TouchpadEvent::Type::Rotate;
+        te.angle = qDegreesToRadians(e->value());
         break;
     case Qt::PanNativeGesture:
         te.type = TouchpadEvent::Type::Swipe;

@@ -15,11 +15,14 @@ namespace balsa::visualization {
 //   translation  movement of the centroid during the step
 //   scale        change in spread (>1 = fingers moving apart); always 1
 //                for a single contact
+//   rotation     mean turn of the contacts about the centroid (radians,
+//                clockwise on screen); always 0 for a single contact
 struct TouchGesture {
     int touch_count = 0;
     zipper::Vector<double, 2> centroid{ 0.0, 0.0 };
     zipper::Vector<double, 2> translation{ 0.0, 0.0 };
     double scale = 1.0;
+    double rotation = 0.0;
 };
 
 // Turns raw TouchEvents into per-step TouchGestures independent of the

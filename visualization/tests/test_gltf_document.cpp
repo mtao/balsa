@@ -7,6 +7,7 @@
 #include <balsa/scene_graph/BasicShading.hpp>
 #include <balsa/visualization/normalize_mesh.hpp>
 #include <balsa/visualization/vulkan/orbit_camera_controller.hpp>
+#include <numbers>
 #include <balsa/visualization/vulkan/mesh_scene.hpp>
 #include <balsa/visualization/vulkan/vulkan_mesh_drawable.hpp>
 #include <balsa/scene_graph/MeshAttribute.hpp>
@@ -1220,6 +1221,81 @@ TEST_CASE("orbit_camera_touchpad", "[viewer][touch]") {
         camera.on_touchpad_event({ .type = T::Pinch, .x = 400, .y = 200, .scale = 2.0 });
         CHECK(camera.distance() == Catch::Approx(0.5f * distance));
         CHECK(camera.center().norm() == Catch::Approx(0.f).margin(1e-6));
+    }
+}
+
+TEST_CASE("touch_gesture_rotation", "[viewer][touch]") {
+    namespace viz = balsa::visualization;
+    using T = viz::TouchEvent::Type;
+    using S = viz::TouchPoint::State;
+    viz::TouchGestureTracker tracker;
+    tracker.update(touch(T::Begin, { { 0, 90, 100, S::Pressed }, { 1, 110, 100, S::Pressed } }));
+    // Quarter turn about (100, 100): left/right -> top/bottom.  With y down,
+    // left -> top is clockwise on screen.
+    auto g = tracker.update(touch(T::Update, { { 0, 100, 90, S::Moved }, { 1, 100, 110, S::Moved } }));
+    REQUIRE(g);
+    CHECK(g->rotation == Catch::Approx(std::numbers::pi / 2));
+    CHECK(g->scale == Catch::Approx(1.0));
+    CHECK(g->translation.norm() == Catch::Approx(0.0).margin(1e-12));
+
+    // Crossing the +-pi seam wraps instead of jumping by 2pi.
+    tracker.update(touch(T::Update, { { 0, 110, 99, S::Moved }, { 1, 90, 101, S::Moved } }));
+    g = tracker.update(touch(T::Update, { { 0, 110, 101, S::Moved }, { 1, 90, 99, S::Moved } }));
+    REQUIRE(g);
+    CHECK(std::abs(g->rotation) < 0.2);
+}
+
+TEST_CASE("orbit_camera_roll", "[viewer][touch]") {
+    namespace vk = balsa::visualization::vulkan;
+    vk::MeshScene scene;
+    const float fov = 1.0f;
+    scene.set_perspective(fov, 2.0f, 0.01f, 100.f);
+    vk::OrbitCameraController camera(&scene);
+    camera.set_viewport_size(800, 400);
+    camera.set_angles(0.f, 0.f);// looking down -z, screen right = +x
+
+    auto camera_axis = [&](int i) {
+        return balsa::scene_graph::Vec3f(
+          scene.active_camera_object().world_transform().linear().col(i));
+    };
+
+    SECTION("positive roll turns content clockwise") {
+        camera.set_roll(std::numbers::pi_v<float> / 2);
+        // World +y (was screen-up) now points screen-right.
+        CHECK(camera_axis(0)(1) == Catch::Approx(1.f));
+        CHECK(camera_axis(1)(0) == Catch::Approx(-1.f));
+    }
+
+    SECTION("roll_at keeps the point under the cursor fixed") {
+        const float wpp = 2.f * camera.distance() * std::tan(0.5f * fov) / 400.f;
+        // World point under screen offset (100, 0): +x by 100 px.
+        const float px = 100 * wpp;
+        camera.roll_at(std::numbers::pi / 2, 500, 200);
+        // After a clockwise quarter turn screen-right is world +y, screen-down
+        // is world +x; the point should still be 100 px right of center.
+        const auto [right, up] = std::pair{ camera_axis(0), camera_axis(1) };
+        const auto point = balsa::scene_graph::Vec3f{ px, 0.f, 0.f };
+        const auto offset = point - camera.center();
+        CHECK(offset.dot(right) / wpp == Catch::Approx(100.f));
+        CHECK(offset.dot(up) / wpp == Catch::Approx(0.f).margin(1e-3));
+    }
+
+    SECTION("orbit follows the cursor when rolled") {
+        camera.set_roll(std::numbers::pi_v<float> / 2);
+        // Screen-right is now world-up: a rightward drag tilts (phi), not spins.
+        const float theta = camera.theta();
+        camera.orbit(50, 0);
+        CHECK(camera.theta() == Catch::Approx(theta).margin(1e-6));
+        CHECK(camera.phi() != 0.f);
+    }
+
+    SECTION("frame resets roll") {
+        camera.set_roll(1.f);
+        balsa::geometry::BoundingBox<float, 3> box;
+        box.expand(::zipper::Vector<float, 3>{ 0.f, 0.f, 0.f });
+        box.expand(::zipper::Vector<float, 3>{ 1.f, 1.f, 1.f });
+        camera.frame(box);
+        CHECK(camera.roll() == 0.f);
     }
 }
 

@@ -1,6 +1,8 @@
 #include "balsa/visualization/touch_gesture_tracker.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 #include <ranges>
 #include <utility>
 
@@ -16,6 +18,29 @@ namespace {
         double spread = 0.0;
         for (const auto &[id, p] : pts) spread += (p - c).norm();
         return { c, spread / static_cast<double>(pts.size()) };
+    }
+    // Mean change in angle about each step's centroid; contacts too close
+    // to the centroid have no meaningful angle and are skipped.
+    auto mean_rotation(const TouchGestureTracker::Contacts &before,
+                       const TouchGestureTracker::Contacts &after,
+                       const zipper::Vector<double, 2> &c0,
+                       const zipper::Vector<double, 2> &c1) -> double {
+        double sum = 0.0;
+        int n = 0;
+        for (const auto &[id, p1] : after) {
+            const auto a = before.at(id) - c0;
+            const auto b = p1 - c1;
+            if (a.norm() < TouchGestureTracker::min_spread
+                || b.norm() < TouchGestureTracker::min_spread) {
+                continue;
+            }
+            // Screen y points down, so this is clockwise-positive.
+            double d = std::atan2(b(1), b(0)) - std::atan2(a(1), a(0));
+            d = std::remainder(d, 2.0 * std::numbers::pi);
+            sum += d;
+            ++n;
+        }
+        return n > 0 ? sum / n : 0.0;
     }
 }// namespace
 
@@ -43,6 +68,9 @@ auto TouchGestureTracker::update(const TouchEvent &e) -> std::optional<TouchGest
         g.translation = c1 - c0;
         if (current.size() > 1 && s0 > min_spread) {
             g.scale = std::max(s1, min_spread) / s0;
+        }
+        if (current.size() > 1) {
+            g.rotation = mean_rotation(_points, current, c0, c1);
         }
         gesture = g;
     }
