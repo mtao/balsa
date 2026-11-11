@@ -142,7 +142,7 @@ auto OrbitCameraController::on_touchpad_event(const TouchpadEvent &e) -> void {
         pan(e.dx, e.dy);
         break;
     case TouchpadEvent::Type::Rotate:
-        roll_at(e.angle * touchpad_roll_scale, e.x, e.y);
+        if (touchpad_roll) roll_at(e.angle * touchpad_roll_scale, e.x, e.y);
         break;
     }
 }

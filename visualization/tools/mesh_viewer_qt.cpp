@@ -98,6 +98,8 @@ namespace {
                 std::make_shared<vk_viz::OrbitCameraController>(_scene.get());
             _camera->set_distance(2.5f);
             _camera->set_angles(0.4f, 0.3f);
+            // Touchpad twists are easy to trigger while pinching.
+            _camera->touchpad_roll = false;
             _vk_window->set_input_handler(_camera);
 
             // Initial projection

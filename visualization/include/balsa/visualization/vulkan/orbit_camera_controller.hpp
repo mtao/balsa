@@ -72,6 +72,8 @@ class OrbitCameraController : public InputHandler {
     double touchpad_orbit_scale = 1.0;
     // Zoom factor per pixel of Ctrl + two-finger scroll.
     double touchpad_zoom_sensitivity = 0.01;
+    // Whether touchpad twists roll the view.
+    bool touchpad_roll = true;
     // Multiplier on twist angles from touchpads; negate to flip.
     double touchpad_roll_scale = 1.0;
 
@@ -88,7 +90,7 @@ class OrbitCameraController : public InputHandler {
     //   Shift + two-finger scroll → pan
     //   Ctrl + two-finger scroll  → zoom toward the cursor
     //   Pinch                     → zoom toward the cursor
-    //   Twist                     → roll about the cursor
+    //   Twist                     → roll about the cursor (if touchpad_roll)
     //   Swipe                     → pan
     auto on_touchpad_event(const TouchpadEvent &e) -> void override;
     auto on_window_resize(const WindowResizeEvent &e) -> void override;
