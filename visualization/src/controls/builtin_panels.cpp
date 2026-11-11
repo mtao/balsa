@@ -361,19 +361,28 @@ auto render_layers_layout(sg::BasicShading &shading) -> Layout {
     layout.add_property(active_layer_property(shading));
     for (auto &layer : shading.render_layers()) {
         if (!layer.renderer) continue;
-        auto renderer_layout =
-            layer.renderer->build_controls(sg::MeshLayerContext(shading, layer.id));
-        renderer_layout.add_property(bool_property(
-            "Enabled", [sh = &shading, id = layer.id]() -> bool * {
-                auto *l = sh->find_layer(id);
-                return l ? &l->enabled : nullptr;
-            }));
-        renderer_layout.add_property(view_property(shading, layer.id));
-        auto &bindings = renderer_layout.add_column("Bindings");
+        auto *sh = &shading;
+        const auto id = layer.id;
+        auto enabled = [sh, id] {
+            const auto *l = sh->find_layer(id);
+            return l && l->enabled;
+        };
+        // One headed group per layer: what it draws, then how.
+        auto &group = layout.add_column(layer.name);
+        group.add_property(bool_property("Enabled", [sh, id]() -> bool * {
+            auto *l = sh->find_layer(id);
+            return l ? &l->enabled : nullptr;
+        }));
+        auto view = view_property(shading, id);
+        view.visible_when = enabled;
+        group.add_property(std::move(view));
+        group.add_layout(layer.renderer->build_controls(sg::MeshLayerContext(shading, id)))
+            .set_visible_when(enabled);
+        auto &bindings = group.add_column("Bindings");
+        bindings.set_visible_when(enabled);
         for (const auto &requirement : layer.renderer->required_roles()) {
-            bindings.add_property(role_property(shading, layer.id, requirement));
+            bindings.add_property(role_property(shading, id, requirement));
         }
-        layout.add_layout(std::move(renderer_layout));
     }
     return layout;
 }

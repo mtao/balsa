@@ -239,6 +239,9 @@ void ControlsWidget::build_layout(const ctl::Layout &layout, QWidget *parent,
                 hl->setContentsMargins(0, 0, 0, 0);
                 build_layout(**child, holder, hl);
                 form->addRow(holder);
+                m_refreshers.push_back([holder, &layout = **child] {
+                    holder->setVisible(layout.visible_when()());
+                });
             } else {
                 build_layout(**child, group, hbox);
             }
