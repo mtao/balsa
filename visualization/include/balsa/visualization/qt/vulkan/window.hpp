@@ -2,6 +2,9 @@
 #include <memory>
 #include <string>
 #include <QVulkanWindow>
+
+class QNativeGestureEvent;
+class QTouchEvent;
 #include "balsa/visualization/vulkan/window.hpp"
 #include "balsa/visualization/qt/vulkan/film.hpp"
 
@@ -36,6 +39,11 @@ class Window : public QVulkanWindow
     std::array<uint32_t, 2> framebuffer_size() const override;
     void set_title(std::string_view title) override;
 
+    // Embeds this window in a widget tree (QWidget::createWindowContainer).
+    // The container also forwards touch and touchpad gestures, which Qt
+    // can deliver to the container rather than to the embedded window.
+    auto create_container(QWidget *parent = nullptr) -> QWidget *;
+
   protected:
     // QVulkanWindow override: creates our inner Renderer.
     QVulkanWindowRenderer *createRenderer() override;
@@ -49,6 +57,8 @@ class Window : public QVulkanWindow
     void mouseMoveEvent(QMouseEvent *e) override;
     void wheelEvent(QWheelEvent *e) override;
     void touchEvent(QTouchEvent *e) override;
+    bool event(QEvent *e) override;
+    bool eventFilter(QObject *watched, QEvent *e) override;
     void keyPressEvent(QKeyEvent *e) override;
     void keyReleaseEvent(QKeyEvent *e) override;
     void resizeEvent(QResizeEvent *e) override;
@@ -73,6 +83,11 @@ class Window : public QVulkanWindow
     // True for mouse events Qt synthesized from touch input; those are
     // already handled through touchEvent().
     static bool is_from_touch(const QMouseEvent *e);
+
+    // Shared by the window's own handlers and the container's filter.
+    // Return whether the event was consumed.
+    bool handle_touch(QTouchEvent *e);
+    bool handle_native_gesture(QNativeGestureEvent *e);
 
     // Inner renderer that bridges Qt's push model to our draw_frame().
     class Renderer;

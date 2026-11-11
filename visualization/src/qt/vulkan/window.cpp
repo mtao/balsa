@@ -5,9 +5,11 @@
 #include <QFocusEvent>
 #include <QGuiApplication>
 #include <QMouseEvent>
+#include <QNativeGestureEvent>
 #include <QResizeEvent>
 #include <QTouchEvent>
 #include <QVulkanInstance>
+#include <QWidget>
 #include <spdlog/spdlog.h>
 
 namespace balsa::visualization::qt::vulkan {
@@ -234,6 +236,24 @@ void Window::mouseMoveEvent(QMouseEvent *e) {
 }
 
 void Window::wheelEvent(QWheelEvent *e) {
+    // Touchpads report precise pixel deltas; mice report notches.
+    const auto *dev = e->pointingDevice();
+    const bool touchpad = (dev && dev->type() == QInputDevice::DeviceType::TouchPad)
+                          || !e->pixelDelta().isNull();
+    if (touchpad) {
+        TouchpadEvent te;
+        te.type = TouchpadEvent::Type::Scroll;
+        te.x = e->position().x();
+        te.y = e->position().y();
+        const QPointF delta = e->pixelDelta().isNull()
+                                ? QPointF(e->angleDelta()) / 8.0
+                                : QPointF(e->pixelDelta());
+        te.dx = delta.x();
+        te.dy = delta.y();
+        te.modifiers = translate_mods(e->modifiers());
+        dispatch_touchpad(te);
+        return;
+    }
     MouseEvent me;
     me.type = MouseEvent::Type::Scroll;
     me.x = e->position().x();
@@ -247,11 +267,10 @@ void Window::wheelEvent(QWheelEvent *e) {
     dispatch_mouse(me);
 }
 
-void Window::touchEvent(QTouchEvent *e) {
+bool Window::handle_touch(QTouchEvent *e) {
     const auto *dev = e->pointingDevice();
     if (!dev || dev->type() != QInputDevice::DeviceType::TouchScreen) {
-        e->ignore();
-        return;
+        return false;
     }
 
     TouchEvent te;
@@ -294,6 +313,67 @@ void Window::touchEvent(QTouchEvent *e) {
     }
     dispatch_touch(te);
     e->accept();
+    return true;
+}
+
+void Window::touchEvent(QTouchEvent *e) {
+    if (!handle_touch(e)) e->ignore();
+}
+
+bool Window::handle_native_gesture(QNativeGestureEvent *e) {
+    TouchpadEvent te;
+    te.x = e->position().x();
+    te.y = e->position().y();
+    te.modifiers = translate_mods(e->modifiers());
+    switch (e->gestureType()) {
+    case Qt::ZoomNativeGesture:
+        te.type = TouchpadEvent::Type::Pinch;
+        te.scale = 1.0 + e->value();
+        break;
+    case Qt::PanNativeGesture:
+        te.type = TouchpadEvent::Type::Swipe;
+        te.dx = e->delta().x();
+        te.dy = e->delta().y();
+        break;
+    case Qt::BeginNativeGesture:
+    case Qt::EndNativeGesture:
+        e->accept();
+        return true;
+    default:
+        return false;
+    }
+    dispatch_touchpad(te);
+    e->accept();
+    return true;
+}
+
+bool Window::event(QEvent *e) {
+    if (e->type() == QEvent::NativeGesture
+        && handle_native_gesture(static_cast<QNativeGestureEvent *>(e))) {
+        return true;
+    }
+    return QVulkanWindow::event(e);
+}
+
+auto Window::create_container(QWidget *parent) -> QWidget * {
+    auto *container = QWidget::createWindowContainer(this, parent);
+    container->setAttribute(Qt::WA_AcceptTouchEvents);
+    container->installEventFilter(this);
+    return container;
+}
+
+bool Window::eventFilter(QObject *watched, QEvent *e) {
+    switch (e->type()) {
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+    case QEvent::TouchEnd:
+    case QEvent::TouchCancel:
+        return handle_touch(static_cast<QTouchEvent *>(e));
+    case QEvent::NativeGesture:
+        return handle_native_gesture(static_cast<QNativeGestureEvent *>(e));
+    default:
+        return QVulkanWindow::eventFilter(watched, e);
+    }
 }
 
 void Window::keyPressEvent(QKeyEvent *e) {

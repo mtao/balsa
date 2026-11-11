@@ -116,6 +116,27 @@ auto OrbitCameraController::on_touch_event(const TouchEvent &e) -> void {
     }
 }
 
+auto OrbitCameraController::on_touchpad_event(const TouchpadEvent &e) -> void {
+    snap_to_active_camera();
+    switch (e.type) {
+    case TouchpadEvent::Type::Scroll:
+        if (e.modifiers & ModControl) {
+            zoom_at(static_cast<float>(std::exp(e.dy * touchpad_zoom_sensitivity)), e.x, e.y);
+        } else if (e.modifiers & ModShift) {
+            pan(e.dx, e.dy);
+        } else {
+            orbit(e.dx * touchpad_orbit_scale, e.dy * touchpad_orbit_scale);
+        }
+        break;
+    case TouchpadEvent::Type::Pinch:
+        zoom_at(static_cast<float>(e.scale), e.x, e.y);
+        break;
+    case TouchpadEvent::Type::Swipe:
+        pan(e.dx, e.dy);
+        break;
+    }
+}
+
 auto OrbitCameraController::on_window_resize(const WindowResizeEvent &e) -> void {
     set_viewport_size(e.width, e.height);
     if (_scene && e.framebuffer_width > 0 && e.framebuffer_height > 0) {

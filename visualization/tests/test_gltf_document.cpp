@@ -1189,6 +1189,40 @@ TEST_CASE("camera_fov_spans_shorter_side", "[viewer]") {
     CHECK(cam.vertical_fov() == Catch::Approx(1.0f));
 }
 
+TEST_CASE("orbit_camera_touchpad", "[viewer][touch]") {
+    namespace vk = balsa::visualization::vulkan;
+    namespace viz = balsa::visualization;
+    using T = viz::TouchpadEvent::Type;
+    vk::MeshScene scene;
+    vk::OrbitCameraController camera(&scene);
+    camera.set_viewport_size(800, 400);
+    const float theta = camera.theta();
+    const float distance = camera.distance();
+
+    SECTION("scroll orbits") {
+        camera.on_touchpad_event({ .type = T::Scroll, .dx = 40 });
+        CHECK(camera.theta() == Catch::Approx(theta - 40 * camera.orbit_sensitivity));
+        CHECK(camera.distance() == distance);
+    }
+
+    SECTION("shift scroll pans") {
+        camera.on_touchpad_event({ .type = T::Scroll, .dx = 40, .modifiers = viz::ModShift });
+        CHECK(camera.theta() == theta);
+        CHECK(camera.center().norm() > 0.f);
+    }
+
+    SECTION("ctrl scroll zooms") {
+        camera.on_touchpad_event({ .type = T::Scroll, .x = 400, .y = 200, .dy = 50, .modifiers = viz::ModControl });
+        CHECK(camera.distance() < distance);
+    }
+
+    SECTION("pinch zooms at the cursor") {
+        camera.on_touchpad_event({ .type = T::Pinch, .x = 400, .y = 200, .scale = 2.0 });
+        CHECK(camera.distance() == Catch::Approx(0.5f * distance));
+        CHECK(camera.center().norm() == Catch::Approx(0.f).margin(1e-6));
+    }
+}
+
 TEST_CASE("scene_loader", "[viewer]") {
     TempDir dir;
     namespace sg = balsa::scene_graph;

@@ -16,6 +16,7 @@ class MeshScene;
 //   Right-drag  → pan (translate center + eye in the view plane)
 //   Scroll      → zoom (move eye closer/further from center)
 //   Touch: one finger orbits, two fingers pan, pinch zooms
+//   Touchpad: two-finger scroll orbits (Shift pans, Ctrl zooms), pinch zooms
 //
 // Updates the MeshScene's view matrix via look_at() each time the
 // camera state changes.
@@ -60,6 +61,11 @@ class OrbitCameraController : public InputHandler {
     float zoom_sensitivity = 0.1f;
     // Multiplier on orbit_sensitivity for one-finger drags.
     double touch_orbit_scale = 1.0;
+    // Multiplier on orbit_sensitivity for two-finger touchpad scrolls;
+    // negate to flip the direction.
+    double touchpad_orbit_scale = 1.0;
+    // Zoom factor per pixel of Ctrl + two-finger scroll.
+    double touchpad_zoom_sensitivity = 0.01;
 
     // ── InputHandler overrides ──────────────────────────────────────
 
@@ -69,6 +75,13 @@ class OrbitCameraController : public InputHandler {
     //   Two-finger drag      → pan
     //   Pinch                → zoom
     auto on_touch_event(const TouchEvent &e) -> void override;
+    // Touchpad:
+    //   Two-finger scroll         → orbit
+    //   Shift + two-finger scroll → pan
+    //   Ctrl + two-finger scroll  → zoom toward the cursor
+    //   Pinch                     → zoom toward the cursor
+    //   Swipe                     → pan
+    auto on_touchpad_event(const TouchpadEvent &e) -> void override;
     auto on_window_resize(const WindowResizeEvent &e) -> void override;
     auto on_focus_lost() -> void override;
 

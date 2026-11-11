@@ -2,6 +2,7 @@
 #include "balsa/visualization/qt/vertical_tab_widget.hpp"
 #include "balsa/visualization/qt/zipper_compat.hpp"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -12,6 +13,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScroller>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStandardItemModel>
@@ -36,6 +39,32 @@ void set_button_color(QPushButton *btn, const sg::Vec4f &c) {
             .arg(to_qcolor(c).name(QColor::HexArgb)));
 }
 
+// Value widgets only take wheel input once focused, so scrolling the
+// panel past them doesn't change their values.
+class WheelGuard : public QObject {
+  public:
+    using QObject::QObject;
+    bool eventFilter(QObject *watched, QEvent *e) override {
+        if (e->type() == QEvent::Wheel) {
+            if (auto *w = qobject_cast<QWidget *>(watched); w && !w->hasFocus()) {
+                e->ignore();
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+auto wheel_guard() -> WheelGuard * {
+    static auto *guard = new WheelGuard(qApp);
+    return guard;
+}
+
+void guard_wheel(QWidget *w) {
+    w->setFocusPolicy(Qt::StrongFocus);
+    w->installEventFilter(wheel_guard());
+}
+
 auto make_spin(QWidget *parent, double min, double max, double step,
                int decimals) -> QDoubleSpinBox * {
     auto *s = new QDoubleSpinBox(parent);
@@ -44,6 +73,7 @@ auto make_spin(QWidget *parent, double min, double max, double step,
     s->setDecimals(decimals);
     s->setKeyboardTracking(false);
     s->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    guard_wheel(s);
     return s;
 }
 
@@ -142,9 +172,17 @@ void ControlsWidget::rebuild() {
         for (const auto *panel : panels) layout->addWidget(build_panel(*panel));
         layout->addStretch();
 
+        auto *scroll = new QScrollArea;
+        scroll->setWidget(page);
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        // Drag-to-scroll with a finger; mouse and touchpad use the wheel.
+        QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
+
         if (tab->id == m_current_tab) current = static_cast<int>(tab_ids.size());
         tab_ids.push_back(tab->id);
-        m_tabs->addTab(page, qstr(tab->icon_glyph), qstr(tab->label));
+        m_tabs->addTab(scroll, qstr(tab->icon_glyph), qstr(tab->label));
     }
     if (current >= 0) m_tabs->setCurrentIndex(current);
     connect(m_tabs, &VerticalTabWidget::currentChanged, this,
@@ -323,6 +361,7 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
                 h->setContentsMargins(0, 0, 0, 0);
                 auto *s = new QSlider(Qt::Horizontal, w);
                 s->setRange(0, k_slider_steps);
+                guard_wheel(s);
                 auto *value = new QLabel(w);
                 value->setMinimumWidth(40);
                 h->addWidget(s, 1);
@@ -388,6 +427,7 @@ auto ControlsWidget::build_property(const ctl::Property &prop, QWidget *parent)
 
             } else if constexpr (std::is_same_v<V, ctl::ChoiceInput>) {
                 auto *c = new QComboBox(parent);
+                guard_wheel(c);
                 connect(c, &QComboBox::currentIndexChanged, this,
                         [this, &v](int i) {
                             if (i < 0) return;

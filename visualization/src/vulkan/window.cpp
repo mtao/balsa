@@ -62,6 +62,12 @@ void Window::dispatch_touch(const TouchEvent &e) {
     }
 }
 
+void Window::dispatch_touchpad(const TouchpadEvent &e) {
+    if (_input_handler) {
+        _input_handler->on_touchpad_event(e);
+    }
+}
+
 void Window::dispatch_focus_lost() {
     if (_input_handler) {
         _input_handler->on_focus_lost();

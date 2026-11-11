@@ -53,6 +53,7 @@ class Window {
     virtual void dispatch_mouse(const MouseEvent &e);
     virtual void dispatch_key(const KeyEvent &e);
     virtual void dispatch_touch(const TouchEvent &e);
+    virtual void dispatch_touchpad(const TouchpadEvent &e);
     void dispatch_resize(const WindowResizeEvent &e);
     void dispatch_focus_lost();
 

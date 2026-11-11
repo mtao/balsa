@@ -87,7 +87,7 @@ namespace {
             _vk_window->setVulkanInstance(inst);
 
             // Wrap QVulkanWindow in a widget for embedding
-            QWidget *wrapper = QWidget::createWindowContainer(_vk_window, this);
+            QWidget *wrapper = _vk_window->create_container(this);
             setCentralWidget(wrapper);
 
             // ── Create the scene ─────────────────────────────────────────
