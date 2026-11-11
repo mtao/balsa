@@ -21,7 +21,7 @@ meshopt_dep = dependency('', required: false)
 if get_option('json')
   if not get_option('draco').disabled()
     # The subprojects/draco wrapper builds the draco-src wrap.
-    draco_dep = dependency('draco', method: 'cmake', required: false)
+    draco_dep = dependency('draco', method: 'cmake', required: false, include_type: 'system')
     draco_encoder_dep = draco_dep
     if not draco_dep.found() and get_option('draco').enabled()
       draco_proj = subproject('draco')

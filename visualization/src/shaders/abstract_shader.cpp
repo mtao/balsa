@@ -67,6 +67,9 @@ auto AbstractShader::compile_glsl(std::string_view glsl, ShaderType type) const 
     case ShaderType::Fragment:
         kind = shaderc_glsl_default_fragment_shader;
         break;
+    default:
+        spdlog::error("Cannot compile an unsupported shader type");
+        return {};
     }
     shaderc::Compiler compiler;
     shaderc::CompileOptions compile_options;

@@ -19,9 +19,14 @@ namespace {
             .vertex_shader = "phong/vertex",
             .fragment_shader = "phong/fragment",
             .streams = {position_stream(),
-                        {.role = roles::normal(), .location = 1, .define = "HAS_NORMALS"},
-                        {.role = roles::scalar(), .location = 2, .define = "HAS_SCALARS"}},
+                        {.role = roles::normal(),
+                         .location = 1,
+                         .define = "HAS_NORMALS"},
+                        {.role = roles::scalar(),
+                         .location = 2,
+                         .define = "HAS_SCALARS"}},
             .material_size = 64,
+            .textures = {},
         });
         ShaderProgram gltf_metallic_roughness = catalog.add({
             .id = "balsa.gltf_metallic_roughness",
@@ -60,6 +65,7 @@ namespace {
             .fragment_shader = "unlit/fragment",
             .streams = {position_stream()},
             .material_size = 32,
+            .textures = {},
         });
         ShaderProgram unlit_points = catalog.add({
             .id = "balsa.unlit_points",
@@ -68,6 +74,7 @@ namespace {
             .fragment_shader = "unlit/fragment",
             .streams = {position_stream()},
             .material_size = 32,
+            .textures = {},
         });
     };
 

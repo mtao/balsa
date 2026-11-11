@@ -12,6 +12,15 @@
 
 namespace shaders = balsa::visualization::shaders;
 
+TEST_CASE("unsupported_shader_type_is_rejected", "[visualization][shaders]") {
+    const shaders::AbstractShader shader;
+    CHECK(
+        shader
+            .compile_glsl("#version 450\nvoid main() {}",
+                          static_cast<shaders::AbstractShader::ShaderType>(-1))
+            .empty());
+}
+
 TEST_CASE("shader_library_supports_extension", "[visualization][shaders]") {
     shaders::ShaderLibrary library;
 
