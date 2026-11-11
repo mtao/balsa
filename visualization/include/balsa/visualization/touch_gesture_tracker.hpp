@@ -1,7 +1,8 @@
 #pragma once
 #include <algorithm>
-#include <map>
+#include <flat_map>
 #include <optional>
+#include <ranges>
 
 #include <zipper/Vector.hpp>
 
@@ -27,13 +28,16 @@ struct TouchGesture {
 // that step, so going from two fingers to one does not make the view jump.
 class TouchGestureTracker {
   public:
+    // Contact id -> position, sorted by id.
+    using Contacts = std::flat_map<int, zipper::Vector<double, 2>>;
+
     auto update(const TouchEvent &e) -> std::optional<TouchGesture> {
         if (e.type == TouchEvent::Type::Cancel) {
             reset();
             return std::nullopt;
         }
 
-        std::map<int, zipper::Vector<double, 2>> current;
+        Contacts current;
         for (const auto &p : e.points) {
             if (p.state != TouchPoint::State::Released) {
                 current.emplace(p.id, zipper::Vector<double, 2>{ p.x, p.y });
@@ -64,15 +68,14 @@ class TouchGestureTracker {
     static constexpr double min_spread = 1.0;
 
   private:
-    std::map<int, zipper::Vector<double, 2>> _points;
+    Contacts _points;
 
-    auto same_contacts(const std::map<int, zipper::Vector<double, 2>> &other) const -> bool {
-        return other.size() == _points.size()
-               && std::ranges::equal(other, _points, {}, [](const auto &kv) { return kv.first; }, [](const auto &kv) { return kv.first; });
+    auto same_contacts(const Contacts &other) const -> bool {
+        return std::ranges::equal(std::views::keys(other), std::views::keys(_points));
     }
 
     // Centroid and mean distance of the contacts to it.
-    static auto centroid_and_spread(const std::map<int, zipper::Vector<double, 2>> &pts)
+    static auto centroid_and_spread(const Contacts &pts)
       -> std::pair<zipper::Vector<double, 2>, double> {
         zipper::Vector<double, 2> c{ 0.0, 0.0 };
         for (const auto &[id, p] : pts) c = c + p;
