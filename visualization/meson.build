@@ -139,6 +139,8 @@ visualization_sources = [
   'src/shaders/embedded_colormaps.cpp',
   'src/vulkan/native_film.cpp',
   'src/vulkan/window.cpp',
+  'src/vulkan/orbit_camera_controller.cpp',
+  'src/touch_gesture_tracker.cpp',
   'src/scene_graph/Object.cpp',
   'src/scene_graph/Camera.cpp',
   'src/scene_graph/MeshRenderer.cpp',

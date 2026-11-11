@@ -1,14 +1,12 @@
 #pragma once
-#include <algorithm>
-#include <cmath>
-
 #include "balsa/scene_graph/types.hpp"
 #include <balsa/geometry/BoundingBox.hpp>
 #include "balsa/visualization/input_handler.hpp"
 #include "balsa/visualization/touch_gesture_tracker.hpp"
-#include "balsa/visualization/vulkan/mesh_scene.hpp"
 
 namespace balsa::visualization::vulkan {
+
+class MeshScene;
 
 // ── OrbitCameraController ───────────────────────────────────────────
 //
@@ -35,49 +33,23 @@ namespace balsa::visualization::vulkan {
 
 class OrbitCameraController : public InputHandler {
   public:
-    explicit OrbitCameraController(MeshScene *scene)
-      : _scene(scene) {
-        apply();
-    }
+    explicit OrbitCameraController(MeshScene *scene);
 
     // ── Configuration ───────────────────────────────────────────────
 
-    void set_distance(float d) {
-        _distance = std::max(d, _min_distance);
-        apply();
-    }
-    void set_center(const scene_graph::Vec3f &c) {
-        _center = c;
-        apply();
-    }
-    void set_angles(float theta, float phi) {
-        _theta = theta;
-        _phi = std::clamp(phi, -_max_phi, _max_phi);
-        apply();
-    }
+    auto set_distance(float d) -> void;
+    auto set_center(const scene_graph::Vec3f &c) -> void;
+    auto set_angles(float theta, float phi) -> void;
 
     // Switches to the default camera, centres it on `box` and backs off
     // until the box fits the field of view.  The near and far planes follow
     // the box's size.  Empty boxes are ignored.
-    void frame(const geometry::BoundingBox<float, 3> &box) {
-        if (!_scene || box.is_empty()) return;
-        _scene->set_active_camera(nullptr);
-        const auto &camera = _scene->camera();
-        const float radius = std::max(0.5f * box.range().norm(), 1e-6f);
-        _center = box.center();
-        _distance = std::max(
-            1.05f * radius / std::sin(0.5f * camera.fov_y()), _min_distance);
-        _scene->set_perspective(camera.fov_y(),
-                                camera.aspect(),
-                                1e-3f * radius,
-                                100.f * (_distance + radius));
-        apply();
-    }
+    auto frame(const geometry::BoundingBox<float, 3> &box) -> void;
 
-    float distance() const { return _distance; }
-    const scene_graph::Vec3f &center() const { return _center; }
-    float theta() const { return _theta; }
-    float phi() const { return _phi; }
+    auto distance() const -> float { return _distance; }
+    auto center() const -> const scene_graph::Vec3f & { return _center; }
+    auto theta() const -> float { return _theta; }
+    auto phi() const -> float { return _phi; }
 
     // Sensitivity parameters
     float orbit_sensitivity = 0.005f;
@@ -88,106 +60,21 @@ class OrbitCameraController : public InputHandler {
 
     // ── InputHandler overrides ──────────────────────────────────────
 
-    void on_mouse_event(const MouseEvent &e) override {
-        switch (e.type) {
-        case MouseEvent::Type::Press:
-            _last_x = e.x;
-            _last_y = e.y;
-            if (e.button == 0) _left_down = true;
-            if (e.button == 1) _right_down = true;
-            if (e.button == 2) _middle_down = true;
-            // When a non-default camera is active, snap the default
-            // camera to match it and revert to the default on first
-            // interaction.  The non-default camera acts as a bookmark.
-            snap_to_active_camera();
-            break;
-
-        case MouseEvent::Type::Release:
-            if (e.button == 0) _left_down = false;
-            if (e.button == 1) _right_down = false;
-            if (e.button == 2) _middle_down = false;
-            break;
-
-        case MouseEvent::Type::Move: {
-            double dx = e.x - _last_x;
-            double dy = e.y - _last_y;
-            _last_x = e.x;
-            _last_y = e.y;
-
-            if (_left_down) {
-                orbit(dx, dy);
-            }
-
-            if (_right_down || _middle_down) {
-                pan(dx, dy);
-            }
-            break;
-        }
-
-        case MouseEvent::Type::Scroll: {
-            // Snap from bookmark camera on first interaction.
-            snap_to_active_camera();
-            // Zoom: exponential scaling feels natural
-            zoom(1.0f / (1.0f - static_cast<float>(e.scroll_y) * zoom_sensitivity));
-            break;
-        }
-        }
-    }
-
+    auto on_mouse_event(const MouseEvent &e) -> void override;
     // Touchscreen:
     //   One-finger drag      → orbit
     //   Two-finger drag      → pan
     //   Pinch                → zoom
-    void on_touch_event(const TouchEvent &e) override {
-        if (e.type == TouchEvent::Type::Begin) {
-            snap_to_active_camera();
-        }
-        const auto gesture = _touch.update(e);
-        if (!gesture) return;
-        const double dx = gesture->translation(0);
-        const double dy = gesture->translation(1);
-        if (gesture->touch_count == 1) {
-            orbit(dx * touch_orbit_scale, dy * touch_orbit_scale);
-        } else {
-            pan(dx, dy);
-            zoom(static_cast<float>(gesture->scale));
-        }
-    }
+    auto on_touch_event(const TouchEvent &e) -> void override;
+    auto on_window_resize(const WindowResizeEvent &e) -> void override;
 
     // ── Camera motions (screen-space deltas in logical pixels) ──────
 
-    void orbit(double dx, double dy) {
-        _theta -= static_cast<float>(dx) * orbit_sensitivity;
-        _phi = std::clamp(_phi + static_cast<float>(dy) * orbit_sensitivity, -_max_phi, _max_phi);
-        apply();
-    }
-
+    auto orbit(double dx, double dy) -> void;
     // Moves the center in the view plane so the scene follows the cursor.
-    void pan(double dx, double dy) {
-        scene_graph::Vec3f eye = compute_eye();
-        scene_graph::Vec3f forward = (_center - eye).normalized();
-        scene_graph::Vec3f right = forward.cross(_up).normalized();
-        scene_graph::Vec3f up = right.cross(forward).normalized();
-
-        float pan_scale = _distance * pan_sensitivity;
-        _center = _center - right * (static_cast<float>(dx) * pan_scale);
-        _center = _center + up * (static_cast<float>(dy) * pan_scale);
-        apply();
-    }
-
+    auto pan(double dx, double dy) -> void;
     // factor > 1 moves the eye closer (distance /= factor).
-    void zoom(float factor) {
-        if (!(factor > 0.0f)) return;
-        _distance = std::max(_distance / factor, _min_distance);
-        apply();
-    }
-
-    void on_window_resize(const WindowResizeEvent &e) override {
-        if (_scene && e.framebuffer_width > 0 && e.framebuffer_height > 0) {
-            _scene->update_aspect(
-              static_cast<float>(e.framebuffer_width) / static_cast<float>(e.framebuffer_height));
-        }
-    }
+    auto zoom(float factor) -> void;
 
   private:
     MeshScene *_scene = nullptr;
@@ -211,48 +98,15 @@ class OrbitCameraController : public InputHandler {
 
     TouchGestureTracker _touch;
 
-    scene_graph::Vec3f compute_eye() const {
-        const float cos_phi = std::cos(_phi);
-        return _center + scene_graph::Vec3f{ _distance * cos_phi * std::sin(_theta),
-                                             _distance * std::sin(_phi),
-                                             _distance * cos_phi * std::cos(_theta) };
-    }
+    auto compute_eye() const -> scene_graph::Vec3f;
 
     // If the active camera is not the default camera, extract orbit
     // parameters from the active camera's world transform, copy them
     // to the default camera, revert to the default camera, and update
     // our spherical state so subsequent orbiting continues from there.
-    void snap_to_active_camera() {
-        if (!_scene || _scene->is_default_camera_active()) return;
+    auto snap_to_active_camera() -> void;
 
-        // Extract eye position from the active camera's world transform.
-        auto world_xf = _scene->active_camera_object().world_transform();
-        scene_graph::Vec3f eye(world_xf.translation());
-
-        // Extract forward direction (camera looks along -Z in its local space).
-        scene_graph::Vec3f forward = (-world_xf.linear().col(2)).normalized();
-
-        // Derive center from eye + forward * distance.
-        _center = eye + forward * _distance;
-
-        // Compute spherical coordinates from (eye - center).
-        scene_graph::Vec3f offset = eye - _center;
-        _distance = offset.norm();
-        _distance = std::max(_distance, _min_distance);
-
-        _phi = std::asin(std::clamp(offset(1) / _distance, -1.0f, 1.0f));
-        _theta = std::atan2(offset(0), offset(2));
-
-        // Snap the default camera to this position and revert.
-        _scene->set_active_camera(nullptr);
-        apply();
-    }
-
-    void apply() {
-        if (!_scene) return;
-        scene_graph::Vec3f eye = compute_eye();
-        _scene->look_at(eye, _center, _up);
-    }
+    auto apply() -> void;
 };
 
 }// namespace balsa::visualization::vulkan
