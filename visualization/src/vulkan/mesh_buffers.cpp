@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/mesh_buffers.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include "balsa/visualization/vulkan/vertex_format.hpp"
 
 #include <spdlog/spdlog.h>
@@ -66,9 +67,12 @@ auto MeshBuffers::attribute(Film &film,
     const std::size_t count = attribute->count();
     if (!attribute->is_vector() || components < 1 || components > 4
         || count == 0) {
-        spdlog::warn("MeshBuffers: attribute '{}' ({} components, {} values) "
-                     "cannot be a vertex input",
-                     attribute->name, components, count);
+        logger()->warn(
+            "MeshBuffers: attribute '{}' ({} components, {} values) "
+            "cannot be a vertex input",
+            attribute->name,
+            components,
+            count);
         return nullptr;
     }
 

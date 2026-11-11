@@ -2670,6 +2670,33 @@ TEST_CASE("fit_to_geometry", "[scene_graph][semantics]") {
         mesh.shading.fit_to_geometry();
         CHECK_FALSE(enabled(mesh.shading, "balsa.unlit_points"));
     }
+
+    SECTION("disabled layers do not derive their geometry") {
+        balsa::catalog::Catalog<sg::GeometryViewDefinition> catalog(
+            "test view");
+        int derivations = 0;
+        const auto view =
+            catalog.add({.id = "test.disabled",
+                         .label = "Disabled",
+                         .derive = [&](const sg::MeshInstance &instance)
+                             -> std::shared_ptr<const sg::MeshGeometry> {
+                             ++derivations;
+                             return instance.shared_geometry();
+                         }});
+        MeshObject mesh;
+        mesh.geometry.add_attribute(
+            "p", sg::AttributeDomain::Vertex, 3, xyz, as_positions);
+        mesh.geometry.set_triangle_indices(TriangleIndices(tri.data(), 1));
+        auto *points = mesh.shading.find_layer("balsa.unlit_points");
+        REQUIRE(points);
+        points->view = view;
+        points->enabled = false;
+        mesh.shading.fit_to_geometry();
+        CHECK(derivations == 0);
+        points->enabled = true;
+        mesh.shading.fit_to_geometry();
+        CHECK(derivations == 1);
+    }
 }
 
 TEST_CASE("role_candidates", "[scene_graph][semantics]") {

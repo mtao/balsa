@@ -5,6 +5,7 @@ vulkan_dep = dependency('vulkan', required: false)
 #===========================================
 
 shaderc_dep = dependency('shaderc')
+vma_dep = dependency('VulkanMemoryAllocator', version: '>=3.3.0')
 
 if get_option('imgui') and not get_option('glfw')
   error('The ImGui frontend currently requires GLFW; enable -Dglfw=true or disable -Dimgui')
@@ -20,7 +21,7 @@ meshopt_dep = dependency('', required: false)
 if get_option('json')
   if not get_option('draco').disabled()
     # The subprojects/draco wrapper builds the draco-src wrap.
-    draco_dep = dependency('draco', method: 'cmake', required: false)
+    draco_dep = dependency('draco', method: 'cmake', required: false, include_type: 'system')
     draco_encoder_dep = draco_dep
     if not draco_dep.found() and get_option('draco').enabled()
       draco_proj = subproject('draco')
@@ -112,13 +113,16 @@ endif
 # Public deps: propagated to consumers via declare_dependency().
 visualization_public_deps = [vulkan_dep, shaderc_dep, dl_lib, colormap_shaders_dep]
 # Private deps: used only for building the library (not propagated).
-visualization_private_deps = []
+visualization_private_deps = [vma_dep]
 
 visualization_sources = [
   'src/vulkan/film.cpp',
+  'src/vulkan/logging.cpp',
   'src/vulkan/scene_base.cpp',
   'src/vulkan/pipeline.cpp',
   'src/vulkan/vulkan_buffer.cpp',
+  'src/vulkan/BufferAllocator.cpp',
+  'src/vulkan/BufferUploadBatch.cpp',
   'src/vulkan/mesh_buffers.cpp',
   'src/vulkan/vertex_format.cpp',
   'src/vulkan/mesh_pipeline.cpp',

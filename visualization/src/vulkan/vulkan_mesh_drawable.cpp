@@ -4,6 +4,7 @@
 #include "balsa/scene_graph/Object.hpp"
 #include "balsa/scene_graph/types.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 
 #include <algorithm>
@@ -261,9 +262,13 @@ void VulkanMeshDrawable::record_draw_commands(Film &film) {
         scene_graph::MeshMaterial material;
         layer.renderer->write_material(material, scene_graph::MeshLayerContext(*shading, layer.id));
         if (material.uniform.size() != program.material_size) {
-            spdlog::error("VulkanMeshDrawable: layer \"{}\" wrote {} material bytes; {} needs {}",
-                          layer.name, material.uniform.size(), program.label,
-                          program.material_size);
+            logger()->error(
+                "VulkanMeshDrawable: layer \"{}\" wrote {} material bytes; {} "
+                "needs {}",
+                layer.name,
+                material.uniform.size(),
+                program.label,
+                program.material_size);
             continue;
         }
 

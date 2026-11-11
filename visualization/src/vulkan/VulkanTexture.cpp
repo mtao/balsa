@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/VulkanTexture.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include "balsa/visualization/vulkan/one_shot_command.hpp"
 
 #include <cstring>
@@ -235,10 +236,10 @@ auto VulkanTexture::create(Film &film,
     _staging_memory = _device.allocateMemory(staging_alloc);
     _device.bindBufferMemory(_staging_buffer, _staging_memory, 0);
 
-    spdlog::info("VulkanTexture: created {}x{} ({} bpp)",
-                 width,
-                 height,
-                 bytes_per_pixel());
+    logger()->debug("VulkanTexture: created {}x{} ({} bpp)",
+                    width,
+                    height,
+                    bytes_per_pixel());
 }
 
 // ── Layout transition ───────────────────────────────────────────────

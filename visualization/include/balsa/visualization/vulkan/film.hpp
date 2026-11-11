@@ -9,6 +9,9 @@
 
 namespace balsa::visualization::vulkan {
 
+class BufferAllocator;
+class BufferUploadBatch;
+
 class Film {
   public:
     Film() = default;
@@ -52,6 +55,13 @@ class Film {
     // Throws std::runtime_error if no suitable memory type is found.
     uint32_t find_memory_type(uint32_t type_filter, vk::MemoryPropertyFlags properties) const;
 
+    // Shared by buffers on this device; created on first use.
+    auto buffer_allocator() -> std::shared_ptr<BufferAllocator>;
+    // Call before destroying an owned device, after releasing its buffers.
+    void release_buffer_allocator();
+    auto buffer_upload_batch() const -> BufferUploadBatch * {
+        return _buffer_upload_batch;
+    }
 
     virtual vk::Image msaa_color_image(int index) const = 0;
     virtual vk::ImageView msaa_color_image_view(int index) const = 0;
@@ -107,11 +117,14 @@ class Film {
     void release_retired();
 
   private:
+    friend class BufferUploadBatch;
     struct Retired {
         uint64_t frame;
         std::shared_ptr<void> resource;
     };
     uint64_t _frame_number = 0;
     std::vector<Retired> _retired;
+    std::shared_ptr<BufferAllocator> _buffer_allocator;
+    BufferUploadBatch *_buffer_upload_batch = nullptr;
 };
 }// namespace balsa::visualization::vulkan

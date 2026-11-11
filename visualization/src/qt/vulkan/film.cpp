@@ -1,14 +1,16 @@
 #include "balsa/visualization/qt/vulkan/film.hpp"
-#include <QVulkanWindow>
+#include "balsa/visualization/vulkan/logging.hpp"
 #include <QVulkanInstance>
+#include <QVulkanWindow>
 #include <spdlog/spdlog.h>
 #include <vulkan/vulkan_enums.hpp>
 namespace balsa::visualization::qt::vulkan {
 Film::Film(QVulkanWindow &window) : _window(window) {
-    spdlog::info("First time calling myself on a window! {}", swapchain_image_count());
+    balsa::visualization::vulkan::logger()->debug("Qt Vulkan film initialized");
     if (depth_stencil_format() == vk::Format::eUndefined) {
-        spdlog::error("QVulkanWindow created no depth/stencil attachment; "
-                      "mesh depth testing is disabled");
+        ::balsa::visualization::vulkan::logger()->error(
+            "QVulkanWindow created no depth/stencil attachment; "
+            "mesh depth testing is disabled");
     }
 }
 Film::~Film() {}

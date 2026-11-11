@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/mesh_pipeline.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include "balsa/visualization/vulkan/vertex_format.hpp"
 
 #include <spdlog/spdlog.h>
@@ -59,7 +60,7 @@ void MeshPipelineManager::init(Film &film, uint32_t max_descriptor_sets) {
     _scene_allocator.init(_device, {{vk::DescriptorType::eUniformBuffer, 2}}, max_descriptor_sets);
 
     _initialized = true;
-    spdlog::info("MeshPipelineManager: initialized");
+    logger()->debug("MeshPipelineManager: initialized");
 }
 
 void MeshPipelineManager::release() {
@@ -95,7 +96,7 @@ void MeshPipelineManager::invalidate_pipelines() {
         }
     }
     _cache.clear();
-    spdlog::info("MeshPipelineManager: pipelines invalidated");
+    logger()->debug("MeshPipelineManager: pipelines invalidated");
 }
 
 // ── Layouts and descriptor sets ──────────────────────────────────────
@@ -224,15 +225,19 @@ auto MeshPipelineManager::pipeline(const MeshPipelineKey &key) -> vk::Pipeline {
 }
 
 auto MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) -> vk::Pipeline {
+    ProfileScope profile("MeshPipelineManager::create_pipeline");
     const auto &definition = program_definition(key.program);
-    spdlog::info("MeshPipelineManager: creating a pipeline for {} (topology {})", definition.id,
-                 static_cast<int>(key.topology));
+    logger()->debug(
+        "MeshPipelineManager: creating a pipeline for {} (topology {})",
+        definition.id,
+        static_cast<int>(key.topology));
 
     const shaders::ProgramShader shader(definition, key.variant, _shader_library);
     const auto vert_spv = shader.vert_spirv();
     const auto frag_spv = shader.frag_spirv();
     if (vert_spv.empty() || frag_spv.empty()) {
-        spdlog::error("MeshPipelineManager: shader compilation failed; no pipeline");
+        logger()->error(
+            "MeshPipelineManager: shader compilation failed; no pipeline");
         return vk::Pipeline{};
     }
     const auto module = [&](const std::vector<uint32_t> &spv) {
@@ -315,7 +320,8 @@ auto MeshPipelineManager::create_pipeline(const MeshPipelineKey &key) -> vk::Pip
         created.result == vk::Result::eSuccess) {
         result = created.value;
     } else {
-        spdlog::error("MeshPipelineManager: failed to create a graphics pipeline");
+        logger()->error(
+            "MeshPipelineManager: failed to create a graphics pipeline");
     }
     _device.destroyShaderModule(vert_module);
     _device.destroyShaderModule(frag_module);

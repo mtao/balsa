@@ -12,6 +12,15 @@
 
 namespace shaders = balsa::visualization::shaders;
 
+TEST_CASE("unsupported_shader_type_is_rejected", "[visualization][shaders]") {
+    const shaders::AbstractShader shader;
+    CHECK(
+        shader
+            .compile_glsl("#version 450\nvoid main() {}",
+                          static_cast<shaders::AbstractShader::ShaderType>(-1))
+            .empty());
+}
+
 TEST_CASE("shader_library_supports_extension", "[visualization][shaders]") {
     shaders::ShaderLibrary library;
 
@@ -82,8 +91,8 @@ TEST_CASE("embedded_shader_sources_are_available", "[visualization][shaders]") {
         "phong/fragment",
         "unlit/vertex",
         "unlit/fragment",
-        "pbr/vertex",
-        "pbr/fragment",
+        "gltf_metallic_roughness/vertex",
+        "gltf_metallic_roughness/fragment",
         "image/vertex",
         "image/fragment",
     };
@@ -166,7 +175,9 @@ TEST_CASE("shader_program_permutations_compile", "[visualization][shaders][progr
         return defines;
     };
     for (unsigned mask = 0; mask < 32; ++mask) {
-        compiles(programs::pbr(), {.defines = stream_defines(programs::pbr(), mask)});
+        compiles(programs::gltf_metallic_roughness(),
+                 {.defines = stream_defines(programs::gltf_metallic_roughness(),
+                                            mask)});
     }
     for (const auto *shading : {"SHADING_FLAT", "SHADING_GOURAUD", "SHADING_PHONG", "SHADING_UNLIT"}) {
         for (unsigned mask = 0; mask < 4; ++mask) {

@@ -1,7 +1,8 @@
 #include "balsa/visualization/vulkan/ImagePipelineManager.hpp"
-#include "balsa/visualization/shaders/embedded_sources.hpp"
 #include "balsa/visualization/shaders/abstract_shader.hpp"
+#include "balsa/visualization/shaders/embedded_sources.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 
 #include <spdlog/spdlog.h>
 #include <stdexcept>
@@ -28,7 +29,7 @@ auto ImagePipelineManager::init(Film &film, uint32_t max_descriptor_sets) -> voi
 
     _initialized = true;
     _shader_revision = _shader_library.revision();
-    spdlog::info("ImagePipelineManager: initialized");
+    logger()->debug("ImagePipelineManager: initialized");
 }
 
 auto ImagePipelineManager::release() -> void {
@@ -66,7 +67,7 @@ auto ImagePipelineManager::invalidate_pipeline() -> void {
     _cached_render_pass = vk::RenderPass{};
     _cached_msaa_samples = 0;
     _cached_depth_test = false;
-    spdlog::info("ImagePipelineManager: pipeline invalidated");
+    logger()->debug("ImagePipelineManager: pipeline invalidated");
 }
 
 // ── Descriptor set layout / pipeline layout / pool ──────────────────
@@ -214,7 +215,7 @@ auto ImagePipelineManager::get_or_create() -> vk::Pipeline {
 // ── Pipeline creation ───────────────────────────────────────────────
 
 auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
-    spdlog::info("ImagePipelineManager: creating pipeline");
+    logger()->debug("ImagePipelineManager: creating pipeline");
 
     shaders::AbstractShader shader_compiler;
     const auto vertex_source = _shader_library.find("image/vertex");
@@ -227,7 +228,7 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
         shaders::AbstractShader::ShaderType::Fragment);
 
     if (vert_spv.empty() || frag_spv.empty()) {
-        spdlog::error(
+        logger()->error(
             "ImagePipelineManager: shader compilation failed (empty SPIR-V)");
         return vk::Pipeline{};
     }
@@ -353,9 +354,9 @@ auto ImagePipelineManager::create_pipeline() -> vk::Pipeline {
     auto res = _device.createGraphicsPipeline(VK_NULL_HANDLE, pipeline_info);
     if (res.result == vk::Result::eSuccess) {
         result = res.value;
-        spdlog::info("ImagePipelineManager: pipeline created successfully");
+        logger()->debug("ImagePipelineManager: pipeline created successfully");
     } else {
-        spdlog::error(
+        logger()->error(
             "ImagePipelineManager: failed to create graphics pipeline");
     }
 

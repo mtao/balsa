@@ -1,6 +1,7 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : require
-// glTF metallic-roughness surfaces ("balsa.pbr"); see pbr.frag.
+// glTF metallic-roughness surfaces ("balsa.gltf_metallic_roughness");
+// see gltf_metallic_roughness.frag.
 //
 // Defines, one per bound optional stream:
 //   HAS_NORMALS, HAS_TANGENTS, HAS_TEXTURE_COORDINATES_0,

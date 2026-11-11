@@ -5,6 +5,8 @@
 !packagefiles/colormap_shaders/meson.build
 !packagefiles/stb/
 !packagefiles/stb/meson.build
+!packagefiles/vulkan-memory-allocator/
+!packagefiles/vulkan-memory-allocator/meson.build
 !draco/
 !draco/meson.build
 
@@ -25,4 +27,5 @@
 !simdutf.wrap
 !spdlog.wrap
 !stb.wrap
+!vulkan-memory-allocator.wrap
 !zipper.wrap

@@ -24,6 +24,7 @@
 #endif
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 
 #include <balsa/scene_graph/Object.hpp>
@@ -231,6 +232,7 @@ class MeshViewerWindow : public viz::glfw::vulkan::Window {
 
 int main(int argc, char *argv[]) {
     spdlog::set_level(spdlog::level::info);
+    spdlog::cfg::load_env_levels();
 
     std::string input_path;
 #if BALSA_HAS_CLI11

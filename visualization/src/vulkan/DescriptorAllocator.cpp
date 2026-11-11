@@ -1,4 +1,5 @@
 #include "balsa/visualization/vulkan/DescriptorAllocator.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 
 #include <format>
 #include <ranges>
@@ -46,7 +47,22 @@ void DescriptorAllocator::add_pool(uint32_t sets) {
     ci.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
     ci.setMaxSets(sets);
     ci.setPoolSizes(sizes);
-    m_pools.push_back(m_device.createDescriptorPool(ci));
+    vk::DescriptorPool pool;
+    try {
+        pool = m_device.createDescriptorPool(ci);
+    } catch (const vk::SystemError &e) {
+        throw std::runtime_error(std::format(
+            "DescriptorAllocator: createDescriptorPool failed for pool {} "
+            "(capacity {} sets): {}",
+            m_pools.size(),
+            sets,
+            e.what()));
+    }
+    m_pools.push_back({pool, sets});
+    logger()->debug(
+        "DescriptorAllocator: created pool {} with capacity {} sets",
+        m_pools.size() - 1,
+        sets);
 }
 
 auto DescriptorAllocator::allocate(vk::DescriptorSetLayout layout)
@@ -55,32 +71,45 @@ auto DescriptorAllocator::allocate(vk::DescriptorSetLayout layout)
     ai.setSetLayouts(layout);
     vk::DescriptorSet set;
     // Newest pools first: older ones only have room again after frees.
-    for (const auto pool : m_pools | std::views::reverse) {
-        ai.setDescriptorPool(pool);
+    for (auto index = m_pools.size(); index > 0;) {
+        auto &pool = m_pools[--index];
+        // Avoid Vulkan 1.0's ambiguous OOM result for exhausted pools.
+        if (pool.live_sets == pool.capacity) { continue; }
+        ai.setDescriptorPool(pool.handle);
         const auto result = m_device.allocateDescriptorSets(&ai, &set);
         if (result == vk::Result::eSuccess) {
-            m_owners.emplace(set, pool);
+            m_owners.emplace(set, index);
+            ++pool.live_sets;
             return set;
         }
         if (result != vk::Result::eErrorOutOfPoolMemory
             && result != vk::Result::eErrorFragmentedPool) {
-            throw std::runtime_error(std::format(
-                "DescriptorAllocator: allocateDescriptorSets failed: {}",
-                vk::to_string(result)));
+            throw std::runtime_error(
+                std::format("DescriptorAllocator: allocateDescriptorSets "
+                            "failed in existing "
+                            "pool {} ({} / {} live sets): {}",
+                            index,
+                            pool.live_sets,
+                            pool.capacity,
+                            vk::to_string(result)));
         }
     }
 
     add_pool(m_next_pool_sets);
     m_next_pool_sets *= 2;
-    ai.setDescriptorPool(m_pools.back());
+    auto &pool = m_pools.back();
+    ai.setDescriptorPool(pool.handle);
     if (const auto result = m_device.allocateDescriptorSets(&ai, &set);
         result != vk::Result::eSuccess) {
         throw std::runtime_error(std::format(
-            "DescriptorAllocator: allocateDescriptorSets failed on a new "
-            "pool: {}",
+            "DescriptorAllocator: allocateDescriptorSets failed in fresh "
+            "pool {} (0 / {} live sets): {}",
+            m_pools.size() - 1,
+            pool.capacity,
             vk::to_string(result)));
     }
-    m_owners.emplace(set, m_pools.back());
+    m_owners.emplace(set, m_pools.size() - 1);
+    ++pool.live_sets;
     return set;
 }
 
@@ -88,13 +117,17 @@ void DescriptorAllocator::free(vk::DescriptorSet set) {
     if (!set) { return; }
     const auto owner = m_owners.find(set);
     if (owner == m_owners.end()) { return; }
-    m_device.freeDescriptorSets(owner->second, set);
+    auto &pool = m_pools[owner->second];
+    m_device.freeDescriptorSets(pool.handle, set);
+    --pool.live_sets;
     m_owners.erase(owner);
 }
 
 void DescriptorAllocator::release() {
     if (m_device) {
-        for (const auto pool : m_pools) { m_device.destroyDescriptorPool(pool); }
+        for (const auto &pool : m_pools) {
+            m_device.destroyDescriptorPool(pool.handle);
+        }
     }
     m_pools.clear();
     m_owners.clear();

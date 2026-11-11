@@ -36,7 +36,7 @@ foreach target : ['attributes',
                   'metadata_dec',
                   'point_cloud',
                   'points_dec']
-  draco_object_deps += draco_sub.dependency('draco_' + target)
+  draco_object_deps += draco_sub.dependency('draco_' + target, include_type : 'system')
 endforeach
 draco_dep = declare_dependency(dependencies : draco_object_deps)
 meson.override_dependency('draco', draco_dep)
@@ -50,6 +50,6 @@ foreach target : ['compression_attributes_enc',
                   'enc_config',
                   'metadata_enc',
                   'points_enc']
-  draco_encoder_object_deps += draco_sub.dependency('draco_' + target)
+  draco_encoder_object_deps += draco_sub.dependency('draco_' + target, include_type : 'system')
 endforeach
 draco_encoder_dep = declare_dependency(dependencies : [draco_dep] + draco_encoder_object_deps)

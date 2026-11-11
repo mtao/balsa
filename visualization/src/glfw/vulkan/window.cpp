@@ -1,6 +1,7 @@
 #include "balsa/visualization/glfw/vulkan/window.hpp"
 #include "balsa/visualization/glfw/vulkan/film.hpp"
 #include "balsa/visualization/input_handler.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
@@ -41,7 +42,9 @@ Window::Window(const std::string_view &title, int width, int height)
     const char *description = nullptr;
     int code = glfwGetError(&description);
     if (code != GLFW_NO_ERROR) {
-        spdlog::error("GLFW window creation failed: {}", description ? description : "unknown");
+        ::balsa::visualization::vulkan::logger()->error(
+            "GLFW window creation failed: {}",
+            description ? description : "unknown");
         throw std::runtime_error("Could not create GLFW window");
     }
 
@@ -171,7 +174,8 @@ void Window::cb_framebuffer_size(GLFWwindow *w, int width, int height) {
     auto *win = self(w);
     if (!win) return;
 
-    spdlog::debug("Framebuffer resized to {}x{}", width, height);
+    ::balsa::visualization::vulkan::logger()->debug(
+        "Framebuffer resized to {}x{}", width, height);
 
     // GLFW owns the surface extent.  Tell the Film immediately instead of
     // relying on a later acquire/present result to notice the resize.

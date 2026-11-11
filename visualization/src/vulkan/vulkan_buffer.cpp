@@ -1,9 +1,14 @@
 
+#include "balsa/visualization/vulkan/BufferAllocator.hpp"
+#include "balsa/visualization/vulkan/BufferUploadBatch.hpp"
 #include "balsa/visualization/vulkan/buffer.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
 #include "balsa/visualization/vulkan/one_shot_command.hpp"
-#include <stdexcept>
 #include <cstring>
+#include <format>
+#include <stdexcept>
+#include <utility>
+#include <vk_mem_alloc.h>
 
 namespace balsa::visualization::vulkan {
 
@@ -11,26 +16,44 @@ VulkanBuffer::VulkanBuffer(Film &film,
                            vk::DeviceSize size,
                            vk::BufferUsageFlags usage,
                            vk::MemoryPropertyFlags mem_props)
-  : _device(film.device()), _size(size) {
-    // Create the buffer object
-    vk::BufferCreateInfo buf_info{};
-    buf_info.size = size;
-    buf_info.usage = usage;
-    buf_info.sharingMode = vk::SharingMode::eExclusive;
+  : VulkanBuffer(film.buffer_allocator(), size, usage, mem_props) {}
 
-    _buffer = _device.createBuffer(buf_info);
-
-    // Query memory requirements and allocate
-    auto mem_reqs = _device.getBufferMemoryRequirements(_buffer);
-
-    vk::MemoryAllocateInfo alloc_info{};
-    alloc_info.allocationSize = mem_reqs.size;
-    alloc_info.memoryTypeIndex = film.find_memory_type(mem_reqs.memoryTypeBits, mem_props);
-
-    _memory = _device.allocateMemory(alloc_info);
-    _device.bindBufferMemory(_buffer, _memory, 0);
-
-    _host_visible = (mem_props & vk::MemoryPropertyFlagBits::eHostVisible) == vk::MemoryPropertyFlagBits::eHostVisible;
+VulkanBuffer::VulkanBuffer(std::shared_ptr<BufferAllocator> allocator,
+                           vk::DeviceSize size,
+                           vk::BufferUsageFlags usage,
+                           vk::MemoryPropertyFlags mem_props)
+  : _allocator(std::move(allocator)), _size(size),
+    _host_visible(bool(mem_props & vk::MemoryPropertyFlagBits::eHostVisible)) {
+    if (!_allocator || size == 0) {
+        throw std::invalid_argument(
+            "VulkanBuffer: an allocator and nonzero size are required");
+    }
+    const VkBufferCreateInfo buffer_info =
+        vk::BufferCreateInfo{}.setSize(size).setUsage(usage).setSharingMode(
+            vk::SharingMode::eExclusive);
+    VmaAllocationCreateInfo allocation_info{};
+    allocation_info.requiredFlags =
+        static_cast<VkMemoryPropertyFlags>(mem_props);
+    if (_host_visible) allocation_info.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocationInfo allocated{};
+    const auto result = vmaCreateBuffer(_allocator->_allocator,
+                                        &buffer_info,
+                                        &allocation_info,
+                                        &buffer,
+                                        &_allocation,
+                                        &allocated);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error(
+            std::format("VulkanBuffer: vmaCreateBuffer failed ({} bytes, usage "
+                        "{}, memory {}): {}",
+                        size,
+                        vk::to_string(usage),
+                        vk::to_string(mem_props),
+                        vk::to_string(static_cast<vk::Result>(result))));
+    }
+    _buffer = buffer;
+    _mapped = allocated.pMappedData;
 }
 
 VulkanBuffer::~VulkanBuffer() {
@@ -38,44 +61,36 @@ VulkanBuffer::~VulkanBuffer() {
 }
 
 VulkanBuffer::VulkanBuffer(VulkanBuffer &&other) noexcept
-  : _device(other._device),
-    _buffer(other._buffer),
-    _memory(other._memory),
-    _size(other._size),
-    _host_visible(other._host_visible) {
-    other._device = vk::Device{};
-    other._buffer = vk::Buffer{};
-    other._memory = vk::DeviceMemory{};
-    other._size = 0;
-    other._host_visible = false;
-}
+  : _buffer(std::exchange(other._buffer, {})),
+    _allocator(std::move(other._allocator)),
+    _allocation(std::exchange(other._allocation, nullptr)),
+    _mapped(std::exchange(other._mapped, nullptr)),
+    _size(std::exchange(other._size, 0)),
+    _host_visible(std::exchange(other._host_visible, false)) {}
 
 VulkanBuffer &VulkanBuffer::operator=(VulkanBuffer &&other) noexcept {
     if (this != &other) {
         release();
-        _device = other._device;
-        _buffer = other._buffer;
-        _memory = other._memory;
-        _size = other._size;
-        _host_visible = other._host_visible;
-        other._device = vk::Device{};
-        other._buffer = vk::Buffer{};
-        other._memory = vk::DeviceMemory{};
-        other._size = 0;
-        other._host_visible = false;
+        _buffer = std::exchange(other._buffer, {});
+        _allocator = std::move(other._allocator);
+        _allocation = std::exchange(other._allocation, nullptr);
+        _mapped = std::exchange(other._mapped, nullptr);
+        _size = std::exchange(other._size, 0);
+        _host_visible = std::exchange(other._host_visible, false);
     }
     return *this;
 }
 
 void VulkanBuffer::release() {
-    if (_device && _buffer) {
-        _device.destroyBuffer(_buffer);
-        _buffer = vk::Buffer{};
+    if (_allocator && _buffer) {
+        vmaDestroyBuffer(_allocator->_allocator, _buffer, _allocation);
     }
-    if (_device && _memory) {
-        _device.freeMemory(_memory);
-        _memory = vk::DeviceMemory{};
-    }
+    _buffer = vk::Buffer{};
+    _allocation = nullptr;
+    _mapped = nullptr;
+    _allocator.reset();
+    _size = 0;
+    _host_visible = false;
 }
 
 void VulkanBuffer::upload(const void *data, vk::DeviceSize size, vk::DeviceSize offset) {
@@ -83,14 +98,22 @@ void VulkanBuffer::upload(const void *data, vk::DeviceSize size, vk::DeviceSize 
         throw std::runtime_error(
           "VulkanBuffer::upload: buffer is not host-visible; use upload_staged() instead");
     }
-    if (offset + size > _size) {
+    if (offset > _size || size > _size - offset) {
         throw std::runtime_error(
           "VulkanBuffer::upload: write exceeds buffer size");
     }
 
-    void *mapped = _device.mapMemory(_memory, offset, size);
-    std::memcpy(mapped, data, static_cast<size_t>(size));
-    _device.unmapMemory(_memory);
+    if (size == 0) return;
+    std::memcpy(static_cast<std::byte *>(_mapped) + offset,
+                data,
+                static_cast<size_t>(size));
+    const auto result =
+        vmaFlushAllocation(_allocator->_allocator, _allocation, offset, size);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error(
+            std::format("VulkanBuffer: vmaFlushAllocation failed: {}",
+                        vk::to_string(static_cast<vk::Result>(result))));
+    }
 }
 
 void VulkanBuffer::upload_staged(Film &film, const void *data, vk::DeviceSize size) {
@@ -99,40 +122,24 @@ void VulkanBuffer::upload_staged(Film &film, const void *data, vk::DeviceSize si
           "VulkanBuffer::upload_staged: data exceeds buffer size");
     }
 
-    // 1. Create a temporary host-visible staging buffer
-    vk::BufferCreateInfo staging_buf_info{};
-    staging_buf_info.size = size;
-    staging_buf_info.usage = vk::BufferUsageFlagBits::eTransferSrc;
-    staging_buf_info.sharingMode = vk::SharingMode::eExclusive;
+    if (size == 0) return;
+    VulkanBuffer staging(_allocator,
+                         size,
+                         vk::BufferUsageFlagBits::eTransferSrc,
+                         vk::MemoryPropertyFlagBits::eHostVisible
+                             | vk::MemoryPropertyFlagBits::eHostCoherent);
+    staging.upload(data, size);
+    if (auto *batch = film.buffer_upload_batch()) {
+        batch->add(_buffer, std::move(staging), size);
+        return;
+    }
 
-    vk::Buffer staging_buffer = _device.createBuffer(staging_buf_info);
-
-    auto staging_reqs = _device.getBufferMemoryRequirements(staging_buffer);
-
-    vk::MemoryAllocateInfo staging_alloc{};
-    staging_alloc.allocationSize = staging_reqs.size;
-    staging_alloc.memoryTypeIndex = film.find_memory_type(
-      staging_reqs.memoryTypeBits,
-      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    vk::DeviceMemory staging_memory = _device.allocateMemory(staging_alloc);
-    _device.bindBufferMemory(staging_buffer, staging_memory, 0);
-
-    // 2. Copy data into the staging buffer
-    void *mapped = _device.mapMemory(staging_memory, 0, size);
-    std::memcpy(mapped, data, static_cast<size_t>(size));
-    _device.unmapMemory(staging_memory);
-
-    // 3. Copy into this buffer
     one_shot_command(film, [&](vk::CommandBuffer cmd) {
         vk::BufferCopy copy_region{};
         copy_region.size = size;
-        cmd.copyBuffer(staging_buffer, _buffer, copy_region);
+        cmd.copyBuffer(staging.buffer(), _buffer, copy_region);
     });
 
-    // 4. Clean up staging resources
-    _device.destroyBuffer(staging_buffer);
-    _device.freeMemory(staging_memory);
 }
 
 }// namespace balsa::visualization::vulkan

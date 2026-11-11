@@ -59,8 +59,8 @@ namespace programs {
     // Blinn-Phong surfaces (flat, Gouraud or per-fragment), uniform colour
     // or a colormapped scalar: "balsa.phong".
     auto phong() -> ShaderProgram;
-    // glTF metallic-roughness surfaces: "balsa.pbr".
-    auto pbr() -> ShaderProgram;
+    // glTF metallic-roughness surfaces: "balsa.gltf_metallic_roughness".
+    auto gltf_metallic_roughness() -> ShaderProgram;
     // Unlit lines of one colour: "balsa.unlit_lines".
     auto unlit_lines() -> ShaderProgram;
     // Unlit points of one colour and size: "balsa.unlit_points".

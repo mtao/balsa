@@ -1,11 +1,13 @@
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
-#include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
-#include "balsa/visualization/vulkan/film.hpp"
 #include "balsa/scene_graph/Light.hpp"
+#include "balsa/visualization/vulkan/BufferUploadBatch.hpp"
+#include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
+#include "balsa/visualization/vulkan/vulkan_mesh_drawable.hpp"
 
-#include <zipper/transform/view.hpp>
 #include <algorithm>
 #include <spdlog/spdlog.h>
+#include <zipper/transform/view.hpp>
 
 namespace balsa::visualization::vulkan {
 
@@ -50,11 +52,14 @@ void MeshScene::initialize(Film &film) {
         }
     }
 
-    spdlog::info("MeshScene initialized with {} drawable(s)", _drawable_group.size());
+    logger()->debug("MeshScene initialized with {} drawable(s)",
+                    _drawable_group.size());
 }
 
 void MeshScene::draw(Film &film) {
     if (!_initialized) return;
+    ProfileScope profile("MeshScene::draw", spdlog::level::trace);
+    BufferUploadBatch uploads(film);
 
     // Resolve scene-level lighting once per frame.
     auto light_state = resolve_scene_lights();
@@ -69,12 +74,14 @@ void MeshScene::draw(Film &film) {
         vmd->set_scene_light_state(light_state);
         vmd->draw(*active_cam, film);
     }
+    uploads.submit();
 }
 
 void MeshScene::release_vulkan_resources() {
     if (!_initialized) return;
 
-    spdlog::debug("MeshScene: releasing Vulkan resources ({} drawables)", _drawable_group.size());
+    logger()->debug("MeshScene: releasing Vulkan resources ({} drawables)",
+                    _drawable_group.size());
 
     // Release all VulkanMeshDrawables first (they reference pipeline
     // manager's descriptor pool).
@@ -245,7 +252,8 @@ void MeshScene::set_active_camera(scene_graph::Object *cam_obj) {
     }
     auto *cam = cam_obj->find_feature<scene_graph::Camera>();
     if (!cam) {
-        spdlog::warn("set_active_camera: Object '{}' has no Camera feature", cam_obj->name);
+        logger()->warn("set_active_camera: Object '{}' has no Camera feature",
+                       cam_obj->name);
         return;
     }
     _active_camera_object = cam_obj;

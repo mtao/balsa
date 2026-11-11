@@ -52,7 +52,7 @@ if get_option('json')
           '__cpp_lib_reflection), e.g. GCC 16+ with -freflection; ' +
           'disable it with -Djson=false')
   endif
-  nlohmann_json_dep = dependency('nlohmann_json')
+  nlohmann_json_dep = dependency('nlohmann_json', include_type: 'system')
   # Propagated: headers using balsa::json annotations need -freflection too.
   core_required_deps += [nlohmann_json_dep,
                          declare_dependency(compile_args: reflection_args)]

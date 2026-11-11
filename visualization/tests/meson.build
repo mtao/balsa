@@ -19,6 +19,27 @@ test_textures = executable(
 )
 test('texture test', test_textures)
 
+test_descriptor_allocator = executable(
+  'test_descriptor_allocator',
+  'test_descriptor_allocator.cpp',
+  dependencies: [visualization_dep, catch2_with_main_dep],
+)
+test('descriptor allocator test', test_descriptor_allocator)
+
+test_buffer_allocator = executable(
+  'test_buffer_allocator',
+  'test_buffer_allocator.cpp',
+  dependencies: [visualization_dep, catch2_with_main_dep],
+)
+test('buffer allocator test', test_buffer_allocator)
+
+test_vulkan_logging = executable(
+  'test_vulkan_logging',
+  'test_vulkan_logging.cpp',
+  dependencies: [visualization_dep, catch2_with_main_dep],
+)
+test('vulkan logger test', test_vulkan_logging)
+
 if get_option('json')
   test_gltf_document = executable(
     'test_gltf_document',

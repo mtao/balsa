@@ -1,6 +1,7 @@
 #include "balsa/visualization/vulkan/ImageScene.hpp"
-#include "balsa/visualization/vulkan/film.hpp"
 #include "balsa/visualization/vulkan/VulkanImageDrawable.hpp"
+#include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 
 #include <algorithm>
 #include <zipper/expression/nullary/Identity.hpp>
@@ -44,8 +45,8 @@ auto ImageScene::initialize(Film &film) -> void {
         if (vid && !vid->is_initialized()) { vid->init(film); }
     }
 
-    spdlog::info("ImageScene initialized with {} drawable(s)",
-                 _drawable_group.size());
+    logger()->debug("ImageScene initialized with {} drawable(s)",
+                    _drawable_group.size());
 }
 
 auto ImageScene::draw(Film &film) -> void {
@@ -64,8 +65,8 @@ auto ImageScene::draw(Film &film) -> void {
 auto ImageScene::release_vulkan_resources() -> void {
     if (!_initialized) return;
 
-    spdlog::debug("ImageScene: releasing Vulkan resources ({} drawables)",
-                  _drawable_group.size());
+    logger()->debug("ImageScene: releasing Vulkan resources ({} drawables)",
+                    _drawable_group.size());
 
     // Release all VulkanImageDrawables first (they reference pipeline
     // manager's descriptor pool).

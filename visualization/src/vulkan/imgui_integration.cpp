@@ -1,5 +1,6 @@
 #include "balsa/visualization/vulkan/imgui_integration.hpp"
 #include "balsa/visualization/vulkan/film.hpp"
+#include "balsa/visualization/vulkan/logging.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -59,7 +60,9 @@ ImGuiIntegration::~ImGuiIntegration() {
 
 void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
     if (is_initialized()) {
-        spdlog::warn("ImGuiIntegration::init() called but already initialized — ignoring");
+        logger()->warn(
+            "ImGuiIntegration::init() called but already initialized — "
+            "ignoring");
         return;
     }
 
@@ -107,7 +110,7 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
     init_info.Allocator = nullptr;
     init_info.CheckVkResultFn = [](VkResult err) {
         if (err != VK_SUCCESS) {
-            spdlog::error("ImGui Vulkan error: {}", static_cast<int>(err));
+            logger()->error("ImGui Vulkan error: {}", static_cast<int>(err));
         }
     };
 
@@ -182,7 +185,8 @@ void ImGuiIntegration::init(Film &film, GLFWwindow *glfw_window) {
     }
 #endif
 
-    spdlog::debug("ImGuiIntegration initialized (GLFW backend: {})", _has_glfw_backend);
+    logger()->debug("ImGuiIntegration initialized (GLFW backend: {})",
+                    _has_glfw_backend);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +248,7 @@ void ImGuiIntegration::shutdown() {
     _context = nullptr;
     _device = VK_NULL_HANDLE;
 
-    spdlog::debug("ImGuiIntegration shut down");
+    logger()->debug("ImGuiIntegration shut down");
 }
 
 }// namespace balsa::visualization::vulkan

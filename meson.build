@@ -54,7 +54,7 @@ if get_option('qt')
   if get_option('visualization')
     qt_required_modules += ['Gui', 'Widgets', 'OpenGLWidgets']
   endif
-  qt_dep = dependency('qt6', modules: qt_required_modules)
+  qt_dep = dependency('qt6', modules: qt_required_modules, include_type: 'system')
 endif
 
 subdir('core')
