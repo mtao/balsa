@@ -5,6 +5,7 @@
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QResizeEvent>
+#include <QTouchEvent>
 #include <QVulkanInstance>
 #include <spdlog/spdlog.h>
 
@@ -102,6 +103,10 @@ int Window::translate_button(Qt::MouseButton button) {
     }
 }
 
+bool Window::is_from_touch(const QMouseEvent *e) {
+    const auto *dev = e->pointingDevice();
+    return dev && dev->type() == QInputDevice::DeviceType::TouchScreen;
+}
 
 // ============================================================
 // Construction / Destruction
@@ -184,6 +189,7 @@ void Window::closeEvent(QCloseEvent *e) {
 // ============================================================
 
 void Window::mousePressEvent(QMouseEvent *e) {
+    if (is_from_touch(e)) return;
     MouseEvent me;
     me.type = MouseEvent::Type::Press;
     me.x = e->position().x();
@@ -194,6 +200,7 @@ void Window::mousePressEvent(QMouseEvent *e) {
 }
 
 void Window::mouseReleaseEvent(QMouseEvent *e) {
+    if (is_from_touch(e)) return;
     MouseEvent me;
     me.type = MouseEvent::Type::Release;
     me.x = e->position().x();
@@ -204,6 +211,7 @@ void Window::mouseReleaseEvent(QMouseEvent *e) {
 }
 
 void Window::mouseMoveEvent(QMouseEvent *e) {
+    if (is_from_touch(e)) return;
     MouseEvent me;
     me.type = MouseEvent::Type::Move;
     me.x = e->position().x();
@@ -225,6 +233,55 @@ void Window::wheelEvent(QWheelEvent *e) {
     me.scroll_y = e->angleDelta().y() / 120.0;
     me.modifiers = translate_mods(e->modifiers());
     dispatch_mouse(me);
+}
+
+void Window::touchEvent(QTouchEvent *e) {
+    const auto *dev = e->pointingDevice();
+    if (!dev || dev->type() != QInputDevice::DeviceType::TouchScreen) {
+        e->ignore();
+        return;
+    }
+
+    TouchEvent te;
+    switch (e->type()) {
+    case QEvent::TouchBegin:
+        te.type = TouchEvent::Type::Begin;
+        break;
+    case QEvent::TouchEnd:
+        te.type = TouchEvent::Type::End;
+        break;
+    case QEvent::TouchCancel:
+        te.type = TouchEvent::Type::Cancel;
+        break;
+    default:
+        te.type = TouchEvent::Type::Update;
+        break;
+    }
+    te.modifiers = translate_mods(e->modifiers());
+    te.points.reserve(e->points().size());
+    for (const auto &p : e->points()) {
+        TouchPoint tp;
+        tp.id = p.id();
+        tp.x = p.position().x();
+        tp.y = p.position().y();
+        switch (p.state()) {
+        case QEventPoint::State::Pressed:
+            tp.state = TouchPoint::State::Pressed;
+            break;
+        case QEventPoint::State::Updated:
+            tp.state = TouchPoint::State::Moved;
+            break;
+        case QEventPoint::State::Released:
+            tp.state = TouchPoint::State::Released;
+            break;
+        default:
+            tp.state = TouchPoint::State::Stationary;
+            break;
+        }
+        te.points.push_back(tp);
+    }
+    dispatch_touch(te);
+    e->accept();
 }
 
 void Window::keyPressEvent(QKeyEvent *e) {

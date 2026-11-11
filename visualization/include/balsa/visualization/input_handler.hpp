@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+
 namespace balsa::visualization {
 
 // Modifier key bitmask values (matches GLFW modifier bits)
@@ -33,6 +35,29 @@ struct KeyEvent {
     int modifiers = 0;// bitmask of Modifiers
 };
 
+struct TouchPoint {
+    enum class State { Pressed,
+                       Moved,
+                       Stationary,
+                       Released };
+    int id = -1;// stable for the lifetime of the contact
+    double x = 0;// logical window coordinates, like MouseEvent
+    double y = 0;
+    State state = State::Stationary;
+};
+
+// A touchscreen event carrying every current contact, including ones that
+// were just released.  Cancel means the platform aborted the sequence.
+struct TouchEvent {
+    enum class Type { Begin,
+                      Update,
+                      End,
+                      Cancel };
+    Type type;
+    std::vector<TouchPoint> points;
+    int modifiers = 0;// bitmask of Modifiers
+};
+
 struct WindowResizeEvent {
     int width = 0;
     int height = 0;
@@ -49,6 +74,7 @@ class InputHandler {
     virtual ~InputHandler() = default;
     virtual void on_mouse_event(const MouseEvent &) {}
     virtual void on_key_event(const KeyEvent &) {}
+    virtual void on_touch_event(const TouchEvent &) {}
     virtual void on_window_resize(const WindowResizeEvent &) {}
 };
 

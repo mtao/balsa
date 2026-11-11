@@ -5,6 +5,7 @@
 #include "balsa/scene_graph/types.hpp"
 #include <balsa/geometry/BoundingBox.hpp>
 #include "balsa/visualization/input_handler.hpp"
+#include "balsa/visualization/touch_gesture_tracker.hpp"
 #include "balsa/visualization/vulkan/mesh_scene.hpp"
 
 namespace balsa::visualization::vulkan {
@@ -16,6 +17,7 @@ namespace balsa::visualization::vulkan {
 //   Left-drag   → orbit (rotate around the center point)
 //   Right-drag  → pan (translate center + eye in the view plane)
 //   Scroll      → zoom (move eye closer/further from center)
+//   Touch: one finger orbits, two fingers pan, pinch zooms
 //
 // Updates the MeshScene's view matrix via look_at() each time the
 // camera state changes.
@@ -81,6 +83,8 @@ class OrbitCameraController : public InputHandler {
     float orbit_sensitivity = 0.005f;
     float pan_sensitivity = 0.003f;
     float zoom_sensitivity = 0.1f;
+    // Multiplier on orbit_sensitivity for one-finger drags.
+    double touch_orbit_scale = 1.0;
 
     // ── InputHandler overrides ──────────────────────────────────────
 
@@ -111,24 +115,11 @@ class OrbitCameraController : public InputHandler {
             _last_y = e.y;
 
             if (_left_down) {
-                // Orbit
-                _theta -= static_cast<float>(dx) * orbit_sensitivity;
-                _phi += static_cast<float>(dy) * orbit_sensitivity;
-                _phi = std::clamp(_phi, -_max_phi, _max_phi);
-                apply();
+                orbit(dx, dy);
             }
 
             if (_right_down || _middle_down) {
-                // Pan: move center in the view plane
-                scene_graph::Vec3f eye = compute_eye();
-                scene_graph::Vec3f forward = (_center - eye).normalized();
-                scene_graph::Vec3f right = forward.cross(_up).normalized();
-                scene_graph::Vec3f up = right.cross(forward).normalized();
-
-                float pan_scale = _distance * pan_sensitivity;
-                _center = _center - right * (static_cast<float>(dx) * pan_scale);
-                _center = _center + up * (static_cast<float>(dy) * pan_scale);
-                apply();
+                pan(dx, dy);
             }
             break;
         }
@@ -137,12 +128,58 @@ class OrbitCameraController : public InputHandler {
             // Snap from bookmark camera on first interaction.
             snap_to_active_camera();
             // Zoom: exponential scaling feels natural
-            float factor = 1.0f - static_cast<float>(e.scroll_y) * zoom_sensitivity;
-            _distance = std::max(_distance * factor, _min_distance);
-            apply();
+            zoom(1.0f / (1.0f - static_cast<float>(e.scroll_y) * zoom_sensitivity));
             break;
         }
         }
+    }
+
+    // Touchscreen:
+    //   One-finger drag      → orbit
+    //   Two-finger drag      → pan
+    //   Pinch                → zoom
+    void on_touch_event(const TouchEvent &e) override {
+        if (e.type == TouchEvent::Type::Begin) {
+            snap_to_active_camera();
+        }
+        const auto gesture = _touch.update(e);
+        if (!gesture) return;
+        const double dx = gesture->translation(0);
+        const double dy = gesture->translation(1);
+        if (gesture->touch_count == 1) {
+            orbit(dx * touch_orbit_scale, dy * touch_orbit_scale);
+        } else {
+            pan(dx, dy);
+            zoom(static_cast<float>(gesture->scale));
+        }
+    }
+
+    // ── Camera motions (screen-space deltas in logical pixels) ──────
+
+    void orbit(double dx, double dy) {
+        _theta -= static_cast<float>(dx) * orbit_sensitivity;
+        _phi = std::clamp(_phi + static_cast<float>(dy) * orbit_sensitivity, -_max_phi, _max_phi);
+        apply();
+    }
+
+    // Moves the center in the view plane so the scene follows the cursor.
+    void pan(double dx, double dy) {
+        scene_graph::Vec3f eye = compute_eye();
+        scene_graph::Vec3f forward = (_center - eye).normalized();
+        scene_graph::Vec3f right = forward.cross(_up).normalized();
+        scene_graph::Vec3f up = right.cross(forward).normalized();
+
+        float pan_scale = _distance * pan_sensitivity;
+        _center = _center - right * (static_cast<float>(dx) * pan_scale);
+        _center = _center + up * (static_cast<float>(dy) * pan_scale);
+        apply();
+    }
+
+    // factor > 1 moves the eye closer (distance /= factor).
+    void zoom(float factor) {
+        if (!(factor > 0.0f)) return;
+        _distance = std::max(_distance / factor, _min_distance);
+        apply();
     }
 
     void on_window_resize(const WindowResizeEvent &e) override {
@@ -171,6 +208,8 @@ class OrbitCameraController : public InputHandler {
     bool _left_down = false;
     bool _right_down = false;
     bool _middle_down = false;
+
+    TouchGestureTracker _touch;
 
     scene_graph::Vec3f compute_eye() const {
         const float cos_phi = std::cos(_phi);

@@ -1021,6 +1021,87 @@ TEST_CASE("orbit_camera_frames_box", "[viewer]") {
     CHECK(camera.distance() == distance);
 }
 
+namespace {
+auto touch(balsa::visualization::TouchEvent::Type type,
+           std::vector<balsa::visualization::TouchPoint> points)
+  -> balsa::visualization::TouchEvent {
+    return { type, std::move(points), 0 };
+}
+}// namespace
+
+TEST_CASE("touch_gesture_tracker", "[viewer][touch]") {
+    namespace viz = balsa::visualization;
+    using T = viz::TouchEvent::Type;
+    using S = viz::TouchPoint::State;
+    viz::TouchGestureTracker tracker;
+
+    // The first event only establishes the reference.
+    CHECK_FALSE(tracker.update(touch(T::Begin, { { 0, 10, 10, S::Pressed } })));
+    auto g = tracker.update(touch(T::Update, { { 0, 15, 7, S::Moved } }));
+    REQUIRE(g);
+    CHECK(g->touch_count == 1);
+    CHECK(g->translation(0) == Catch::Approx(5.0));
+    CHECK(g->translation(1) == Catch::Approx(-3.0));
+    CHECK(g->scale == 1.0);
+
+    // A second finger re-bases instead of producing a jump.
+    CHECK_FALSE(tracker.update(touch(T::Update, { { 0, 15, 7, S::Stationary }, { 1, 25, 7, S::Pressed } })));
+    CHECK(tracker.touch_count() == 2);
+
+    // Spreading symmetrically: pure pinch, no translation.
+    g = tracker.update(touch(T::Update, { { 0, 10, 7, S::Moved }, { 1, 30, 7, S::Moved } }));
+    REQUIRE(g);
+    CHECK(g->touch_count == 2);
+    CHECK(g->scale == Catch::Approx(2.0));
+    CHECK(g->translation(0) == Catch::Approx(0.0));
+
+    // Moving both together: pure translation.
+    g = tracker.update(touch(T::Update, { { 0, 10, 17, S::Moved }, { 1, 30, 17, S::Moved } }));
+    REQUIRE(g);
+    CHECK(g->scale == Catch::Approx(1.0));
+    CHECK(g->translation(1) == Catch::Approx(10.0));
+
+    // Lifting a finger re-bases again.
+    CHECK_FALSE(tracker.update(touch(T::Update, { { 0, 10, 17, S::Stationary }, { 1, 30, 17, S::Released } })));
+    CHECK(tracker.touch_count() == 1);
+
+    CHECK_FALSE(tracker.update(touch(T::Cancel, {})));
+    CHECK(tracker.touch_count() == 0);
+}
+
+TEST_CASE("orbit_camera_touch", "[viewer][touch]") {
+    namespace vk = balsa::visualization::vulkan;
+    namespace viz = balsa::visualization;
+    using T = viz::TouchEvent::Type;
+    using S = viz::TouchPoint::State;
+    vk::MeshScene scene;
+    vk::OrbitCameraController camera(&scene);
+
+    SECTION("one finger orbits") {
+        const float theta = camera.theta();
+        camera.on_touch_event(touch(T::Begin, { { 0, 0, 0, S::Pressed } }));
+        camera.on_touch_event(touch(T::Update, { { 0, 100, 0, S::Moved } }));
+        CHECK(camera.theta() == Catch::Approx(theta - 100 * camera.orbit_sensitivity));
+        CHECK(camera.distance() == Catch::Approx(3.f));
+    }
+
+    SECTION("pinch zooms") {
+        camera.on_touch_event(touch(T::Begin, { { 0, 40, 50, S::Pressed }, { 1, 60, 50, S::Pressed } }));
+        camera.on_touch_event(touch(T::Update, { { 0, 30, 50, S::Moved }, { 1, 70, 50, S::Moved } }));
+        CHECK(camera.distance() == Catch::Approx(1.5f));
+        CHECK(camera.center().norm() == Catch::Approx(0.f).margin(1e-6));
+    }
+
+    SECTION("two finger drag pans") {
+        const float theta = camera.theta();
+        camera.on_touch_event(touch(T::Begin, { { 0, 40, 50, S::Pressed }, { 1, 60, 50, S::Pressed } }));
+        camera.on_touch_event(touch(T::Update, { { 0, 40, 80, S::Moved }, { 1, 60, 80, S::Moved } }));
+        CHECK(camera.theta() == theta);
+        CHECK(camera.center()(1) > 0.f);
+        CHECK(camera.distance() == Catch::Approx(3.f));
+    }
+}
+
 TEST_CASE("scene_loader", "[viewer]") {
     TempDir dir;
     namespace sg = balsa::scene_graph;

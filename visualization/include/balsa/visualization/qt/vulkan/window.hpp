@@ -48,6 +48,7 @@ class Window : public QVulkanWindow
     void mouseReleaseEvent(QMouseEvent *e) override;
     void mouseMoveEvent(QMouseEvent *e) override;
     void wheelEvent(QWheelEvent *e) override;
+    void touchEvent(QTouchEvent *e) override;
     void keyPressEvent(QKeyEvent *e) override;
     void keyReleaseEvent(QKeyEvent *e) override;
     void resizeEvent(QResizeEvent *e) override;
@@ -66,6 +67,9 @@ class Window : public QVulkanWindow
     static int translate_mods(Qt::KeyboardModifiers mods);
     // Helper: translate Qt mouse button enum to our int convention (0=left,1=right,2=middle).
     static int translate_button(Qt::MouseButton button);
+    // True for mouse events Qt synthesized from touch input; those are
+    // already handled through touchEvent().
+    static bool is_from_touch(const QMouseEvent *e);
 
     // Inner renderer that bridges Qt's push model to our draw_frame().
     class Renderer;

@@ -56,6 +56,12 @@ void Window::dispatch_key(const KeyEvent &e) {
     }
 }
 
+void Window::dispatch_touch(const TouchEvent &e) {
+    if (_input_handler) {
+        _input_handler->on_touch_event(e);
+    }
+}
+
 void Window::dispatch_resize(const WindowResizeEvent &e) {
     if (_input_handler) {
         _input_handler->on_window_resize(e);
